@@ -20,6 +20,8 @@ Write, step through, and debug m68k assembly — no installation needed.
 - Detailed error reporting with line context
 - Preloaded examples covering common patterns
 - Export register and memory state to file
+- Terminal-mode execution path for `nibbles.asm`
+- Runtime batching and keyboard capture for browser-playable terminal programs
 
 ## Supported instructions
 
@@ -29,6 +31,10 @@ Write, step through, and debug m68k assembly — no installation needed.
 **Shifts & rotates** — `ASL` `ASR` `LSL` `LSR` `ROL` `ROR`  
 **Comparisons** — `CMP` `CMPA` `CMPI` `TST`  
 **Control flow** — `JMP` `JSR` `RTS` `BRA` `BSR` `BEQ` `BNE` `BGE` `BGT` `BLE` `BLT`
+
+## Easy68K subset notes
+
+The current terminal build is aimed at the Easy68K subset needed by `nibbles.asm`, including `EQU`, `DC.*`, `DS.*`, trap tasks `1`, `3`, `4`, and `TRAP #11` halt. See [docs/EASY68K_SUBSET_AND_LIMITATIONS.md](docs/EASY68K_SUBSET_AND_LIMITATIONS.md) for the supported subset and known limitations.
 
 ---
 <!-- 
@@ -60,14 +66,14 @@ React 18 · TypeScript · Vite 5 · Zustand · Vitest
 ```bash
 git clone https://github.com/gianlucarea/m68k-interpreter.git
 cd m68k-interpreter
-npm install
-npm run dev
+yarn install
+yarn workspace @m68k/ide dev
 ```
 
 ```bash
-npm run build        # production build
-npm run test         # run tests
-npm run lint:fix     # lint and format
+yarn build           # production build
+yarn test            # run tests
+yarn type-check      # workspace type-check
 ```
 
 ---

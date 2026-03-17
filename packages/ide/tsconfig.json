@@ -1,5 +1,5 @@
 {
-  "extends": "./tsconfig.base.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": [
       "ES2020",
@@ -13,12 +13,13 @@
     "baseUrl": ".",
     "paths": {
       "@/*": [
-        "packages/ide/src/*"
+        "src/*"
       ]
     }
   },
   "include": [
-    "tests",
+    "src",
+    "vite.config.ts",
     "vitest.config.ts"
   ]
 }

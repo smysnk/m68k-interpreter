@@ -3,18 +3,19 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
+  root: import.meta.dirname,
   plugins: [react()],
   test: {
     globals: true,
     environment: 'jsdom',
     pool: 'forks',
     css: true,
-    include: ['tests/integration/**/*.test.ts?(x)'],
-    setupFiles: ['./tests/setup.ts'],
+    include: ['src/**/*.test.ts?(x)'],
+    setupFiles: ['./src/test/setup.ts'],
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './packages/ide/src'),
+      '@': path.resolve(import.meta.dirname, './src'),
     },
   },
 });

@@ -1,18 +1,21 @@
 # Dependencies
-/node_modules
+node_modules
 /.pnp
 .pnp.js
 package-lock.json
-yarn.lock
 pnpm-lock.yaml
+.yarn/install-state.gz
+/vendor
 
 # Testing
 /coverage
 /.vitest
+/.test-results
 
 # Production
 /build
 /dist
+/packages/*/dist
 
 # Logs
 logs/
