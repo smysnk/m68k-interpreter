@@ -1,13 +1,20 @@
 import { useEffect, useRef } from 'react';
+import { useSelector } from 'react-redux';
+import {
+  createStoreBackedReducerInterpreterAdapter,
+  type InterpreterReduxAction,
+} from '@m68k/interpreter-redux';
 import { Emulator, type ConditionFlags, type ExecutionState, type Registers } from '@m68k/interpreter';
 import { ideStore } from '@/store';
 import { runEmulationFrame } from '@/runtime/executionLoop';
+import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import { useEmulatorStore, type RuntimeMetrics } from '@/stores/emulatorStore';
+import type { AppDispatch, RootState } from '@/store';
 
 declare global {
   interface Window {
     editorCode: string;
-    emulatorInstance: Emulator | null;
+    emulatorInstance: IdeRuntimeSession | null;
   }
 }
 
@@ -56,7 +63,7 @@ function cancelFrame(handle: number): void {
   window.clearTimeout(handle);
 }
 
-function buildFlags(emulator: Emulator): ConditionFlags {
+function buildFlags(emulator: IdeRuntimeSession): ConditionFlags {
   return {
     z: emulator.getZFlag(),
     v: emulator.getVFlag(),
@@ -66,7 +73,7 @@ function buildFlags(emulator: Emulator): ConditionFlags {
   };
 }
 
-function buildRegisters(emulator: Emulator, flags: ConditionFlags): Registers {
+function buildRegisters(emulator: IdeRuntimeSession, flags: ConditionFlags): Registers {
   const values = emulator.getRegisters();
 
   return {
@@ -92,6 +99,7 @@ function buildRegisters(emulator: Emulator, flags: ConditionFlags): Registers {
 }
 
 export const useEmulatorEvents = () => {
+  const engineMode = useSelector((state: RootState) => state.settings.engineMode);
   const {
     editorCode,
     reset,
@@ -102,12 +110,13 @@ export const useEmulatorEvents = () => {
     delay,
     speedMultiplier,
   } = useEmulatorStore();
-  const emulatorRef = useRef<Emulator | null>(null);
+  const emulatorRef = useRef<IdeRuntimeSession | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const executionDelayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isExecutionScheduledRef = useRef(false);
   const delayRef = useRef(delay);
   const speedMultiplierRef = useRef(speedMultiplier);
+  const engineModeRef = useRef(engineMode);
 
   useEffect(() => {
     window.editorCode = editorCode;
@@ -122,8 +131,12 @@ export const useEmulatorEvents = () => {
   }, [speedMultiplier]);
 
   useEffect(() => {
+    engineModeRef.current = engineMode;
+  }, [engineMode]);
+
+  useEffect(() => {
     const syncStoreFromEmulator = (
-      emulator: Emulator,
+      emulator: IdeRuntimeSession,
       options: {
         executionState?: Partial<ExecutionState>;
         runtimeMetrics?: Partial<RuntimeMetrics>;
@@ -158,6 +171,17 @@ export const useEmulatorEvents = () => {
       }
 
       isExecutionScheduledRef.current = false;
+    };
+
+    const createReducerEngine = (code: string): IdeRuntimeSession => {
+      const adapter = createStoreBackedReducerInterpreterAdapter({
+        dispatch: (action: InterpreterReduxAction) =>
+          ideStore.dispatch(action as Parameters<AppDispatch>[0]),
+        getState: () => ideStore.getState().interpreterRedux,
+      });
+
+      adapter.loadProgram(code);
+      return adapter;
     };
 
     const executeFrame = (): void => {
@@ -220,10 +244,13 @@ export const useEmulatorEvents = () => {
       queueFrame();
     };
 
-    const initializeEmulator = (code: string): Emulator | null => {
+    const initializeEmulator = (code: string): IdeRuntimeSession | null => {
       clearScheduledExecution();
 
-      const emulator = new Emulator(code);
+      const emulator =
+        engineModeRef.current === 'interpreter-redux'
+          ? createReducerEngine(code)
+          : new Emulator(code);
       emulatorRef.current = emulator;
       setEmulatorInstance(emulator);
       window.emulatorInstance = emulator;

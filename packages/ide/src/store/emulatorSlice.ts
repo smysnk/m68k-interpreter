@@ -4,9 +4,9 @@ import type {
   ExecutionState,
   MemoryCell,
   Registers,
-  Emulator,
   TerminalSnapshot,
 } from '@m68k/interpreter';
+import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 
 export interface RuntimeMetrics {
   lastFrameInstructions: number;
@@ -20,7 +20,7 @@ export interface EmulatorState {
   memory: MemoryCell;
   flags: ConditionFlags;
   executionState: ExecutionState;
-  emulatorInstance: Emulator | null;
+  emulatorInstance: IdeRuntimeSession | null;
   terminalSnapshot: TerminalSnapshot;
   showFlags: boolean;
   delay: number;
@@ -139,7 +139,7 @@ const emulatorSlice = createSlice({
     setExecutionState(state, action: PayloadAction<Partial<ExecutionState>>) {
       state.executionState = { ...state.executionState, ...action.payload };
     },
-    setEmulatorInstance(state, action: PayloadAction<Emulator | null>) {
+    setEmulatorInstance(state, action: PayloadAction<IdeRuntimeSession | null>) {
       state.emulatorInstance = action.payload;
     },
     setTerminalSnapshot(state, action: PayloadAction<TerminalSnapshot>) {

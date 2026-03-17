@@ -18,6 +18,7 @@ import { nibblesSource } from '@/programs/nibbles';
 import {
   ideStore,
   setEditorCode,
+  setEngineMode,
   syncSystemTheme,
   toggleEditorTheme,
   toggleHelp,
@@ -34,6 +35,7 @@ function AppShell(): React.ReactElement {
   const showHelp = useSelector((state: RootState) => state.settings.showHelp);
   const showRegisters = useSelector((state: RootState) => state.settings.showRegisters);
   const followSystemTheme = useSelector((state: RootState) => state.settings.followSystemTheme);
+  const engineMode = useSelector((state: RootState) => state.settings.engineMode);
 
   useEmulatorEvents();
 
@@ -82,13 +84,20 @@ function AppShell(): React.ReactElement {
     window.dispatchEvent(new CustomEvent('emulator:reset'));
   };
 
+  const handleEngineChange = (nextEngineMode: RootState['settings']['engineMode']): void => {
+    dispatch(setEngineMode(nextEngineMode));
+    window.dispatchEvent(new CustomEvent('emulator:reset'));
+  };
+
   return (
     <div className="app-container" data-testid="app-container" data-theme={theme.surfaceMode}>
       <Navbar
         onLoadNibbles={handleLoadNibbles}
+        onEngineChange={handleEngineChange}
         onToggleTheme={() => dispatch(toggleEditorTheme())}
         onToggleHelp={() => dispatch(toggleHelp())}
         onToggleMemory={() => dispatch(toggleRegisters())}
+        engineMode={engineMode}
         theme={theme.surfaceMode}
         showHelp={showHelp}
         showMemory={showRegisters}

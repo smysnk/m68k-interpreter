@@ -5,9 +5,9 @@ import type {
   ExecutionState,
   MemoryCell,
   Registers,
-  Emulator,
   TerminalSnapshot,
 } from '@m68k/interpreter';
+import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import {
   ideStore,
   setEditorCode as setEditorCodeAction,
@@ -37,7 +37,7 @@ type EmulatorStoreFacade = RootState['emulator'] & {
   setMemory: (memory: MemoryCell) => void;
   setFlags: (flags: Partial<ConditionFlags>) => void;
   setExecutionState: (state: Partial<ExecutionState>) => void;
-  setEmulatorInstance: (emulator: Emulator | null) => void;
+  setEmulatorInstance: (emulator: IdeRuntimeSession | null) => void;
   setTerminalSnapshot: (snapshot: TerminalSnapshot) => void;
   syncEmulatorFrame: (frame: {
     registers: Registers;
@@ -93,7 +93,8 @@ function createActions(dispatch: AppDispatch) {
     setMemory: (memory: MemoryCell) => dispatch(setMemoryAction(memory)),
     setFlags: (flags: Partial<ConditionFlags>) => dispatch(setFlagsAction(flags)),
     setExecutionState: (nextState: Partial<ExecutionState>) => dispatch(setExecutionStateAction(nextState)),
-    setEmulatorInstance: (emulator: Emulator | null) => dispatch(setEmulatorInstanceAction(emulator)),
+    setEmulatorInstance: (emulator: IdeRuntimeSession | null) =>
+      dispatch(setEmulatorInstanceAction(emulator)),
     setTerminalSnapshot: (snapshot: TerminalSnapshot) => dispatch(setTerminalSnapshotAction(snapshot)),
     syncEmulatorFrame: (frame: {
       registers: Registers;
@@ -114,8 +115,12 @@ function createActions(dispatch: AppDispatch) {
     setRegisterInEmulator: (name: keyof Registers, value: number) => {
       const emulator = ideStore.getState().emulator.emulatorInstance;
       if (emulator && name in registerMap) {
-        const registers = emulator.getRegisters();
-        registers[registerMap[name]] = value;
+        if (typeof emulator.setRegisterValue === 'function') {
+          emulator.setRegisterValue(registerMap[name], value);
+        } else {
+          const registers = emulator.getRegisters();
+          registers[registerMap[name]] = value;
+        }
       }
       setRegister(name, value);
     },

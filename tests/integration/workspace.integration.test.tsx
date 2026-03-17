@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { App } from '@m68k/ide';
 import { Emulator } from '@m68k/interpreter';
+import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import { useEmulatorStore } from '@/stores/emulatorStore';
 import { ideStore, resetSettingsState } from '@/store';
 
@@ -10,10 +11,11 @@ vi.mock('@vercel/analytics/react', () => ({
 }));
 
 describe('workspace integration', () => {
-  const getWindowEmulator = (): Emulator => {
-    const emulator = (window as typeof window & { emulatorInstance: Emulator | null }).emulatorInstance;
+  const getWindowEmulator = (): IdeRuntimeSession => {
+    const emulator = (window as typeof window & { emulatorInstance: IdeRuntimeSession | null })
+      .emulatorInstance;
     expect(emulator).not.toBeNull();
-    return emulator as Emulator;
+    return emulator as IdeRuntimeSession;
   };
 
   const getEmulatorTerminalText = (): string => getWindowEmulator().getTerminalSnapshot().lines.join('\n');
@@ -53,6 +55,35 @@ describe('workspace integration', () => {
     await waitFor(() => {
       expect(screen.getByTestId('terminal-screen')).toHaveTextContent('H');
     });
+  });
+
+  it('can switch to Interpreter Redux and boot a simple program through the shared IDE flow', async () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText(/interpreter engine/i), {
+      target: { value: 'interpreter-redux' },
+    });
+
+    useEmulatorStore.getState().setEditorCode(`VALUE DC.L 0
+START
+  MOVE.L #1,D0
+  ADDQ.L #1,D0
+  MOVE.L D0,VALUE
+  END START`);
+    window.editorCode = useEmulatorStore.getState().editorCode;
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('emulator:run'));
+    });
+
+    await waitFor(() => {
+      expect(ideStore.getState().settings.engineMode).toBe('interpreter-redux');
+      expect(useEmulatorStore.getState().registers.d0).toBe(2);
+    });
+
+    const valueAddress = getWindowEmulator().getSymbolAddress('VALUE') ?? -1;
+    expect(valueAddress).toBeGreaterThanOrEqual(0);
+    expect(getWindowEmulator().getMemory()[valueAddress + 3]).toBe(2);
   });
 
   it('loads Nibbles in the ide, renders the splash screen, and forwards gameplay input', async () => {

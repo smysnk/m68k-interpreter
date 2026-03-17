@@ -12,10 +12,13 @@ import {
   faSun,
 } from '@fortawesome/free-solid-svg-icons';
 import GitHubButton from 'react-github-btn';
+import type { EngineMode } from '@/store';
 
 type AppTheme = 'light' | 'dark';
 
 interface NavbarProps {
+  engineMode: EngineMode;
+  onEngineChange: (engineMode: EngineMode) => void;
   onLoadNibbles: () => void;
   onToggleTheme: () => void;
   onToggleHelp: () => void;
@@ -26,6 +29,8 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({
+  engineMode,
+  onEngineChange,
   onLoadNibbles,
   onToggleTheme,
   onToggleHelp,
@@ -64,6 +69,18 @@ const Navbar: React.FC<NavbarProps> = ({
         <button className="btn-command btn-command-text" onClick={onLoadNibbles} title="Load Nibbles">
           Load Nibbles
         </button>
+        <label className="navbar-engine-selector">
+          <span className="navbar-engine-label">Engine</span>
+          <select
+            aria-label="Interpreter engine"
+            className="navbar-engine-select"
+            onChange={(event) => onEngineChange(event.target.value as EngineMode)}
+            value={engineMode}
+          >
+            <option value="interpreter">Interpreter</option>
+            <option value="interpreter-redux">Interpreter Redux</option>
+          </select>
+        </label>
         <button className="btn-command" onClick={handleRun} title="Run program">
           <FontAwesomeIcon icon={faPlay} size="lg" />
         </button>

@@ -113,6 +113,37 @@ pre {
   gap: var(--spacing-sm);
 }
 
+.navbar-engine-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-height: 40px;
+  padding: 0 var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background: var(--surface-color);
+}
+
+.navbar-engine-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.navbar-engine-select {
+  min-width: 170px;
+  border: none;
+  background: transparent;
+  color: var(--text-color);
+  padding: 0;
+}
+
+.navbar-engine-select:focus {
+  box-shadow: none;
+}
+
 .main-content {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.9fr);

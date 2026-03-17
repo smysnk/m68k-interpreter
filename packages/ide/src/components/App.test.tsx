@@ -48,6 +48,44 @@ END`);
     expect(window.editorCode).toContain('END NIBBLES');
   });
 
+  it('stores the selected interpreter engine in Redux and resets the active runtime', () => {
+    render(<App />);
+
+    useEmulatorStore.getState().setEmulatorInstance({
+      emulationStep: vi.fn(),
+      getCFlag: vi.fn(() => 0),
+      getErrors: vi.fn(() => []),
+      getException: vi.fn(() => undefined),
+      getLastInstruction: vi.fn(() => 'Ready'),
+      getMemory: vi.fn(() => ({})),
+      getNFlag: vi.fn(() => 0),
+      getPC: vi.fn(() => 0),
+      getQueuedInputLength: vi.fn(() => 0),
+      getRegisters: vi.fn(() => new Int32Array(16)),
+      getSymbolAddress: vi.fn(() => undefined),
+      getSymbols: vi.fn(() => ({})),
+      getTerminalSnapshot: vi.fn(() => useEmulatorStore.getState().terminalSnapshot),
+      getVFlag: vi.fn(() => 0),
+      getXFlag: vi.fn(() => 0),
+      getZFlag: vi.fn(() => 0),
+      isHalted: vi.fn(() => false),
+      isWaitingForInput: vi.fn(() => false),
+      queueInput: vi.fn(),
+      reset: vi.fn(),
+      undoFromStack: vi.fn(),
+      clearInputQueue: vi.fn(),
+    });
+    window.emulatorInstance = useEmulatorStore.getState().emulatorInstance;
+
+    fireEvent.change(screen.getByLabelText(/interpreter engine/i), {
+      target: { value: 'interpreter-redux' },
+    });
+
+    expect(ideStore.getState().settings.engineMode).toBe('interpreter-redux');
+    expect(useEmulatorStore.getState().emulatorInstance).toBeNull();
+    expect(window.emulatorInstance).toBeNull();
+  });
+
   it('toggles the compatibility notes panel', () => {
     render(<App />);
 

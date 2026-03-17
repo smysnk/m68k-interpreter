@@ -1,11 +1,33 @@
 import { combineReducers, configureStore } from '@reduxjs/toolkit';
+import { interpreterReducer as interpreterReduxReducer } from '@m68k/interpreter-redux';
 import emulatorReducer from '@/store/emulatorSlice';
 import settingsReducer from '@/store/settingsSlice';
+import { resetEmulatorState } from '@/store/emulatorSlice';
 
-const rootReducer = combineReducers({
+const combinedReducer = combineReducers({
   emulator: emulatorReducer,
+  interpreterRedux: interpreterReduxReducer,
   settings: settingsReducer,
 });
+
+const rootReducer = (
+  state: ReturnType<typeof combinedReducer> | undefined,
+  action: Parameters<typeof combinedReducer>[1]
+) => {
+  if (action.type === resetEmulatorState.type) {
+    return combinedReducer(
+      state
+        ? {
+            ...state,
+            interpreterRedux: undefined,
+          }
+        : state,
+      action
+    );
+  }
+
+  return combinedReducer(state, action);
+};
 
 export function createIdeStore() {
   return configureStore({

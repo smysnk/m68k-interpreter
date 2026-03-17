@@ -11,15 +11,19 @@ import {
 export interface SettingsState {
   themes: EditorThemeId[];
   editorTheme: EditorThemeId;
+  engineMode: EngineMode;
   followSystemTheme: boolean;
   lineNumbers: boolean;
   showHelp: boolean;
   showRegisters: boolean;
 }
 
+export type EngineMode = 'interpreter' | 'interpreter-redux';
+
 const initialState: SettingsState = {
   themes: defaultEditorThemes,
   editorTheme: defaultEditorTheme,
+  engineMode: 'interpreter',
   followSystemTheme: true,
   lineNumbers: true,
   showHelp: false,
@@ -42,6 +46,9 @@ const settingsSlice = createSlice({
       }
       state.editorTheme = action.payload;
       state.followSystemTheme = false;
+    },
+    setEngineMode(state, action: PayloadAction<EngineMode>) {
+      state.engineMode = action.payload;
     },
     toggleEditorTheme(state) {
       state.editorTheme = getOppositeTheme(state.editorTheme);
@@ -73,6 +80,7 @@ const settingsSlice = createSlice({
 
 export const {
   setEditorTheme,
+  setEngineMode,
   toggleEditorTheme,
   syncSystemTheme,
   setFollowSystemTheme,
