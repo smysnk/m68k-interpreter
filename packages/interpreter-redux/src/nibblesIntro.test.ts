@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { ReducerInterpreterSession } from './session';
 
-const nibblesPath = fileURLToPath(new URL('../../../../../nibbles.asm', import.meta.url));
+const nibblesPath = fileURLToPath(new URL('../../../examples/nibbles.asm', import.meta.url));
 
 describe('interpreter-redux nibbles intro', () => {
   it(

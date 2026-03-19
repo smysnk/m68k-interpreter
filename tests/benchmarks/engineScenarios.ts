@@ -24,7 +24,7 @@ export interface BenchmarkScenario {
   expectation?: BenchmarkScenarioExpectation;
 }
 
-const nibblesPath = fileURLToPath(new URL('../../../../nibbles.asm', import.meta.url));
+const nibblesPath = fileURLToPath(new URL('../../examples/nibbles.asm', import.meta.url));
 const nibblesProgram = new Uint8Array(readFileSync(nibblesPath));
 
 export const NIBBLES_INTRO_BENCHMARK_SCENARIO: BenchmarkScenario = {

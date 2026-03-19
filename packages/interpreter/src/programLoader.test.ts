@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadProgramSource } from './programLoader';
 
-const nibblesPath = fileURLToPath(new URL('../../../../../nibbles.asm', import.meta.url));
+const nibblesPath = fileURLToPath(new URL('../../../examples/nibbles.asm', import.meta.url));
 
 function readBytes(memory: Record<number, number>, address: number, length: number): number[] {
   return Array.from({ length }, (_, index) => memory[address + index] ?? 0);

@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { Emulator } from './emulator';
 import { Strings } from './strings';
 
-const nibblesPath = fileURLToPath(new URL('../../../../../../nibbles.asm', import.meta.url));
+const nibblesPath = fileURLToPath(new URL('../../../../examples/nibbles.asm', import.meta.url));
 
 function runProgram(emulator: Emulator, maxSteps = 1000): number {
   for (let step = 0; step < maxSteps; step += 1) {
