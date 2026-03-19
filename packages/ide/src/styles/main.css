@@ -384,7 +384,10 @@ textarea {
   min-height: 0;
   overflow: hidden;
   height: 100%;
-  background: transparent;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
 }
 
 .editor-code-mirror {

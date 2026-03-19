@@ -1,14 +1,11 @@
 import React from 'react';
 import CodeMirror from '@uiw/react-codemirror';
-import { StreamLanguage } from '@codemirror/language';
-import { gas } from '@codemirror/legacy-modes/mode/gas';
 import { EditorView, placeholder } from '@codemirror/view';
 import { useSelector } from 'react-redux';
 import { useTheme } from 'styled-components';
+import { m68kLanguage } from '@/editor/m68kLanguage';
 import { useEmulatorStore } from '@/stores/emulatorStore';
 import type { RootState } from '@/store';
-
-const assemblyLanguage = StreamLanguage.define(gas);
 
 const Editor: React.FC = () => {
   const { editorCode, setEditorCode } = useEmulatorStore();
@@ -16,7 +13,7 @@ const Editor: React.FC = () => {
   const theme = useTheme();
 
   const extensions = React.useMemo(
-    () => [assemblyLanguage, EditorView.lineWrapping, placeholder('Enter M68K assembly code...')],
+    () => [m68kLanguage, EditorView.lineWrapping, placeholder('Enter M68K assembly code...')],
     []
   );
 

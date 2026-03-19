@@ -114,6 +114,7 @@ function createIdeTheme(
     { tag: [t.comment, t.blockComment, t.lineComment], color: palette.textSecondary, fontStyle: 'italic' },
     { tag: [t.string, t.special(t.string)], color: palette.successColor },
     { tag: [t.number, t.bool, t.atom], color: palette.warningColor },
+    { tag: [t.operator, t.punctuation], color: palette.secondaryColor },
     { tag: [t.variableName, t.propertyName], color: palette.textColor },
     { tag: [t.definition(t.variableName), t.labelName], color: palette.infoColor, fontWeight: '700' },
     { tag: [t.typeName, t.className], color: palette.infoColor },

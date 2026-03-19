@@ -10,7 +10,7 @@ export default {
   },
   workspaceDiscovery: {
     provider: "manual",
-    packages: ["quality", "interpreter", "ide", "integration", "browser"]
+    packages: ["quality", "interpreter", "ide", "integration", "browser", "benchmark"]
   },
   execution: {
     continueOnError: true,
@@ -118,6 +118,34 @@ export default {
       command: ["yarn", "test:e2e"],
       module: "experience",
       theme: "browser",
+      coverage: {
+        enabled: false
+      }
+    },
+    {
+      id: "engine-benchmark-smoke",
+      label: "Engine Benchmark Battery",
+      adapter: "shell",
+      package: "benchmark",
+      cwd: rootDir,
+      command: ["yarn", "test:performance:test-station"],
+      resultFormat: "suite-json-v1",
+      module: "runtime",
+      theme: "benchmark",
+      coverage: {
+        enabled: false
+      }
+    },
+    {
+      id: "nibbles-intro-benchmark",
+      label: "Nibbles Intro Benchmark",
+      adapter: "shell",
+      package: "benchmark",
+      cwd: rootDir,
+      command: ["yarn", "test:performance:nibbles-intro:test-station"],
+      resultFormat: "suite-json-v1",
+      module: "runtime",
+      theme: "benchmark",
       coverage: {
         enabled: false
       }
