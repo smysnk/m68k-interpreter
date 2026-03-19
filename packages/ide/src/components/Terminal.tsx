@@ -1,9 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   RetroLcd,
   createRetroLcdController,
   type RetroLcdController,
-  type RetroLcdGeometry,
 } from 'react-retro-display-tty-ansi';
 import { useTheme } from 'styled-components';
 import { useEmulatorStore } from '@/stores/emulatorStore';
@@ -37,7 +36,6 @@ const Terminal: React.FC = () => {
   const previousOutputRef = useRef('');
   const { emulatorInstance, terminalSnapshot, executionState } = useEmulatorStore();
   const theme = useTheme();
-  const [displayGeometry, setDisplayGeometry] = useState<RetroLcdGeometry | null>(null);
 
   if (controllerRef.current === null) {
     controllerRef.current = createRetroLcdController({
@@ -110,20 +108,6 @@ const Terminal: React.FC = () => {
 
   return (
     <section className="terminal-container" data-terminal-theme={theme.surfaceMode}>
-      <div className="terminal-header">
-        <div>
-          <h3 className="terminal-title">Terminal</h3>
-          <p className="terminal-subtitle">
-            Auto-fit retro terminal synced with the IDE theme.
-          </p>
-        </div>
-        <div className="terminal-toolbar">
-          <button className="btn-terminal-focus" onClick={focusTerminal} type="button">
-            Focus Terminal
-          </button>
-        </div>
-      </div>
-
       <div
         ref={terminalRef}
         className="terminal-screen"
@@ -141,18 +125,7 @@ const Terminal: React.FC = () => {
           displayPadding={{ top: 18, right: 20, bottom: 18, left: 20 }}
           displaySurfaceMode={theme.surfaceMode}
           mode="terminal"
-          onGeometryChange={setDisplayGeometry}
         />
-      </div>
-
-      <div className="terminal-footer">
-        <span>{executionState.started ? 'Live terminal output' : 'Ready to load and run a program'}</span>
-        <span className="terminal-meta">
-          {displayGeometry ? `Display ${displayGeometry.rows}x${displayGeometry.cols}` : 'Display auto-fit'}
-          {' • '}
-          Source {terminalSnapshot.rows}x{terminalSnapshot.columns}
-        </span>
-        <span className="terminal-hint">Keys: W A S D, arrows, Enter, 4 5 6 8</span>
       </div>
     </section>
   );

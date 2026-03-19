@@ -55,7 +55,7 @@ describe('interpreter-redux phase 1 reducer contracts', () => {
     expect(nextState.cpu.registers[7]).toBe(DEFAULT_STACK_POINTER);
   });
 
-  it('queues input and clears waiting-for-input state', () => {
+  it('queues input while preserving a pending blocking-read trap', () => {
     const initialState = createInitialInterpreterReducerState();
     const waitingState = {
       ...initialState,
@@ -72,8 +72,8 @@ describe('interpreter-redux phase 1 reducer contracts', () => {
     );
 
     expect(nextState.input.queue).toEqual([0x77, 0x0d]);
-    expect(nextState.input.waitingForInput).toBe(false);
-    expect(nextState.input.pendingInputTask).toBeUndefined();
+    expect(nextState.input.waitingForInput).toBe(true);
+    expect(nextState.input.pendingInputTask).toBe(3);
   });
 
   it('resets back to the loaded program memory image', () => {
@@ -92,10 +92,18 @@ describe('interpreter-redux phase 1 reducer contracts', () => {
     const mutatedState = {
       ...loadedState,
       memory: {
-        bytes: {
-          ...loadedState.memory.bytes,
+        ...loadedState.memory,
+        overrides: {
+          ...loadedState.memory.overrides,
           0x2000: 0xff,
         },
+        bytes: Object.assign(
+          Object.create(loadedState.memory.baseBytes),
+          {
+            ...loadedState.memory.overrides,
+            0x2000: 0xff,
+          }
+        ),
       },
       cpu: {
         ...loadedState.cpu,

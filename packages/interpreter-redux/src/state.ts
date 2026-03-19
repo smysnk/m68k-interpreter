@@ -43,6 +43,8 @@ export interface CpuState {
 }
 
 export interface MemoryState {
+  baseBytes: Record<number, number>;
+  overrides: Record<number, number>;
   bytes: Record<number, number>;
 }
 
@@ -194,14 +196,31 @@ export function cloneCpuState(cpu: CpuState): CpuState {
   return createCpuState(cpu);
 }
 
+function createMemoryView(
+  baseBytes: Record<number, number>,
+  overrides: Record<number, number>
+): Record<number, number> {
+  return Object.assign(Object.create(baseBytes), overrides);
+}
+
 export function createMemoryState(bytes: Record<number, number> = {}): MemoryState {
+  const baseBytes = { ...bytes };
+  const overrides: Record<number, number> = {};
   return {
-    bytes: { ...bytes },
+    baseBytes,
+    overrides,
+    bytes: createMemoryView(baseBytes, overrides),
   };
 }
 
 export function cloneMemoryState(memory: MemoryState): MemoryState {
-  return createMemoryState(memory.bytes);
+  const baseBytes = { ...memory.baseBytes };
+  const overrides = { ...memory.overrides };
+  return {
+    baseBytes,
+    overrides,
+    bytes: createMemoryView(baseBytes, overrides),
+  };
 }
 
 export function createInputState(overrides: Partial<InputState> = {}): InputState {
@@ -247,13 +266,15 @@ export function cloneDiagnosticsState(diagnostics: DiagnosticsState): Diagnostic
 }
 
 export function createHistoryFrame(state: InterpreterReducerState): InterpreterHistoryFrame {
+  // Reducer state slices are treated as immutable, so history frames can safely
+  // keep references to the pre-step slices instead of deep-cloning them.
   return {
-    cpu: cloneCpuState(state.cpu),
-    memory: cloneMemoryState(state.memory),
-    terminal: cloneTerminalState(state.terminal),
-    input: cloneInputState(state.input),
-    execution: cloneExecutionRuntimeState(state.execution),
-    diagnostics: cloneDiagnosticsState(state.diagnostics),
+    cpu: state.cpu,
+    memory: state.memory,
+    terminal: state.terminal,
+    input: state.input,
+    execution: state.execution,
+    diagnostics: state.diagnostics,
   };
 }
 
@@ -261,21 +282,21 @@ export function createHistoryState(
   overrides: Partial<HistoryState> = {}
 ): HistoryState {
   return {
-    undoFrames: overrides.undoFrames
-      ? overrides.undoFrames.map((frame) => ({
-          cpu: cloneCpuState(frame.cpu),
-          memory: cloneMemoryState(frame.memory),
-          terminal: cloneTerminalState(frame.terminal),
-          input: cloneInputState(frame.input),
-          execution: cloneExecutionRuntimeState(frame.execution),
-          diagnostics: cloneDiagnosticsState(frame.diagnostics),
-        }))
-      : [],
+    undoFrames: overrides.undoFrames ? [...overrides.undoFrames] : [],
   };
 }
 
 export function cloneHistoryState(history: HistoryState): HistoryState {
-  return createHistoryState(history);
+  return {
+    undoFrames: history.undoFrames.map((frame) => ({
+      cpu: cloneCpuState(frame.cpu),
+      memory: cloneMemoryState(frame.memory),
+      terminal: cloneTerminalState(frame.terminal),
+      input: cloneInputState(frame.input),
+      execution: cloneExecutionRuntimeState(frame.execution),
+      diagnostics: cloneDiagnosticsState(frame.diagnostics),
+    })),
+  };
 }
 
 export interface CreateInterpreterReducerStateOptions {

@@ -10,7 +10,7 @@ export default {
   },
   workspaceDiscovery: {
     provider: "manual",
-    packages: ["quality", "interpreter", "ide", "integration"]
+    packages: ["quality", "interpreter", "ide", "integration", "browser"]
   },
   execution: {
     continueOnError: true,
@@ -107,6 +107,19 @@ export default {
       coverage: {
         enabled: true,
         mode: "second-pass"
+      }
+    },
+    {
+      id: "browser-e2e",
+      label: "Browser E2E Playwright",
+      adapter: "shell",
+      package: "browser",
+      cwd: rootDir,
+      command: ["yarn", "test:e2e"],
+      module: "experience",
+      theme: "browser",
+      coverage: {
+        enabled: false
       }
     }
   ],

@@ -104,7 +104,11 @@ class ReduxStoreInterpreterAdapter implements StoreBackedReducerInterpreterAdapt
   }
 
   getMemory(): Record<number, number> {
-    return { ...this.store.getState().memory.bytes };
+    const memory = this.store.getState().memory;
+    return {
+      ...memory.baseBytes,
+      ...memory.overrides,
+    };
   }
 
   getPC(): number {

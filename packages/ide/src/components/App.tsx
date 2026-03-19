@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { flushSync } from 'react-dom';
 import { useTheme } from 'styled-components';
 import { Analytics } from '@vercel/analytics/react';
 import 'react-retro-display-tty-ansi/styles.css';
@@ -28,6 +29,8 @@ import {
 } from '@/store';
 import '../styles/main.css';
 
+type WorkspaceTab = 'terminal' | 'code';
+
 function AppShell(): React.ReactElement {
   const dispatch = useDispatch<AppDispatch>();
   const theme = useTheme();
@@ -36,6 +39,7 @@ function AppShell(): React.ReactElement {
   const showRegisters = useSelector((state: RootState) => state.settings.showRegisters);
   const followSystemTheme = useSelector((state: RootState) => state.settings.followSystemTheme);
   const engineMode = useSelector((state: RootState) => state.settings.engineMode);
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTab>('terminal');
 
   useEmulatorEvents();
 
@@ -78,7 +82,27 @@ function AppShell(): React.ReactElement {
     document.documentElement.style.colorScheme = theme.surfaceMode;
   }, [theme.surfaceMode]);
 
+  useEffect(() => {
+    const showTerminalWorkspace = (): void => {
+      flushSync(() => {
+        setActiveWorkspaceTab('terminal');
+      });
+    };
+
+    window.addEventListener('emulator:run', showTerminalWorkspace);
+    window.addEventListener('emulator:resume', showTerminalWorkspace);
+    window.addEventListener('emulator:step', showTerminalWorkspace);
+
+    return () => {
+      window.removeEventListener('emulator:run', showTerminalWorkspace);
+      window.removeEventListener('emulator:resume', showTerminalWorkspace);
+      window.removeEventListener('emulator:step', showTerminalWorkspace);
+    };
+  }, []);
+
   const handleLoadNibbles = (): void => {
+    setActiveWorkspaceTab('terminal');
+    dispatch(setEngineMode('interpreter'));
     dispatch(setEditorCode(nibblesSource));
     window.editorCode = nibblesSource;
     window.dispatchEvent(new CustomEvent('emulator:reset'));
@@ -92,8 +116,10 @@ function AppShell(): React.ReactElement {
   return (
     <div className="app-container" data-testid="app-container" data-theme={theme.surfaceMode}>
       <Navbar
+        activeWorkspaceTab={activeWorkspaceTab}
         onLoadNibbles={handleLoadNibbles}
         onEngineChange={handleEngineChange}
+        onWorkspaceTabChange={setActiveWorkspaceTab}
         onToggleTheme={() => dispatch(toggleEditorTheme())}
         onToggleHelp={() => dispatch(toggleHelp())}
         onToggleMemory={() => dispatch(toggleRegisters())}
@@ -104,8 +130,26 @@ function AppShell(): React.ReactElement {
       />
       <main className="main-content">
         <div className="workspace-panel">
-          <Editor />
-          <Terminal />
+          <div className="workspace-tabpanels">
+            <section
+              aria-labelledby="workspace-tab-terminal"
+              className={`workspace-tabpanel ${activeWorkspaceTab === 'terminal' ? 'active' : ''}`}
+              data-active={activeWorkspaceTab === 'terminal'}
+              id="workspace-tabpanel-terminal"
+              role="tabpanel"
+            >
+              <Terminal />
+            </section>
+            <section
+              aria-labelledby="workspace-tab-code"
+              className={`workspace-tabpanel ${activeWorkspaceTab === 'code' ? 'active' : ''}`}
+              data-active={activeWorkspaceTab === 'code'}
+              id="workspace-tabpanel-code"
+              role="tabpanel"
+            >
+              <Editor />
+            </section>
+          </div>
         </div>
         <div className="inspector-panel">
           <Output />

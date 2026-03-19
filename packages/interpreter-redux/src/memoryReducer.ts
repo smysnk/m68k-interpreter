@@ -71,6 +71,17 @@ export function getMemoryValue(
   }
 }
 
+function createPatchedMemoryState(
+  baseBytes: Record<number, number>,
+  overrides: Record<number, number>
+): MemoryState {
+  return {
+    baseBytes,
+    overrides,
+    bytes: Object.assign(Object.create(baseBytes), overrides),
+  };
+}
+
 export function setMemoryByte(state: MemoryState, address: number, value: number): MemoryState {
   const normalizedAddress = address >>> 0;
   const normalizedValue = (value & 0xff) >>> 0;
@@ -79,40 +90,34 @@ export function setMemoryByte(state: MemoryState, address: number, value: number
     return state;
   }
 
-  return {
-    bytes: {
-      ...state.bytes,
-      [normalizedAddress]: normalizedValue,
-    },
-  };
+  return createPatchedMemoryState(state.baseBytes, {
+    ...state.overrides,
+    [normalizedAddress]: normalizedValue,
+  });
 }
 
 export function setMemoryWord(state: MemoryState, address: number, value: number): MemoryState {
   const normalizedAddress = address >>> 0;
-  const nextBytes = {
-    ...state.bytes,
+  const nextOverrides = {
+    ...state.overrides,
     [normalizedAddress]: ((value >>> 8) & 0xff) >>> 0,
     [(normalizedAddress + 1) >>> 0]: (value & 0xff) >>> 0,
   };
 
-  return {
-    bytes: nextBytes,
-  };
+  return createPatchedMemoryState(state.baseBytes, nextOverrides);
 }
 
 export function setMemoryLong(state: MemoryState, address: number, value: number): MemoryState {
   const normalizedAddress = address >>> 0;
-  const nextBytes = {
-    ...state.bytes,
+  const nextOverrides = {
+    ...state.overrides,
     [normalizedAddress]: ((value >>> 24) & 0xff) >>> 0,
     [(normalizedAddress + 1) >>> 0]: ((value >>> 16) & 0xff) >>> 0,
     [(normalizedAddress + 2) >>> 0]: ((value >>> 8) & 0xff) >>> 0,
     [(normalizedAddress + 3) >>> 0]: (value & 0xff) >>> 0,
   };
 
-  return {
-    bytes: nextBytes,
-  };
+  return createPatchedMemoryState(state.baseBytes, nextOverrides);
 }
 
 export function setMemoryValue(
@@ -133,15 +138,13 @@ export function setMemoryValue(
 }
 
 export function clearMemoryState(state: MemoryState): MemoryState {
-  if (Object.keys(state.bytes).length === 0) {
+  if (Object.keys(state.baseBytes).length === 0 && Object.keys(state.overrides).length === 0) {
     return state;
   }
 
-  return {
-    bytes: {},
-  };
+  return createPatchedMemoryState({}, {});
 }
 
 export function getUsedMemorySize(state: MemoryState): number {
-  return Object.keys(state.bytes).length;
+  return new Set([...Object.keys(state.baseBytes), ...Object.keys(state.overrides)]).size;
 }

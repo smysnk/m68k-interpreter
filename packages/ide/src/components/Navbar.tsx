@@ -15,11 +15,14 @@ import GitHubButton from 'react-github-btn';
 import type { EngineMode } from '@/store';
 
 type AppTheme = 'light' | 'dark';
+type WorkspaceTab = 'terminal' | 'code';
 
 interface NavbarProps {
+  activeWorkspaceTab: WorkspaceTab;
   engineMode: EngineMode;
   onEngineChange: (engineMode: EngineMode) => void;
   onLoadNibbles: () => void;
+  onWorkspaceTabChange: (tab: WorkspaceTab) => void;
   onToggleTheme: () => void;
   onToggleHelp: () => void;
   onToggleMemory: () => void;
@@ -29,9 +32,11 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({
+  activeWorkspaceTab,
   engineMode,
   onEngineChange,
   onLoadNibbles,
+  onWorkspaceTabChange,
   onToggleTheme,
   onToggleHelp,
   onToggleMemory,
@@ -66,6 +71,30 @@ const Navbar: React.FC<NavbarProps> = ({
   return (
     <nav className="navbar">
       <div className="navbar-commands">
+        <div className="navbar-view-toggle" role="tablist" aria-label="Workspace views">
+          <button
+            aria-controls="workspace-tabpanel-terminal"
+            aria-selected={activeWorkspaceTab === 'terminal'}
+            className={`navbar-view-tab ${activeWorkspaceTab === 'terminal' ? 'active' : ''}`}
+            id="workspace-tab-terminal"
+            onClick={() => onWorkspaceTabChange('terminal')}
+            role="tab"
+            type="button"
+          >
+            Terminal
+          </button>
+          <button
+            aria-controls="workspace-tabpanel-code"
+            aria-selected={activeWorkspaceTab === 'code'}
+            className={`navbar-view-tab ${activeWorkspaceTab === 'code' ? 'active' : ''}`}
+            id="workspace-tab-code"
+            onClick={() => onWorkspaceTabChange('code')}
+            role="tab"
+            type="button"
+          >
+            Code
+          </button>
+        </div>
         <button className="btn-command btn-command-text" onClick={onLoadNibbles} title="Load Nibbles">
           Load Nibbles
         </button>
@@ -75,10 +104,11 @@ const Navbar: React.FC<NavbarProps> = ({
             aria-label="Interpreter engine"
             className="navbar-engine-select"
             onChange={(event) => onEngineChange(event.target.value as EngineMode)}
+            title="Choose the runtime engine. Interpreter Redux is experimental."
             value={engineMode}
           >
             <option value="interpreter">Interpreter</option>
-            <option value="interpreter-redux">Interpreter Redux</option>
+            <option value="interpreter-redux">Interpreter Redux (Experimental)</option>
           </select>
         </label>
         <button className="btn-command" onClick={handleRun} title="Run program">

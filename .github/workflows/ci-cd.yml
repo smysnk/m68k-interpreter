@@ -44,6 +44,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
+      - name: Install Playwright browsers
+        run: yarn exec playwright install --with-deps chromium
+
       - name: Capture test-station start time
         run: echo "TEST_STATION_BUILD_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
 
@@ -105,7 +108,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: test-station-results
-          path: .test-results/test-station
+          path: |
+            .test-results/test-station
+            .test-results/playwright
           retention-days: 14
 
       - name: Fail if report detected regressions

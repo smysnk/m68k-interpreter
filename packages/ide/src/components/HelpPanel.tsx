@@ -7,6 +7,16 @@ const HelpPanel: React.FC = () => {
         <h3>Play Nibbles</h3>
         <p>Load Nibbles, press Run, then use W A S D, arrow keys, or keypad 4 5 6 8. Press Enter to confirm menus.</p>
         <p>Reset clears the current emulator session and terminal so the loaded program can be launched again from a clean state.</p>
+        <p>Load Nibbles always switches the IDE back to the default `Interpreter` engine so the game starts on the supported runtime path.</p>
+      </div>
+
+      <div className="help-panel-section">
+        <h3>Engine Modes</h3>
+        <ul className="help-panel-list">
+          <li>`Interpreter` is the default runtime and the recommended engine for Nibbles and general browser use.</li>
+          <li>`Interpreter Redux` is experimental and is currently intended for parity work, reducer-state validation, and simple-program testing.</li>
+          <li>The reducer engine stays available in the dropdown, but it is not yet the supported path for full Nibbles gameplay.</li>
+        </ul>
       </div>
 
       <div className="help-panel-section">

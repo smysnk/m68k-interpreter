@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import App from './App';
 import { nibblesSource } from '@/programs/nibbles';
 import { useEmulatorStore } from '@/stores/emulatorStore';
-import { ideStore, resetSettingsState } from '@/store';
+import { ideStore, resetSettingsState, setEngineMode } from '@/store';
 
 vi.mock('@vercel/analytics/react', () => ({
   Analytics: () => null,
@@ -42,10 +42,36 @@ END`);
   it('loads the Nibbles source into the editor', () => {
     render(<App />);
 
+    fireEvent.click(screen.getByRole('tab', { name: /code/i }));
     fireEvent.click(screen.getByRole('button', { name: /load nibbles/i }));
 
     expect(useEmulatorStore.getState().editorCode).toBe(nibblesSource);
     expect(window.editorCode).toContain('END NIBBLES');
+  });
+
+  it('defaults the workspace to the terminal tab and lets the user switch to code', () => {
+    render(<App />);
+
+    expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'false');
+
+    fireEvent.click(screen.getByRole('tab', { name: /code/i }));
+
+    expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('assembly-editor')).toBeInTheDocument();
+  });
+
+  it('forces the default Interpreter engine when loading Nibbles', () => {
+    ideStore.dispatch(setEngineMode('interpreter-redux'));
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('tab', { name: /code/i }));
+    fireEvent.click(screen.getByRole('button', { name: /load nibbles/i }));
+
+    expect(ideStore.getState().settings.engineMode).toBe('interpreter');
+    expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('stores the selected interpreter engine in Redux and resets the active runtime', () => {
@@ -108,6 +134,7 @@ END`);
     expect(document.querySelector('.terminal-container')).toHaveAttribute('data-terminal-theme', 'dark');
     expect(document.querySelector('.retro-lcd')).toHaveAttribute('data-display-surface-mode', 'dark');
     expect(screen.getByRole('button', { name: /switch to light mode/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/interpreter engine/i)).toHaveDisplayValue('Interpreter');
   });
 
   it('lets the navbar theme toggle switch the whole IDE theme', () => {

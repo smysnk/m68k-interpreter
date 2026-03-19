@@ -34,31 +34,23 @@ const Editor: React.FC = () => {
 
   return (
     <div className="editor-container">
-      <div className="editor-header">
-        <div>
-          <h3 className="editor-title">Assembly Editor</h3>
-          <p className="editor-subtitle">CodeMirror editor with the active IDE theme driving syntax, chrome, and layout.</p>
-        </div>
-      </div>
-      <div className="editor-surface">
-        <CodeMirror
-          aria-label="M68K Assembly Editor"
-          basicSetup={{
-            lineNumbers,
-            foldGutter: false,
-            dropCursor: false,
-            highlightActiveLine: true,
-            highlightActiveLineGutter: true,
-          }}
-          className="editor-code-mirror"
-          data-testid="assembly-editor"
-          extensions={extensions}
-          height="100%"
-          onChange={handleCodeChange}
-          theme={theme.theme}
-          value={editorCode}
-        />
-      </div>
+      <CodeMirror
+        aria-label="M68K Assembly Editor"
+        basicSetup={{
+          lineNumbers,
+          foldGutter: false,
+          dropCursor: false,
+          highlightActiveLine: true,
+          highlightActiveLineGutter: true,
+        }}
+        className="editor-code-mirror"
+        data-testid="assembly-editor"
+        extensions={extensions}
+        height="100%"
+        onChange={handleCodeChange}
+        theme={theme.theme}
+        value={editorCode}
+      />
     </div>
   );
 };

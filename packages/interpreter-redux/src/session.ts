@@ -159,7 +159,10 @@ export class ReducerInterpreterSession implements ReducerInterpreterAdapter {
   }
 
   getMemory(): Record<number, number> {
-    return { ...this.state.memory.bytes };
+    return {
+      ...this.state.memory.baseBytes,
+      ...this.state.memory.overrides,
+    };
   }
 
   getPC(): number {

@@ -1,14 +1,23 @@
 import {
-  cloneTerminalState,
   createEmptyTerminalState,
   createTerminalCellState,
   createTerminalStyleState,
   type TerminalState,
+  type TerminalStyleState,
 } from './state';
 
 function createBlankRow(columns: number) {
   const baseStyle = createTerminalStyleState();
   return Array.from({ length: columns }, () => createTerminalCellState(baseStyle));
+}
+
+function cloneStyle(style: TerminalStyleState): TerminalStyleState {
+  return {
+    foreground: style.foreground,
+    background: style.background,
+    bold: style.bold,
+    inverse: style.inverse,
+  };
 }
 
 function isEscapeSequenceFinal(sequence: string, char: string): boolean {
@@ -34,7 +43,11 @@ function clearScreen(state: TerminalState): void {
   state.cursorColumn = 0;
 }
 
-function applyGraphicsMode(state: TerminalState, params: number[]): void {
+function applyGraphicsMode(
+  state: TerminalState,
+  params: number[],
+  ensureMutableStyle: () => void
+): void {
   const effectiveParams = params.length === 0 ? [0] : params;
 
   for (const param of effectiveParams) {
@@ -44,47 +57,59 @@ function applyGraphicsMode(state: TerminalState, params: number[]): void {
     }
 
     if (param === 1) {
+      ensureMutableStyle();
       state.style.bold = true;
       continue;
     }
 
     if (param === 7) {
+      ensureMutableStyle();
       state.style.inverse = true;
       continue;
     }
 
     if (param === 22) {
+      ensureMutableStyle();
       state.style.bold = false;
       continue;
     }
 
     if (param === 27) {
+      ensureMutableStyle();
       state.style.inverse = false;
       continue;
     }
 
     if (param === 39) {
+      ensureMutableStyle();
       state.style.foreground = null;
       continue;
     }
 
     if (param === 49) {
+      ensureMutableStyle();
       state.style.background = null;
       continue;
     }
 
     if (param >= 30 && param <= 37) {
+      ensureMutableStyle();
       state.style.foreground = param;
       continue;
     }
 
     if (param >= 40 && param <= 47) {
+      ensureMutableStyle();
       state.style.background = param;
     }
   }
 }
 
-function applyEscapeSequence(state: TerminalState, sequence: string): void {
+function applyEscapeSequence(
+  state: TerminalState,
+  sequence: string,
+  ensureMutableStyle: () => void
+): void {
   if (!sequence.startsWith('[')) {
     return;
   }
@@ -126,7 +151,7 @@ function applyEscapeSequence(state: TerminalState, sequence: string): void {
       }
       break;
     case 'm':
-      applyGraphicsMode(state, params);
+      applyGraphicsMode(state, params, ensureMutableStyle);
       break;
     default:
       break;
@@ -135,8 +160,7 @@ function applyEscapeSequence(state: TerminalState, sequence: string): void {
 
 function advanceLine(state: TerminalState): void {
   if (state.cursorRow === state.rows - 1) {
-    state.cells.shift();
-    state.cells.push(createBlankRow(state.columns));
+    state.cells = [...state.cells.slice(1), createBlankRow(state.columns)];
     return;
   }
 
@@ -157,13 +181,17 @@ function writeCharacter(state: TerminalState, char: string): void {
     wrapCursor(state);
   }
 
-  state.cells[state.cursorRow][state.cursorColumn] = {
+  const nextCells = [...state.cells];
+  const nextRow = [...nextCells[state.cursorRow]];
+  nextRow[state.cursorColumn] = {
     char,
     foreground: state.style.foreground,
     background: state.style.background,
     bold: state.style.bold,
     inverse: state.style.inverse,
   };
+  nextCells[state.cursorRow] = nextRow;
+  state.cells = nextCells;
 
   state.cursorColumn += 1;
   if (state.cursorColumn >= state.columns) {
@@ -188,15 +216,33 @@ export function resizeTerminalState(
 }
 
 export function writeTerminalByte(state: TerminalState, value: number): TerminalState {
-  const nextState = cloneTerminalState(state);
+  const nextState: TerminalState = {
+    columns: state.columns,
+    rows: state.rows,
+    cursorRow: state.cursorRow,
+    cursorColumn: state.cursorColumn,
+    style: state.style,
+    escapeBuffer: state.escapeBuffer,
+    output: state.output,
+    cells: state.cells,
+  };
   const byte = value & 0xff;
   const char = String.fromCharCode(byte);
   nextState.output += char;
+  let styleIsMutable = false;
+  const ensureMutableStyle = (): void => {
+    if (styleIsMutable) {
+      return;
+    }
+
+    nextState.style = cloneStyle(nextState.style);
+    styleIsMutable = true;
+  };
 
   if (nextState.escapeBuffer !== null) {
     nextState.escapeBuffer += char;
     if (isEscapeSequenceFinal(nextState.escapeBuffer, char)) {
-      applyEscapeSequence(nextState, nextState.escapeBuffer);
+      applyEscapeSequence(nextState, nextState.escapeBuffer, ensureMutableStyle);
       nextState.escapeBuffer = null;
     }
     return nextState;

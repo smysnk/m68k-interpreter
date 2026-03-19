@@ -99,10 +99,8 @@ export function interpreterReducer(
       return {
         ...state,
         input: {
-          ...cloneInputState(state.input),
+          ...state.input,
           queue: [...state.input.queue, ...action.payload],
-          waitingForInput: false,
-          pendingInputTask: undefined,
         },
       };
     case 'terminalResized':

@@ -35,9 +35,15 @@ describe('workspace integration', () => {
 
     render(<App />);
 
-    expect(screen.getByText('Assembly Editor')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByText('Last Instruction')).toBeInTheDocument();
-    expect(screen.getByText('Terminal')).toBeInTheDocument();
+    expect(screen.getByTestId('terminal-screen')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: /code/i }));
+
+    expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('assembly-editor')).toBeInTheDocument();
 
     useEmulatorStore.getState().setEditorCode(`START
   MOVE.B #'H',D0
@@ -53,6 +59,7 @@ describe('workspace integration', () => {
     });
 
     await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'true');
       expect(screen.getByTestId('terminal-screen')).toHaveTextContent('H');
     });
   });

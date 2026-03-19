@@ -13,7 +13,7 @@ describe('Terminal', () => {
     ideStore.dispatch(resetSettingsState());
   });
 
-  it('renders the terminal snapshot through the retro display and reports auto-fit geometry', async () => {
+  it('renders the terminal snapshot through the retro display as a full-height surface', async () => {
     useEmulatorStore.getState().setTerminalSnapshot({
       columns: 10,
       rows: 2,
@@ -46,10 +46,13 @@ describe('Terminal', () => {
     await waitFor(() => {
       expect(screen.getByTestId('terminal-screen')).toHaveTextContent('Difficulty');
       expect(screen.getByTestId('terminal-screen')).toHaveTextContent('Play');
-      expect(screen.getByText(/Display \d+x\d+/)).toBeInTheDocument();
     });
 
+    const terminalContainer = document.querySelector('.terminal-container') as HTMLElement | null;
     const retroDisplay = document.querySelector('.retro-lcd') as HTMLElement | null;
+    expect(terminalContainer).not.toBeNull();
+    expect(screen.queryByText(/Display \d+x\d+/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /focus terminal/i })).not.toBeInTheDocument();
     expect(retroDisplay).not.toBeNull();
     expect(retroDisplay).toHaveAttribute('data-grid-mode', 'auto');
   });

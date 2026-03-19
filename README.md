@@ -22,6 +22,7 @@ Write, step through, and debug m68k assembly — no installation needed.
 - Export register and memory state to file
 - Terminal-mode execution path for `nibbles.asm`
 - Runtime batching and keyboard capture for browser-playable terminal programs
+- Engine dropdown with default `Interpreter` and experimental `Interpreter Redux`
 
 ## Supported instructions
 
@@ -35,6 +36,12 @@ Write, step through, and debug m68k assembly — no installation needed.
 ## Easy68K subset notes
 
 The current terminal build is aimed at the Easy68K subset needed by `nibbles.asm`, including `EQU`, `DC.*`, `DS.*`, trap tasks `1`, `3`, `4`, and `TRAP #11` halt. See [docs/EASY68K_SUBSET_AND_LIMITATIONS.md](docs/EASY68K_SUBSET_AND_LIMITATIONS.md) for the supported subset and known limitations.
+
+## Runtime shape
+
+- `Interpreter` is the default IDE runtime and the supported path for `nibbles.asm`
+- `Interpreter Redux` is available as an experimental alternate engine for reducer-runtime parity work and store integration
+- `Load Nibbles` intentionally switches the IDE back to `Interpreter` so the main demo path stays playable
 
 ---
 <!-- 
@@ -57,7 +64,7 @@ Each file is commented line by line — useful if you are following a computer a
 
 ## Built with
 
-React 18 · TypeScript · Vite 5 · Zustand · Vitest
+React 18 · Redux Toolkit · TypeScript · Vite 7 · Vitest
 
 ---
 

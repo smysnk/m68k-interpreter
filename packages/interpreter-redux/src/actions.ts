@@ -45,7 +45,7 @@ export const interpreterReduxActions = {
   inputQueued: (bytes: number[]) =>
     ({
       type: 'inputQueued',
-      payload: [...bytes],
+      payload: bytes,
     }) as const,
   inputCleared: () =>
     ({
