@@ -74,7 +74,9 @@ test.describe('browser e2e nibbles', () => {
 
     const introText = await readTerminalText(page);
     expect(introText).toContain('Programmed By Josh Henn');
-    await expect(page.getByText(/waiting for input/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByLabel('IDE status bar')).toContainText(/waiting for input/i, {
+      timeout: 15_000,
+    });
 
     console.info(`Nibbles intro screen reached in ${Date.now() - introStartedAt}ms`);
 

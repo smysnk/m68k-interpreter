@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createIdeStore, setEditorCode, setEditorCursorPosition, setWorkspaceTab } from '@/store';
+import {
+  createIdeStore,
+  setEditorCode,
+  setEditorCursorPosition,
+  setRuntimeMetrics,
+  setWorkspaceTab,
+} from '@/store';
 import { nibblesSource } from '@/programs/nibbles';
 import { selectActiveInspectorPane, selectStatusBarModel } from '@/store/statusBarSelectors';
 
@@ -28,6 +34,20 @@ describe('statusBarSelectors', () => {
     expect(model.programLabel).toBe('Nibbles');
     expect(model.viewLabel).toBe('Code');
     expect(model.locationLabel).toBe('Ln 18, Col 9');
+  });
+
+  it('humanizes underscored stop reasons for the status bar', () => {
+    const store = createIdeStore();
+
+    store.dispatch(
+      setRuntimeMetrics({
+        lastStopReason: 'waiting_for_input',
+      })
+    );
+
+    const model = selectStatusBarModel(store.getState());
+
+    expect(model.stopLabel).toBe('waiting for input');
   });
 
   it('selects the flags pane when the flags view is active', () => {

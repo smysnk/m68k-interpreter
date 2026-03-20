@@ -30,6 +30,8 @@ export const selectActiveInspectorPane = createSelector(
   (showFlags, inspectorView) => (showFlags ? 'flags' : inspectorView)
 );
 
+const humanizeStatusToken = (value: string): string => value.replace(/_/g, ' ');
+
 export const selectStatusBarModel = createSelector(
   [
     (state: RootState) => state.settings.engineMode,
@@ -89,7 +91,7 @@ export const selectStatusBarModel = createSelector(
       viewLabel: workspaceTab === 'code' ? 'Code' : 'Terminal',
       locationLabel,
       frameLabel: `${runtimeMetrics.lastFrameInstructions} instr / ${runtimeMetrics.lastFrameDurationMs.toFixed(1)} ms`,
-      stopLabel: runtimeMetrics.lastStopReason,
+      stopLabel: humanizeStatusToken(runtimeMetrics.lastStopReason),
     };
   }
 );

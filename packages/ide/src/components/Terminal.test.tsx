@@ -55,7 +55,7 @@ describe('Terminal', () => {
     expect(screen.queryByText(/Display \d+x\d+/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /focus terminal/i })).not.toBeInTheDocument();
     expect(retroDisplay).not.toBeNull();
-    expect(retroDisplay).toHaveAttribute('data-grid-mode', 'auto');
+    expect(retroDisplay).toHaveAttribute('data-grid-mode', 'static');
   });
 
   it('renders from the terminal buffer even when no append output stream is present', async () => {

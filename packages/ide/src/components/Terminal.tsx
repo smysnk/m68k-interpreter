@@ -144,7 +144,10 @@ const Terminal: React.FC = () => {
           displayColorMode="ansi-extended"
           displayPadding={{ top: 18, right: 20, bottom: 18, left: 20 }}
           displaySurfaceMode={theme.surfaceMode}
+          gridMode="static"
           mode="terminal"
+          rows={meta.rows}
+          cols={meta.columns}
         />
       </div>
     </section>
