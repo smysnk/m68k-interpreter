@@ -1,3 +1,17 @@
+import {
+  DEFAULT_TERMINAL_BUFFER_COLUMNS,
+  DEFAULT_TERMINAL_BUFFER_ROWS,
+  TERMINAL_BUFFER_COLOR_DEFAULT,
+  TERMINAL_BUFFER_SPACE_BYTE,
+  createTerminalFrameBuffer,
+  readTerminalFrameBufferCell,
+  readTerminalFrameBufferLine,
+  readTerminalFrameBufferText,
+  resetTerminalFrameBuffer,
+  type TerminalFrameBuffer,
+  writeTerminalFrameBufferCell,
+} from './terminalBuffer';
+
 export interface TerminalStyle {
   foreground: number | null;
   background: number | null;
@@ -19,13 +33,20 @@ export interface TerminalSnapshot {
   cells: TerminalCell[][];
 }
 
+export interface TerminalMeta {
+  columns: number;
+  rows: number;
+  cursorRow: number;
+  cursorColumn: number;
+  output: string;
+  version: number;
+  geometryVersion: number;
+}
+
 export interface TerminalDeviceConfig {
   columns?: number;
   rows?: number;
 }
-
-const DEFAULT_COLUMNS = 80;
-const DEFAULT_ROWS = 25;
 
 function createStyle(): TerminalStyle {
   return {
@@ -36,36 +57,20 @@ function createStyle(): TerminalStyle {
   };
 }
 
-function cloneStyle(style: TerminalStyle): TerminalStyle {
-  return {
-    foreground: style.foreground,
-    background: style.background,
-    bold: style.bold,
-    inverse: style.inverse,
-  };
-}
-
-function createCell(style: TerminalStyle): TerminalCell {
-  return {
-    char: ' ',
-    ...cloneStyle(style),
-  };
-}
-
 export class TerminalDevice {
   private readonly columns: number;
   private readonly rows: number;
   private cursorRow = 0;
   private cursorColumn = 0;
   private output = '';
-  private cells: TerminalCell[][];
+  private readonly frameBuffer: TerminalFrameBuffer;
   private style: TerminalStyle = createStyle();
   private escapeBuffer: string | null = null;
 
   constructor(config: TerminalDeviceConfig = {}) {
-    this.columns = config.columns ?? DEFAULT_COLUMNS;
-    this.rows = config.rows ?? DEFAULT_ROWS;
-    this.cells = this.createGrid();
+    this.columns = config.columns ?? DEFAULT_TERMINAL_BUFFER_COLUMNS;
+    this.rows = config.rows ?? DEFAULT_TERMINAL_BUFFER_ROWS;
+    this.frameBuffer = createTerminalFrameBuffer(this.columns, this.rows);
   }
 
   reset(): void {
@@ -74,7 +79,7 @@ export class TerminalDevice {
     this.output = '';
     this.style = createStyle();
     this.escapeBuffer = null;
-    this.cells = this.createGrid();
+    resetTerminalFrameBuffer(this.frameBuffer);
   }
 
   writeByte(value: number): void {
@@ -115,19 +120,49 @@ export class TerminalDevice {
       return;
     }
 
-    this.writeCharacter(char);
+    this.writeCharacter(byte);
   }
 
-  getSnapshot(): TerminalSnapshot {
-    const cells = this.cells.map((row) =>
-      row.map((cell) => ({
-        char: cell.char,
-        foreground: cell.foreground,
-        background: cell.background,
-        bold: cell.bold,
-        inverse: cell.inverse,
-      }))
+  getFrameBuffer(): TerminalFrameBuffer {
+    return this.frameBuffer;
+  }
+
+  getTerminalMeta(): TerminalMeta {
+    return {
+      columns: this.columns,
+      rows: this.rows,
+      cursorRow: this.cursorRow,
+      cursorColumn: this.cursorColumn,
+      output: this.output,
+      version: this.frameBuffer.version,
+      geometryVersion: this.frameBuffer.geometryVersion,
+    };
+  }
+
+  getLines(): string[] {
+    return Array.from({ length: this.rows }, (_, row) =>
+      readTerminalFrameBufferLine(this.frameBuffer, row)
     );
+  }
+
+  getText(): string {
+    return readTerminalFrameBufferText(this.frameBuffer);
+  }
+
+  getDebugSnapshot(): TerminalSnapshot {
+    const cells = Array.from({ length: this.rows }, (_, row) =>
+      Array.from({ length: this.columns }, (_, column) => {
+        const cell = readTerminalFrameBufferCell(this.frameBuffer, row, column);
+        return {
+          char: cell.char,
+          foreground: cell.foreground,
+          background: cell.background,
+          bold: cell.bold,
+          inverse: cell.inverse,
+        };
+      })
+    );
+    const lines = this.getLines();
 
     return {
       columns: this.columns,
@@ -135,16 +170,13 @@ export class TerminalDevice {
       cursorRow: this.cursorRow,
       cursorColumn: this.cursorColumn,
       output: this.output,
-      lines: cells.map((row) => row.map((cell) => cell.char).join('')),
+      lines,
       cells,
     };
   }
 
-  private createGrid(): TerminalCell[][] {
-    const baseStyle = createStyle();
-    return Array.from({ length: this.rows }, () =>
-      Array.from({ length: this.columns }, () => createCell(baseStyle))
-    );
+  getSnapshot(): TerminalSnapshot {
+    return this.getDebugSnapshot();
   }
 
   private isEscapeSequenceFinal(sequence: string, char: string): boolean {
@@ -213,10 +245,7 @@ export class TerminalDevice {
   }
 
   private clearScreen(): void {
-    const clearedStyle = createStyle();
-    this.cells = Array.from({ length: this.rows }, () =>
-      Array.from({ length: this.columns }, () => createCell(clearedStyle))
-    );
+    resetTerminalFrameBuffer(this.frameBuffer);
     this.cursorRow = 0;
     this.cursorColumn = 0;
   }
@@ -271,7 +300,7 @@ export class TerminalDevice {
     }
   }
 
-  private writeCharacter(char: string): void {
+  private writeCharacter(byte: number): void {
     if (this.cursorRow < 0 || this.cursorRow >= this.rows) {
       return;
     }
@@ -280,10 +309,13 @@ export class TerminalDevice {
       this.wrapCursor();
     }
 
-    this.cells[this.cursorRow][this.cursorColumn] = {
-      char,
-      ...cloneStyle(this.style),
-    };
+    writeTerminalFrameBufferCell(this.frameBuffer, this.cursorRow, this.cursorColumn, {
+      charByte: byte,
+      foreground: this.style.foreground,
+      background: this.style.background,
+      bold: this.style.bold,
+      inverse: this.style.inverse,
+    });
 
     this.cursorColumn += 1;
     if (this.cursorColumn >= this.columns) {
@@ -298,11 +330,33 @@ export class TerminalDevice {
 
   private advanceLine(): void {
     if (this.cursorRow === this.rows - 1) {
-      this.cells.shift();
-      this.cells.push(Array.from({ length: this.columns }, () => createCell(createStyle())));
+      this.scrollUpOneLine();
       return;
     }
 
     this.cursorRow += 1;
+  }
+
+  private scrollUpOneLine(): void {
+    const rowWidth = this.columns;
+    const lastRowOffset = (this.rows - 1) * rowWidth;
+
+    this.frameBuffer.charBytes.copyWithin(0, rowWidth);
+    this.frameBuffer.foregroundBytes.copyWithin(0, rowWidth);
+    this.frameBuffer.backgroundBytes.copyWithin(0, rowWidth);
+    this.frameBuffer.flagBytes.copyWithin(0, rowWidth);
+
+    this.frameBuffer.charBytes.subarray(lastRowOffset, lastRowOffset + rowWidth).fill(
+      TERMINAL_BUFFER_SPACE_BYTE
+    );
+    this.frameBuffer.foregroundBytes.subarray(lastRowOffset, lastRowOffset + rowWidth).fill(
+      TERMINAL_BUFFER_COLOR_DEFAULT
+    );
+    this.frameBuffer.backgroundBytes.subarray(lastRowOffset, lastRowOffset + rowWidth).fill(
+      TERMINAL_BUFFER_COLOR_DEFAULT
+    );
+    this.frameBuffer.flagBytes.subarray(lastRowOffset, lastRowOffset + rowWidth).fill(0);
+    this.frameBuffer.dirtyRowFlags.fill(1);
+    this.frameBuffer.version += 1;
   }
 }

@@ -5,6 +5,11 @@ import {
   type RetroLcdController,
 } from 'react-retro-display-tty-ansi';
 import { useTheme } from 'styled-components';
+import {
+  buildTerminalAnsiFullRedraw,
+  buildTerminalAnsiRowPatch,
+} from '@/runtime/terminalAnsiPatch';
+import { useTerminalSurface } from '@/runtime/useTerminalSurface';
 import { useEmulatorStore } from '@/stores/emulatorStore';
 
 function mapKeyboardEventToInput(event: React.KeyboardEvent<HTMLDivElement>): string | number | null {
@@ -33,14 +38,17 @@ function mapKeyboardEventToInput(event: React.KeyboardEvent<HTMLDivElement>): st
 const Terminal: React.FC = () => {
   const terminalRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<RetroLcdController | null>(null);
-  const previousOutputRef = useRef('');
-  const { emulatorInstance, terminalSnapshot, executionState } = useEmulatorStore();
+  const previousGeometryVersionRef = useRef<number | null>(null);
+  const previousVersionRef = useRef<number | null>(null);
+  const previousCursorPositionRef = useRef<string>('');
+  const { emulatorInstance, executionState } = useEmulatorStore();
+  const { frameBuffer, meta, dirtyRows } = useTerminalSurface();
   const theme = useTheme();
 
   if (controllerRef.current === null) {
     controllerRef.current = createRetroLcdController({
-      rows: terminalSnapshot.rows,
-      cols: terminalSnapshot.columns,
+      rows: meta.rows,
+      cols: meta.columns,
       scrollback: 4096,
       cursorMode: 'hollow',
     });
@@ -52,24 +60,36 @@ const Terminal: React.FC = () => {
       return;
     }
 
-    const nextOutput = terminalSnapshot.output;
-    const previousOutput = previousOutputRef.current;
+    const geometryChanged = previousGeometryVersionRef.current !== meta.geometryVersion;
 
-    if (nextOutput === previousOutput) {
-      return;
-    }
-
-    if (!nextOutput || nextOutput.length < previousOutput.length || !nextOutput.startsWith(previousOutput)) {
+    if (geometryChanged) {
       controller.reset();
-      if (nextOutput.length > 0) {
-        controller.write(nextOutput);
-      }
-    } else {
-      controller.write(nextOutput.slice(previousOutput.length));
+      controller.resize(meta.rows, meta.columns);
+      previousGeometryVersionRef.current = meta.geometryVersion;
     }
 
-    previousOutputRef.current = nextOutput;
-  }, [terminalSnapshot.output]);
+    const versionChanged = previousVersionRef.current !== meta.version;
+
+    if (geometryChanged) {
+      const redraw = buildTerminalAnsiFullRedraw(frameBuffer);
+      if (redraw.length > 0) {
+        controller.write(redraw);
+      }
+    } else if (versionChanged && dirtyRows.length > 0) {
+      const patch = buildTerminalAnsiRowPatch(frameBuffer, dirtyRows);
+      if (patch.length > 0) {
+        controller.write(patch);
+      }
+    }
+
+    const cursorPosition = `${meta.cursorRow}:${meta.cursorColumn}`;
+    if (geometryChanged || versionChanged || previousCursorPositionRef.current !== cursorPosition) {
+      controller.moveCursorTo(meta.cursorRow, meta.cursorColumn);
+      previousCursorPositionRef.current = cursorPosition;
+    }
+
+    previousVersionRef.current = meta.version;
+  }, [dirtyRows, frameBuffer, meta.columns, meta.cursorColumn, meta.cursorRow, meta.geometryVersion, meta.rows, meta.version]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
     if (!emulatorInstance) {

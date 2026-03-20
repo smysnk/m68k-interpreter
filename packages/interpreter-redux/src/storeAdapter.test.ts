@@ -26,8 +26,8 @@ START
   END START
 `);
 
-    expect(adapter.getTerminalSnapshot().columns).toBe(90);
-    expect(adapter.getTerminalSnapshot().rows).toBe(30);
+    expect(adapter.getTerminalMeta().columns).toBe(90);
+    expect(adapter.getTerminalMeta().rows).toBe(30);
 
     adapter.queueInput('ws');
     expect(adapter.getQueuedInputLength()).toBe(2);

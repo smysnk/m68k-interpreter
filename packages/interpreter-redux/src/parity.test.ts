@@ -1,4 +1,4 @@
-import { Emulator, type TerminalSnapshot } from '@m68k/interpreter';
+import { Emulator, type TerminalMeta } from '@m68k/interpreter';
 import { describe, expect, it } from 'vitest';
 import { selectFlags } from './selectors';
 import { ReducerInterpreterSession } from './session';
@@ -14,7 +14,8 @@ interface EngineSnapshot {
     c: number;
     x: number;
   };
-  terminal: TerminalSnapshot;
+  terminalMeta: TerminalMeta;
+  terminalText: string;
   lastInstruction: string;
   errors: string[];
   exception?: string;
@@ -34,7 +35,8 @@ function snapshotClassEngine(emulator: Emulator): EngineSnapshot {
       c: emulator.getCFlag(),
       x: emulator.getXFlag(),
     },
-    terminal: emulator.getTerminalSnapshot(),
+    terminalMeta: emulator.getTerminalMeta(),
+    terminalText: emulator.getTerminalText(),
     lastInstruction: emulator.getLastInstruction(),
     errors: emulator.getErrors(),
     exception: emulator.getException(),
@@ -51,7 +53,8 @@ function snapshotReducerEngine(session: ReducerInterpreterSession): EngineSnapsh
     memory: session.getMemory(),
     pc: session.getPC(),
     flags: selectFlags(state),
-    terminal: session.getTerminalSnapshot(),
+    terminalMeta: session.getTerminalMeta(),
+    terminalText: session.getTerminalText(),
     lastInstruction: session.getLastInstruction(),
     errors: session.getErrors(),
     exception: session.getException(),

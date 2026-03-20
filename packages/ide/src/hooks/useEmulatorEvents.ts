@@ -4,10 +4,11 @@ import {
   createStoreBackedReducerInterpreterAdapter,
   type InterpreterReduxAction,
 } from '@m68k/interpreter-redux';
-import { Emulator, type ConditionFlags, type ExecutionState, type Registers } from '@m68k/interpreter';
+import { Emulator, type ExecutionState } from '@m68k/interpreter';
 import { ideStore } from '@/store';
 import { runEmulationFrame } from '@/runtime/executionLoop';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
+import { syncRuntimeFrameToIde } from '@/runtime/syncRuntimeFrame';
 import { useEmulatorStore, type RuntimeMetrics } from '@/stores/emulatorStore';
 import type { AppDispatch, RootState } from '@/store';
 
@@ -22,12 +23,20 @@ const FRAME_FALLBACK_MS = 16;
 const TEST_FRAME_BUDGET_MS = 100;
 const HIDDEN_FRAME_BUDGET_MS = 24;
 
+function isJsdomEnvironment(): boolean {
+  return typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
+}
+
 function shouldUseTimerFrame(): boolean {
+  if (isJsdomEnvironment()) {
+    return true;
+  }
+
   return typeof document !== 'undefined' && document.visibilityState === 'hidden';
 }
 
 function getFrameBudgetForEnvironment(): number | undefined {
-  if (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent)) {
+  if (isJsdomEnvironment()) {
     return TEST_FRAME_BUDGET_MS;
   }
 
@@ -61,41 +70,6 @@ function cancelFrame(handle: number): void {
   }
 
   window.clearTimeout(handle);
-}
-
-function buildFlags(emulator: IdeRuntimeSession): ConditionFlags {
-  return {
-    z: emulator.getZFlag(),
-    v: emulator.getVFlag(),
-    n: emulator.getNFlag(),
-    c: emulator.getCFlag(),
-    x: emulator.getXFlag(),
-  };
-}
-
-function buildRegisters(emulator: IdeRuntimeSession, flags: ConditionFlags): Registers {
-  const values = emulator.getRegisters();
-
-  return {
-    a0: values[0],
-    a1: values[1],
-    a2: values[2],
-    a3: values[3],
-    a4: values[4],
-    a5: values[5],
-    a6: values[6],
-    a7: values[7],
-    d0: values[8],
-    d1: values[9],
-    d2: values[10],
-    d3: values[11],
-    d4: values[12],
-    d5: values[13],
-    d6: values[14],
-    d7: values[15],
-    pc: emulator.getPC(),
-    ccr: (flags.x << 4) | (flags.n << 3) | (flags.z << 2) | (flags.v << 1) | flags.c,
-  };
 }
 
 export const useEmulatorEvents = () => {
@@ -142,21 +116,7 @@ export const useEmulatorEvents = () => {
         runtimeMetrics?: Partial<RuntimeMetrics>;
       } = {}
     ): void => {
-      const flags = buildFlags(emulator);
-
-      syncEmulatorFrame({
-        registers: buildRegisters(emulator, flags),
-        memory: emulator.getMemory(),
-        flags,
-        terminalSnapshot: emulator.getTerminalSnapshot(),
-        executionState: {
-          lastInstruction: emulator.getLastInstruction(),
-          errors: emulator.getErrors(),
-          exception: emulator.getException() ?? null,
-          ...options.executionState,
-        },
-        runtimeMetrics: options.runtimeMetrics,
-      });
+      syncRuntimeFrameToIde(emulator, syncEmulatorFrame, options);
     };
 
     const clearScheduledExecution = (): void => {

@@ -20,10 +20,6 @@ export interface TerminalStyleState {
   inverse: boolean;
 }
 
-export interface TerminalCellState extends TerminalStyleState {
-  char: string;
-}
-
 export interface TerminalState {
   columns: number;
   rows: number;
@@ -32,7 +28,6 @@ export interface TerminalState {
   style: TerminalStyleState;
   escapeBuffer: string | null;
   output: string;
-  cells: TerminalCellState[][];
 }
 
 export interface CpuState {
@@ -134,19 +129,6 @@ export function createTerminalStyleState(
   };
 }
 
-export function createTerminalCellState(
-  overrides: Partial<TerminalCellState> = {}
-): TerminalCellState {
-  const style = createTerminalStyleState(overrides);
-  return {
-    char: overrides.char ?? ' ',
-    foreground: style.foreground,
-    background: style.background,
-    bold: style.bold,
-    inverse: style.inverse,
-  };
-}
-
 export function createEmptyTerminalState(
   columns = DEFAULT_TERMINAL_COLUMNS,
   rows = DEFAULT_TERMINAL_ROWS
@@ -160,9 +142,6 @@ export function createEmptyTerminalState(
     style,
     escapeBuffer: null,
     output: '',
-    cells: Array.from({ length: rows }, () =>
-      Array.from({ length: columns }, () => createTerminalCellState(style))
-    ),
   };
 }
 
@@ -175,7 +154,6 @@ export function cloneTerminalState(terminal: TerminalState): TerminalState {
     style: createTerminalStyleState(terminal.style),
     escapeBuffer: terminal.escapeBuffer,
     output: terminal.output,
-    cells: terminal.cells.map((row) => row.map((cell) => createTerminalCellState(cell))),
   };
 }
 

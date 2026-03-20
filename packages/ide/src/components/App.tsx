@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { flushSync } from 'react-dom';
 import { useTheme } from 'styled-components';
 import { Analytics } from '@vercel/analytics/react';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import 'react-retro-display-tty-ansi/styles.css';
 import Navbar from './Navbar';
 import Editor from './Editor';
 import Registers from './Registers';
 import Output from './Output';
+import StatusBar from './StatusBar';
 import Terminal from './Terminal';
 import HelpPanel from './HelpPanel';
 import Memory from './Memory';
@@ -18,28 +20,42 @@ import { editorThemes } from '@/theme/editorThemeRegistry';
 import { nibblesSource } from '@/programs/nibbles';
 import {
   ideStore,
+  setInspectorView,
   setEditorCode,
   setEngineMode,
+  setInspectorVerticalLayout,
+  setRootHorizontalLayout,
+  setRootHorizontalWithContextLayout,
+  setWorkspaceTab,
   syncSystemTheme,
+  toggleContextView,
   toggleEditorTheme,
-  toggleHelp,
-  toggleRegisters,
+  toggleInspectorView,
+  toggleShowFlags,
   type RootState,
   type AppDispatch,
 } from '@/store';
 import '../styles/main.css';
 
-type WorkspaceTab = 'terminal' | 'code';
-
 function AppShell(): React.ReactElement {
   const dispatch = useDispatch<AppDispatch>();
   const theme = useTheme();
   const showFlags = useSelector((state: RootState) => state.emulator.showFlags);
-  const showHelp = useSelector((state: RootState) => state.settings.showHelp);
-  const showRegisters = useSelector((state: RootState) => state.settings.showRegisters);
+  const workspaceTab = useSelector((state: RootState) => state.uiShell.workspaceTab);
+  const inspectorView = useSelector((state: RootState) => state.uiShell.inspectorView);
+  const rootHorizontalLayout = useSelector((state: RootState) => state.uiShell.layout.rootHorizontal);
+  const rootHorizontalWithContextLayout = useSelector(
+    (state: RootState) => state.uiShell.layout.rootHorizontalWithContext
+  );
+  const inspectorVerticalLayout = useSelector(
+    (state: RootState) => state.uiShell.layout.inspectorVertical
+  );
+  const showHelp = useSelector(
+    (state: RootState) => state.uiShell.contextOpen && state.uiShell.contextView === 'help'
+  );
   const followSystemTheme = useSelector((state: RootState) => state.settings.followSystemTheme);
   const engineMode = useSelector((state: RootState) => state.settings.engineMode);
-  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTab>('terminal');
+  const activeInspectorPane = showFlags ? 'flags' : inspectorView;
 
   useEmulatorEvents();
 
@@ -85,7 +101,7 @@ function AppShell(): React.ReactElement {
   useEffect(() => {
     const showTerminalWorkspace = (): void => {
       flushSync(() => {
-        setActiveWorkspaceTab('terminal');
+        dispatch(setWorkspaceTab('terminal'));
       });
     };
 
@@ -98,67 +114,154 @@ function AppShell(): React.ReactElement {
       window.removeEventListener('emulator:resume', showTerminalWorkspace);
       window.removeEventListener('emulator:step', showTerminalWorkspace);
     };
-  }, []);
+  }, [dispatch]);
 
   const handleLoadNibbles = (): void => {
-    setActiveWorkspaceTab('terminal');
+    dispatch(setWorkspaceTab('terminal'));
     dispatch(setEngineMode('interpreter'));
     dispatch(setEditorCode(nibblesSource));
     window.editorCode = nibblesSource;
     window.dispatchEvent(new CustomEvent('emulator:reset'));
   };
 
-  const handleEngineChange = (nextEngineMode: RootState['settings']['engineMode']): void => {
-    dispatch(setEngineMode(nextEngineMode));
-    window.dispatchEvent(new CustomEvent('emulator:reset'));
+  const handleToggleInspector = (): void => {
+    if (showFlags) {
+      dispatch(toggleShowFlags());
+      dispatch(setInspectorView('memory'));
+      return;
+    }
+
+    dispatch(toggleInspectorView());
+  };
+
+  const handleRootLayout = (sizes: number[]): void => {
+    if (sizes.length === 3) {
+      dispatch(setRootHorizontalWithContextLayout(sizes as [number, number, number]));
+      return;
+    }
+
+    if (sizes.length === 2) {
+      dispatch(setRootHorizontalLayout(sizes as [number, number]));
+    }
   };
 
   return (
     <div className="app-container" data-testid="app-container" data-theme={theme.surfaceMode}>
       <Navbar
-        activeWorkspaceTab={activeWorkspaceTab}
+        activeInspectorPane={activeInspectorPane}
+        activeWorkspaceTab={workspaceTab}
         onLoadNibbles={handleLoadNibbles}
-        onEngineChange={handleEngineChange}
-        onWorkspaceTabChange={setActiveWorkspaceTab}
+        onWorkspaceTabChange={(tab) => dispatch(setWorkspaceTab(tab))}
         onToggleTheme={() => dispatch(toggleEditorTheme())}
-        onToggleHelp={() => dispatch(toggleHelp())}
-        onToggleMemory={() => dispatch(toggleRegisters())}
+        onToggleHelp={() => dispatch(toggleContextView('help'))}
+        onToggleMemory={handleToggleInspector}
         engineMode={engineMode}
         theme={theme.surfaceMode}
         showHelp={showHelp}
-        showMemory={showRegisters}
       />
       <main className="main-content">
-        <div className="workspace-panel">
-          <div className="workspace-tabpanels">
-            <section
-              aria-labelledby="workspace-tab-terminal"
-              className={`workspace-tabpanel ${activeWorkspaceTab === 'terminal' ? 'active' : ''}`}
-              data-active={activeWorkspaceTab === 'terminal'}
-              id="workspace-tabpanel-terminal"
-              role="tabpanel"
-            >
-              <Terminal />
-            </section>
-            <section
-              aria-labelledby="workspace-tab-code"
-              className={`workspace-tabpanel ${activeWorkspaceTab === 'code' ? 'active' : ''}`}
-              data-active={activeWorkspaceTab === 'code'}
-              id="workspace-tabpanel-code"
-              role="tabpanel"
-            >
-              <Editor />
-            </section>
-          </div>
-        </div>
-        <div className="inspector-panel">
-          <Output />
-          {showFlags ? <Flags /> : showRegisters ? <Registers /> : <Memory />}
-        </div>
+        <PanelGroup
+          className="main-shell"
+          direction="horizontal"
+          key={showHelp ? 'main-shell-with-context' : 'main-shell-default'}
+          onLayout={handleRootLayout}
+        >
+          <Panel
+            className="panel-slot"
+            defaultSize={showHelp ? rootHorizontalWithContextLayout[0] : rootHorizontalLayout[0]}
+            minSize={34}
+            order={1}
+          >
+            <div className="workspace-panel">
+              <div className="workspace-tabpanels">
+                <section
+                  aria-labelledby="workspace-tab-terminal"
+                  className={`workspace-tabpanel ${workspaceTab === 'terminal' ? 'active' : ''}`}
+                  data-active={workspaceTab === 'terminal'}
+                  data-testid="workspace-panel-terminal"
+                  id="workspace-tabpanel-terminal"
+                  role="tabpanel"
+                >
+                  <Terminal />
+                </section>
+                <section
+                  aria-labelledby="workspace-tab-code"
+                  className={`workspace-tabpanel ${workspaceTab === 'code' ? 'active' : ''}`}
+                  data-active={workspaceTab === 'code'}
+                  data-testid="workspace-panel-code"
+                  id="workspace-tabpanel-code"
+                  role="tabpanel"
+                >
+                  <Editor />
+                </section>
+              </div>
+            </div>
+          </Panel>
+          <PanelResizeHandle
+            className="panel-resize-handle panel-resize-handle-horizontal"
+            data-testid="resize-handle-root"
+          />
+          <Panel
+            className="panel-slot"
+            defaultSize={showHelp ? rootHorizontalWithContextLayout[1] : rootHorizontalLayout[1]}
+            minSize={24}
+            order={2}
+          >
+            <div className="inspector-panel">
+              <PanelGroup
+                className="inspector-panel-group"
+                direction="vertical"
+                onLayout={(sizes) => dispatch(setInspectorVerticalLayout(sizes as [number, number]))}
+              >
+                <Panel
+                  className="panel-slot panel-slot-vertical"
+                  defaultSize={inspectorVerticalLayout[0]}
+                  minSize={24}
+                  order={1}
+                >
+                  <div className="inspector-section inspector-output-section">
+                    <Output />
+                  </div>
+                </Panel>
+                <PanelResizeHandle
+                  className="panel-resize-handle panel-resize-handle-vertical"
+                  data-testid="resize-handle-inspector"
+                />
+                <Panel
+                  className="panel-slot panel-slot-vertical"
+                  defaultSize={inspectorVerticalLayout[1]}
+                  minSize={24}
+                  order={2}
+                >
+                  <div className="inspector-section inspector-machine-section">
+                    {activeInspectorPane === 'flags' ? (
+                      <Flags />
+                    ) : activeInspectorPane === 'registers' ? (
+                      <Registers />
+                    ) : (
+                      <Memory />
+                    )}
+                  </div>
+                </Panel>
+              </PanelGroup>
+            </div>
+          </Panel>
+          {showHelp ? (
+            <>
+              <PanelResizeHandle
+                className="panel-resize-handle panel-resize-handle-horizontal"
+                data-testid="resize-handle-context"
+              />
+              <Panel className="panel-slot" defaultSize={rootHorizontalWithContextLayout[2]} minSize={14} order={3}>
+                <div className="context-panel" data-testid="context-panel">
+                  <HelpPanel />
+                </div>
+              </Panel>
+            </>
+          ) : null}
+        </PanelGroup>
       </main>
-      <div className={`aside-content ${showHelp ? 'visible' : ''}`}>
-        <HelpPanel />
-      </div>
+      <StatusBar />
       <Analytics />
     </div>
   );

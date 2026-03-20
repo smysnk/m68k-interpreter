@@ -89,6 +89,23 @@ export interface IdeThemeDefinition {
   palette: IdeThemePalette;
 }
 
+export interface IdeShellThemeTokens {
+  background: string;
+  surface: string;
+  surfaceStrong: string;
+  panel: string;
+  border: string;
+  borderStrong: string;
+  textMuted: string;
+  accent: string;
+  accentSoft: string;
+  shadow: string;
+  resizeHandle: string;
+  statusGood: string;
+  statusWarn: string;
+  statusDanger: string;
+}
+
 function createIdeTheme(
   id: EditorThemeId,
   name: string,
@@ -273,4 +290,28 @@ export const defaultEditorTheme = EditorThemeEnum.M68K_LIGHT;
 
 export function resolveThemeForSurfaceMode(surfaceMode: IdeSurfaceMode): EditorThemeId {
   return surfaceMode === 'dark' ? EditorThemeEnum.M68K_DARK : EditorThemeEnum.M68K_LIGHT;
+}
+
+export function resolveShellTheme(theme: IdeThemeDefinition): IdeShellThemeTokens {
+  const { palette, surfaceMode } = theme;
+  const accentStrength = surfaceMode === 'dark' ? '18%' : '12%';
+  const softStrength = surfaceMode === 'dark' ? '12%' : '8%';
+  const shadow = palette.shadowLg;
+
+  return {
+    background: `radial-gradient(circle at 0% 0%, color-mix(in srgb, ${palette.primaryColor} ${accentStrength}, transparent), transparent 32%), radial-gradient(circle at 100% 0%, color-mix(in srgb, ${palette.infoColor} ${softStrength}, transparent), transparent 26%), linear-gradient(180deg, ${palette.mainContentTop}, ${palette.mainContentBottom})`,
+    surface: `color-mix(in srgb, ${palette.surfaceColor} 92%, transparent)`,
+    surfaceStrong: `color-mix(in srgb, ${palette.editorSurfaceColor} 96%, ${palette.surfaceColor})`,
+    panel: `color-mix(in srgb, ${palette.surfaceColor} 88%, ${palette.backgroundColor})`,
+    border: palette.borderColor,
+    borderStrong: `color-mix(in srgb, ${palette.primaryColor} 22%, ${palette.borderColor})`,
+    textMuted: palette.textSecondary,
+    accent: palette.primaryColor,
+    accentSoft: `color-mix(in srgb, ${palette.primaryColor} 14%, ${palette.surfaceColor})`,
+    shadow,
+    resizeHandle: `color-mix(in srgb, ${palette.primaryColor} 16%, ${palette.surfaceColor})`,
+    statusGood: palette.successColor,
+    statusWarn: palette.warningColor,
+    statusDanger: palette.dangerColor,
+  };
 }

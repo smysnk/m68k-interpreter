@@ -2,7 +2,15 @@ import React from 'react';
 
 const HelpPanel: React.FC = () => {
   return (
-    <aside className="help-panel" aria-label="Compatibility notes">
+    <aside className="help-panel pane-surface" aria-label="Compatibility notes">
+      <div className="pane-header">
+        <div className="pane-title-group">
+          <p className="pane-eyebrow">Reference</p>
+          <h2 className="pane-title">Compatibility Notes</h2>
+          <p className="pane-caption">Current Nibbles workflow, runtime support, and known limits.</p>
+        </div>
+      </div>
+
       <div className="help-panel-section">
         <h3>Play Nibbles</h3>
         <p>Load Nibbles, press Run, then use W A S D, arrow keys, or keypad 4 5 6 8. Press Enter to confirm menus.</p>

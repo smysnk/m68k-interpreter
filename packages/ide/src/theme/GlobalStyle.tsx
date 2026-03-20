@@ -1,7 +1,27 @@
 import { createGlobalStyle } from 'styled-components';
+import { resolveShellTheme } from '@/theme/editorThemeRegistry';
 
 export const GlobalStyle = createGlobalStyle`
   :root {
+    ${({ theme }) => {
+      const shell = resolveShellTheme(theme);
+      return `
+        --ide-bg: ${shell.background};
+        --ide-surface: ${shell.surface};
+        --ide-surface-strong: ${shell.surfaceStrong};
+        --ide-panel: ${shell.panel};
+        --ide-border: ${shell.border};
+        --ide-border-strong: ${shell.borderStrong};
+        --ide-text-muted: ${shell.textMuted};
+        --ide-accent: ${shell.accent};
+        --ide-accent-soft: ${shell.accentSoft};
+        --ide-shadow: ${shell.shadow};
+        --ide-resize-handle: ${shell.resizeHandle};
+        --ide-status-good: ${shell.statusGood};
+        --ide-status-warn: ${shell.statusWarn};
+        --ide-status-danger: ${shell.statusDanger};
+      `;
+    }}
     color-scheme: ${({ theme }) => theme.surfaceMode};
     --primary-color: ${({ theme }) => theme.palette.primaryColor};
     --secondary-color: ${({ theme }) => theme.palette.secondaryColor};
@@ -61,13 +81,14 @@ export const GlobalStyle = createGlobalStyle`
     margin: 0;
     padding: 0;
     min-height: 100%;
-    background-color: var(--background-color);
+    background: var(--ide-bg);
     color: var(--text-color);
     font-family: var(--font-family);
   }
 
   #root {
     min-height: 100%;
+    background: var(--ide-bg);
   }
 
   .cm-theme,

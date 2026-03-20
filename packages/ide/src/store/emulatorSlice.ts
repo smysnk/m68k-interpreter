@@ -4,6 +4,7 @@ import type {
   ExecutionState,
   MemoryCell,
   Registers,
+  TerminalMeta,
   TerminalSnapshot,
 } from '@m68k/interpreter';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
@@ -14,6 +15,15 @@ export interface RuntimeMetrics {
   lastStopReason: string;
 }
 
+export interface TerminalRuntimeState {
+  columns: number;
+  rows: number;
+  cursorRow: number;
+  cursorColumn: number;
+  version: number;
+  geometryVersion: number;
+}
+
 export interface EmulatorState {
   editorCode: string;
   registers: Registers;
@@ -21,7 +31,7 @@ export interface EmulatorState {
   flags: ConditionFlags;
   executionState: ExecutionState;
   emulatorInstance: IdeRuntimeSession | null;
-  terminalSnapshot: TerminalSnapshot;
+  terminal: TerminalRuntimeState;
   showFlags: boolean;
   delay: number;
   speedMultiplier: number;
@@ -79,24 +89,30 @@ export const initialRuntimeMetrics: RuntimeMetrics = {
   lastStopReason: 'idle',
 };
 
-export function createEmptyTerminalSnapshot(columns = 80, rows = 25): TerminalSnapshot {
-  const lines = Array.from({ length: rows }, () => ' '.repeat(columns));
+export function toTerminalRuntimeState(
+  terminal:
+    | TerminalRuntimeState
+    | Pick<TerminalMeta, 'columns' | 'rows' | 'cursorRow' | 'cursorColumn' | 'version' | 'geometryVersion'>
+    | Pick<TerminalSnapshot, 'columns' | 'rows' | 'cursorRow' | 'cursorColumn'>
+): TerminalRuntimeState {
+  return {
+    columns: terminal.columns,
+    rows: terminal.rows,
+    cursorRow: terminal.cursorRow,
+    cursorColumn: terminal.cursorColumn,
+    version: 'version' in terminal ? terminal.version : 1,
+    geometryVersion: 'geometryVersion' in terminal ? terminal.geometryVersion : 1,
+  };
+}
+
+export function createEmptyTerminalState(columns = 80, rows = 25): TerminalRuntimeState {
   return {
     columns,
     rows,
     cursorRow: 0,
     cursorColumn: 0,
-    output: '',
-    lines,
-    cells: lines.map((line) =>
-      line.split('').map((char) => ({
-        char,
-        foreground: null,
-        background: null,
-        bold: false,
-        inverse: false,
-      }))
-    ),
+    version: 1,
+    geometryVersion: 1,
   };
 }
 
@@ -112,7 +128,7 @@ const initialState: EmulatorState = {
   flags: initialFlags,
   executionState: initialExecutionState,
   emulatorInstance: null,
-  terminalSnapshot: createEmptyTerminalSnapshot(),
+  terminal: createEmptyTerminalState(),
   showFlags: false,
   delay: 0,
   speedMultiplier: 1,
@@ -142,8 +158,11 @@ const emulatorSlice = createSlice({
     setEmulatorInstance(state, action: PayloadAction<IdeRuntimeSession | null>) {
       state.emulatorInstance = action.payload;
     },
-    setTerminalSnapshot(state, action: PayloadAction<TerminalSnapshot>) {
-      state.terminalSnapshot = action.payload;
+    setTerminalState(
+      state,
+      action: PayloadAction<TerminalRuntimeState | TerminalMeta | TerminalSnapshot>
+    ) {
+      state.terminal = toTerminalRuntimeState(action.payload);
     },
     syncEmulatorFrame(
       state,
@@ -151,7 +170,7 @@ const emulatorSlice = createSlice({
         registers: Registers;
         memory: MemoryCell;
         flags: ConditionFlags;
-        terminalSnapshot: TerminalSnapshot;
+        terminal: TerminalRuntimeState | TerminalMeta;
         executionState?: Partial<ExecutionState>;
         runtimeMetrics?: Partial<RuntimeMetrics>;
       }>
@@ -159,7 +178,7 @@ const emulatorSlice = createSlice({
       state.registers = action.payload.registers;
       state.memory = action.payload.memory;
       state.flags = action.payload.flags;
-      state.terminalSnapshot = action.payload.terminalSnapshot;
+      state.terminal = toTerminalRuntimeState(action.payload.terminal);
       if (action.payload.executionState) {
         state.executionState = { ...state.executionState, ...action.payload.executionState };
       }
@@ -204,7 +223,7 @@ const emulatorSlice = createSlice({
       state.flags = { ...initialFlags };
       state.executionState = { ...initialExecutionState };
       state.emulatorInstance = null;
-      state.terminalSnapshot = createEmptyTerminalSnapshot();
+      state.terminal = createEmptyTerminalState();
       state.showFlags = false;
       state.delay = preservedDelay;
       state.speedMultiplier = preservedSpeedMultiplier;
@@ -221,7 +240,7 @@ export const {
   setFlags,
   setExecutionState,
   setEmulatorInstance,
-  setTerminalSnapshot,
+  setTerminalState,
   syncEmulatorFrame,
   toggleShowFlags,
   setDelay,

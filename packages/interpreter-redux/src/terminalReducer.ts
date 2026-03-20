@@ -1,15 +1,9 @@
 import {
   createEmptyTerminalState,
-  createTerminalCellState,
   createTerminalStyleState,
   type TerminalState,
   type TerminalStyleState,
 } from './state';
-
-function createBlankRow(columns: number) {
-  const baseStyle = createTerminalStyleState();
-  return Array.from({ length: columns }, () => createTerminalCellState(baseStyle));
-}
 
 function cloneStyle(style: TerminalStyleState): TerminalStyleState {
   return {
@@ -38,7 +32,6 @@ function normalizeCursorCoordinate(value: number, max: number): number {
 }
 
 function clearScreen(state: TerminalState): void {
-  state.cells = Array.from({ length: state.rows }, () => createBlankRow(state.columns));
   state.cursorRow = 0;
   state.cursorColumn = 0;
 }
@@ -160,7 +153,6 @@ function applyEscapeSequence(
 
 function advanceLine(state: TerminalState): void {
   if (state.cursorRow === state.rows - 1) {
-    state.cells = [...state.cells.slice(1), createBlankRow(state.columns)];
     return;
   }
 
@@ -172,7 +164,7 @@ function wrapCursor(state: TerminalState): void {
   advanceLine(state);
 }
 
-function writeCharacter(state: TerminalState, char: string): void {
+function writeCharacter(state: TerminalState): void {
   if (state.cursorRow < 0 || state.cursorRow >= state.rows) {
     return;
   }
@@ -180,18 +172,6 @@ function writeCharacter(state: TerminalState, char: string): void {
   if (state.cursorColumn < 0 || state.cursorColumn >= state.columns) {
     wrapCursor(state);
   }
-
-  const nextCells = [...state.cells];
-  const nextRow = [...nextCells[state.cursorRow]];
-  nextRow[state.cursorColumn] = {
-    char,
-    foreground: state.style.foreground,
-    background: state.style.background,
-    bold: state.style.bold,
-    inverse: state.style.inverse,
-  };
-  nextCells[state.cursorRow] = nextRow;
-  state.cells = nextCells;
 
   state.cursorColumn += 1;
   if (state.cursorColumn >= state.columns) {
@@ -224,7 +204,6 @@ export function writeTerminalByte(state: TerminalState, value: number): Terminal
     style: state.style,
     escapeBuffer: state.escapeBuffer,
     output: state.output,
-    cells: state.cells,
   };
   const byte = value & 0xff;
   const char = String.fromCharCode(byte);
@@ -272,7 +251,7 @@ export function writeTerminalByte(state: TerminalState, value: number): Terminal
     return nextState;
   }
 
-  writeCharacter(nextState, char);
+  writeCharacter(nextState);
   return nextState;
 }
 

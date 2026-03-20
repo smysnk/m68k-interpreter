@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import App from './App';
+import App, { AppShell } from './App';
 import { nibblesSource } from '@/programs/nibbles';
+import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { useEmulatorStore } from '@/stores/emulatorStore';
-import { ideStore, resetSettingsState, setEngineMode } from '@/store';
+import { createIdeStore, ideStore, resetSettingsState, setEngineMode } from '@/store';
+import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
+import { IDE_PERSISTENCE_KEY } from '@/store/persistence';
+import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
 
 vi.mock('@vercel/analytics/react', () => ({
   Analytics: () => null,
@@ -29,6 +33,7 @@ function mockSystemTheme(theme: 'light' | 'dark'): void {
 describe('App', () => {
   beforeEach(() => {
     mockSystemTheme('light');
+    window.localStorage.clear();
     useEmulatorStore.getState().reset();
     ideStore.dispatch(resetSettingsState());
     useEmulatorStore.getState().setEditorCode(`ORG $1000
@@ -90,7 +95,19 @@ END`);
       getRegisters: vi.fn(() => new Int32Array(16)),
       getSymbolAddress: vi.fn(() => undefined),
       getSymbols: vi.fn(() => ({})),
-      getTerminalSnapshot: vi.fn(() => useEmulatorStore.getState().terminalSnapshot),
+      getTerminalFrameBuffer: vi.fn(() => terminalSurfaceStore.getSnapshot().frameBuffer),
+      getTerminalLines: vi.fn(() => ['']),
+      getTerminalMeta: vi.fn(() => terminalSurfaceStore.getSnapshot().meta),
+      getTerminalText: vi.fn(() => ''),
+      getTerminalSnapshot: vi.fn(() => ({
+        columns: 80,
+        rows: 25,
+        cursorRow: 0,
+        cursorColumn: 0,
+        output: '',
+        lines: [],
+        cells: [],
+      })),
       getVFlag: vi.fn(() => 0),
       getXFlag: vi.fn(() => 0),
       getZFlag: vi.fn(() => 0),
@@ -103,9 +120,8 @@ END`);
     });
     window.emulatorInstance = useEmulatorStore.getState().emulatorInstance;
 
-    fireEvent.change(screen.getByLabelText(/interpreter engine/i), {
-      target: { value: 'interpreter-redux' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: /interpreter engine/i }));
+    fireEvent.click(screen.getByRole('option', { name: /interpreter redux/i }));
 
     expect(ideStore.getState().settings.engineMode).toBe('interpreter-redux');
     expect(useEmulatorStore.getState().emulatorInstance).toBeNull();
@@ -115,13 +131,58 @@ END`);
   it('toggles the compatibility notes panel', () => {
     render(<App />);
 
-    expect(screen.queryByLabelText('Compatibility notes')).not.toBeVisible();
+    expect(screen.queryByLabelText('Compatibility notes')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTitle(/compatibility notes/i));
     expect(screen.getByLabelText('Compatibility notes')).toBeVisible();
 
     fireEvent.click(screen.getByTitle(/compatibility notes/i));
-    expect(screen.queryByLabelText('Compatibility notes')).not.toBeVisible();
+    expect(screen.queryByLabelText('Compatibility notes')).not.toBeInTheDocument();
+  });
+
+  it('adds the context resize handle when the help pane is open', () => {
+    const { container } = render(<App />);
+
+    expect(container.querySelectorAll('[data-testid="resize-handle-root"]').length).toBe(1);
+    expect(container.querySelectorAll('[data-testid="resize-handle-context"]').length).toBe(0);
+
+    fireEvent.click(screen.getByTitle(/compatibility notes/i));
+
+    expect(screen.getByLabelText('Compatibility notes')).toBeVisible();
+    expect(container.querySelectorAll('[data-testid="resize-handle-context"]').length).toBe(1);
+    expect(screen.getByTestId('context-panel')).toBeInTheDocument();
+  });
+
+  it('hydrates theme and shell preferences from persisted storage', () => {
+    window.localStorage.setItem(
+      IDE_PERSISTENCE_KEY,
+      JSON.stringify({
+        settings: {
+          editorTheme: EditorThemeEnum.M68K_DARK,
+          followSystemTheme: false,
+          lineNumbers: true,
+          engineMode: 'interpreter',
+        },
+        uiShell: {
+          workspaceTab: 'code',
+          inspectorView: 'memory',
+          contextView: 'help',
+          contextOpen: true,
+          layout: {
+            rootHorizontal: [59, 41],
+            rootHorizontalWithContext: [47, 33, 20],
+            inspectorVertical: [52, 48],
+          },
+        },
+      })
+    );
+
+    const store = createIdeStore();
+    renderWithIdeProviders(<AppShell />, { store });
+
+    expect(screen.getByTestId('app-container')).toHaveAttribute('data-theme', 'dark');
+    expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('Compatibility notes')).toBeVisible();
   });
 
   it('propagates the overall app theme into the terminal surface', () => {
@@ -134,7 +195,7 @@ END`);
     expect(document.querySelector('.terminal-container')).toHaveAttribute('data-terminal-theme', 'dark');
     expect(document.querySelector('.retro-lcd')).toHaveAttribute('data-display-surface-mode', 'dark');
     expect(screen.getByRole('button', { name: /switch to light mode/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/interpreter engine/i)).toHaveDisplayValue('Interpreter');
+    expect(screen.getByRole('button', { name: /interpreter engine/i })).toHaveTextContent('Interpreter');
   });
 
   it('lets the navbar theme toggle switch the whole IDE theme', () => {

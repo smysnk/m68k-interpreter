@@ -1,4 +1,10 @@
-import type { Emulator, ProgramSource, TerminalSnapshot } from '@m68k/interpreter';
+import type {
+  Emulator,
+  ProgramSource,
+  TerminalFrameBuffer,
+  TerminalMeta,
+  TerminalSnapshot,
+} from '@m68k/interpreter';
 import { interpreterReduxActions, type InterpreterReduxAction } from './actions';
 import { createInterpreterReduxStateForProgram } from './instructionReducer';
 import { interpreterReducer } from './reducer';
@@ -8,9 +14,9 @@ import {
   selectIsHalted,
   selectIsWaitingForInput,
   selectLastInstruction,
-  selectTerminalSnapshot,
 } from './selectors';
 import type { InterpreterReducerState } from './state';
+import { ReducerTerminalRuntime } from './terminalRuntime';
 
 type EmulatorCompatibleContract = Pick<
   Emulator,
@@ -27,6 +33,8 @@ type EmulatorCompatibleContract = Pick<
   | 'getRegisters'
   | 'getSymbolAddress'
   | 'getSymbols'
+  | 'getTerminalLines'
+  | 'getTerminalText'
   | 'getTerminalSnapshot'
   | 'getVFlag'
   | 'getXFlag'
@@ -41,6 +49,8 @@ type EmulatorCompatibleContract = Pick<
 export interface ReducerInterpreterAdapter extends EmulatorCompatibleContract {
   dispatch(action: InterpreterReduxAction): InterpreterReducerState;
   getCCR(): number;
+  getTerminalFrameBuffer(): TerminalFrameBuffer;
+  getTerminalMeta(): TerminalMeta;
   getState(): InterpreterReducerState;
   loadProgram(program: ProgramSource): void;
   resizeTerminal(columns: number, rows: number): void;
@@ -68,18 +78,22 @@ function normalizeQueuedInput(input: string | number | number[] | Uint8Array): n
 
 export class ReducerInterpreterSession implements ReducerInterpreterAdapter {
   private state: InterpreterReducerState;
+  private readonly terminalRuntime: ReducerTerminalRuntime;
 
   constructor(program: ProgramSource = '') {
     this.state = createInterpreterReduxStateForProgram(program);
+    this.terminalRuntime = new ReducerTerminalRuntime(this.state.terminal);
   }
 
   dispatch(action: InterpreterReduxAction): InterpreterReducerState {
     if (action.type === 'stepRequested') {
       this.state = interpreterReducer(this.state, action);
+      this.terminalRuntime.synchronize(this.state.terminal);
       return this.state;
     }
 
     this.state = interpreterReducer(this.state, action);
+    this.terminalRuntime.synchronize(this.state.terminal);
     return this.state;
   }
 
@@ -88,6 +102,7 @@ export class ReducerInterpreterSession implements ReducerInterpreterAdapter {
       columns: this.state.terminal.columns,
       rows: this.state.terminal.rows,
     });
+    this.terminalRuntime.synchronize(this.state.terminal);
   }
 
   resizeTerminal(columns: number, rows: number): void {
@@ -101,11 +116,11 @@ export class ReducerInterpreterSession implements ReducerInterpreterAdapter {
     if (this.state.cpu.pc / 4 >= this.state.program.instructions.length) {
       const lastInstruction = this.state.program.instructions[this.state.program.instructions.length - 1]?.[0];
       if (lastInstruction !== undefined) {
-        this.state = {
-          ...this.state,
-          execution: {
-            ...this.state.execution,
-            lastInstruction,
+      this.state = {
+        ...this.state,
+        execution: {
+          ...this.state.execution,
+          lastInstruction,
           },
         };
       }
@@ -144,10 +159,12 @@ export class ReducerInterpreterSession implements ReducerInterpreterAdapter {
 
   reset(): void {
     this.state = interpreterReducer(this.state, interpreterReduxActions.resetRequested());
+    this.terminalRuntime.synchronize(this.state.terminal);
   }
 
   undoFromStack(): void {
     this.state = interpreterReducer(this.state, interpreterReduxActions.undoRequested());
+    this.terminalRuntime.synchronize(this.state.terminal);
   }
 
   getState(): InterpreterReducerState {
@@ -174,7 +191,33 @@ export class ReducerInterpreterSession implements ReducerInterpreterAdapter {
   }
 
   getTerminalSnapshot(): TerminalSnapshot {
-    return selectTerminalSnapshot(this.state);
+    this.terminalRuntime.synchronize(this.state.terminal);
+    return this.terminalRuntime.getSnapshot();
+  }
+
+  getTerminalDebugSnapshot(): TerminalSnapshot {
+    this.terminalRuntime.synchronize(this.state.terminal);
+    return this.terminalRuntime.getDebugSnapshot();
+  }
+
+  getTerminalFrameBuffer(): TerminalFrameBuffer {
+    this.terminalRuntime.synchronize(this.state.terminal);
+    return this.terminalRuntime.getFrameBuffer();
+  }
+
+  getTerminalMeta(): TerminalMeta {
+    this.terminalRuntime.synchronize(this.state.terminal);
+    return this.terminalRuntime.getTerminalMeta();
+  }
+
+  getTerminalLines(): string[] {
+    this.terminalRuntime.synchronize(this.state.terminal);
+    return this.terminalRuntime.getLines();
+  }
+
+  getTerminalText(): string {
+    this.terminalRuntime.synchronize(this.state.terminal);
+    return this.terminalRuntime.getText();
   }
 
   getException(): string | undefined {

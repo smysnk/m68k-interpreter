@@ -35,16 +35,19 @@ const Registers: React.FC = () => {
   const addressRegisters = ['a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7'];
 
   return (
-    <div className="registers-container">
-      <div className="registers-header">
-        <h3>Register Set</h3>
-        <button className="btn-download" onClick={handleDownload} title="Download registers">
+    <div className="registers-container pane-surface">
+      <div className="pane-header">
+        <div className="pane-title-group">
+          <p className="pane-eyebrow">Machine State</p>
+          <h3 className="pane-title">Registers</h3>
+          <p className="pane-caption">Live data, address, and control registers.</p>
+        </div>
+        <button className="btn-download btn-pane-action" onClick={handleDownload} title="Download registers" type="button">
           <FontAwesomeIcon icon={faFileDownload} size="lg" />
         </button>
       </div>
 
       <div className="registers-content">
-        {/* Data and Address Registers - Side by Side */}
         <div className="registers-row">
           <table className="registers-table">
             <thead>
@@ -109,7 +112,6 @@ const Registers: React.FC = () => {
           </table>
         </div>
 
-        {/* Control Registers */}
         <table className="registers-table">
           <thead>
             <tr>

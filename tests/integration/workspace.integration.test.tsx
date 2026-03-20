@@ -18,7 +18,7 @@ describe('workspace integration', () => {
     return emulator as IdeRuntimeSession;
   };
 
-  const getEmulatorTerminalText = (): string => getWindowEmulator().getTerminalSnapshot().lines.join('\n');
+  const getEmulatorTerminalText = (): string => getWindowEmulator().getTerminalText();
 
   beforeEach(() => {
     useEmulatorStore.getState().reset();
@@ -67,9 +67,8 @@ describe('workspace integration', () => {
   it('can switch to Interpreter Redux and boot a simple program through the shared IDE flow', async () => {
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText(/interpreter engine/i), {
-      target: { value: 'interpreter-redux' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: /interpreter engine/i }));
+    fireEvent.click(screen.getByRole('option', { name: /interpreter redux/i }));
 
     useEmulatorStore.getState().setEditorCode(`VALUE DC.L 0
 START
@@ -182,7 +181,7 @@ START
 
     await waitFor(() => {
       expect(window.emulatorInstance).toBeNull();
-      expect(screen.getByText('Ready')).toBeInTheDocument();
+      expect(screen.getByText('Last Instruction').closest('.last-instruction')).toHaveTextContent('Ready');
       expect(document.querySelector('.retro-lcd__body')?.textContent?.trim() ?? '').toBe('');
     });
 

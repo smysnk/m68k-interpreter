@@ -1,7 +1,20 @@
 import React from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faClock, faGaugeHigh } from '@fortawesome/free-solid-svg-icons';
+import {
+  faClock,
+  faGaugeHigh,
+  faPlay,
+  faRedo,
+  faStop,
+  faUndo,
+} from '@fortawesome/free-solid-svg-icons';
 import { useEmulatorStore } from '@/stores/emulatorStore';
+
+function formatLastInstruction(lastInstruction: string): string {
+  const trimmedInstruction = lastInstruction.replace(/\s*;.*$/, '').trim();
+
+  return trimmedInstruction || lastInstruction.trim();
+}
 
 const Output: React.FC = () => {
   const {
@@ -10,19 +23,51 @@ const Output: React.FC = () => {
     setDelay,
     speedMultiplier,
     setSpeedMultiplier,
-    runtimeMetrics,
-    emulatorInstance,
-    terminalSnapshot,
   } = useEmulatorStore();
-  const waitingForInput = emulatorInstance?.isWaitingForInput() ?? false;
-  const halted = emulatorInstance?.isHalted() ?? false;
+  const displayInstruction = formatLastInstruction(executionState.lastInstruction);
+
+  const handleRun = (): void => {
+    window.dispatchEvent(new CustomEvent('emulator:run'));
+    window.dispatchEvent(new CustomEvent('emulator:focus-terminal'));
+  };
+
+  const handleStep = (): void => {
+    window.dispatchEvent(new CustomEvent('emulator:step'));
+    window.dispatchEvent(new CustomEvent('emulator:focus-terminal'));
+  };
+
+  const handleUndo = (): void => {
+    window.dispatchEvent(new CustomEvent('emulator:undo'));
+  };
+
+  const handleReset = (): void => {
+    window.dispatchEvent(new CustomEvent('emulator:reset'));
+  };
 
   return (
-    <div className="output-container">
+    <div className="output-container pane-surface">
       <div className="output-section">
         <div className="last-instruction">
-          <h4>Last Instruction</h4>
-          <p>{executionState.lastInstruction}</p>
+          <div className="last-instruction-header">
+            <div className="last-instruction-copy">
+              <h4>Last Instruction</h4>
+              <p>{displayInstruction}</p>
+            </div>
+            <div className="last-instruction-actions" aria-label="Execution controls">
+              <button className="btn-command" onClick={handleRun} title="Run program" type="button">
+                <FontAwesomeIcon icon={faPlay} size="lg" />
+              </button>
+              <button className="btn-command" onClick={handleReset} title="Reset" type="button">
+                <FontAwesomeIcon icon={faStop} size="lg" />
+              </button>
+              <button className="btn-command" onClick={handleStep} title="Step" type="button">
+                <FontAwesomeIcon icon={faRedo} size="lg" />
+              </button>
+              <button className="btn-command" onClick={handleUndo} title="Undo" type="button">
+                <FontAwesomeIcon icon={faUndo} size="lg" />
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="delay-control">
@@ -61,16 +106,6 @@ const Output: React.FC = () => {
         </div>
       </div>
 
-      <div className="output-meta">
-        <span>Cursor: {terminalSnapshot.cursorRow + 1}:{terminalSnapshot.cursorColumn + 1}</span>
-        <span>Buffered output: {terminalSnapshot.output.length} chars</span>
-        <span>
-          Frame: {runtimeMetrics.lastFrameInstructions} instr / {runtimeMetrics.lastFrameDurationMs.toFixed(1)} ms
-        </span>
-        <span>Stop: {runtimeMetrics.lastStopReason}</span>
-        <span>{waitingForInput ? 'Waiting for input' : halted ? 'Program halted' : 'CPU ready'}</span>
-      </div>
-
       {executionState.errors.length > 0 && (
         <div className="errors-section">
           <h4>Errors</h4>
@@ -88,18 +123,6 @@ const Output: React.FC = () => {
           <p className="exception-text">{executionState.exception}</p>
         </div>
       )}
-
-      <div className="execution-status">
-        <span className={`status-indicator ${executionState.started && !waitingForInput ? 'active' : ''}`}>
-          {executionState.ended
-            ? '✓ Ended'
-            : waitingForInput
-              ? '⌨ Waiting'
-              : executionState.started
-                ? '⏳ Running'
-                : '⏸ Ready'}
-        </span>
-      </div>
     </div>
   );
 };

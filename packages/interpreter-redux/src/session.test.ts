@@ -22,6 +22,8 @@ type IdeCompatibleSession = Pick<
   | 'getRegisters'
   | 'getSymbolAddress'
   | 'getSymbols'
+  | 'getTerminalLines'
+  | 'getTerminalText'
   | 'getTerminalSnapshot'
   | 'getVFlag'
   | 'getXFlag'
@@ -132,8 +134,8 @@ START
   END START
 `);
 
-    expect(session.getTerminalSnapshot().columns).toBe(96);
-    expect(session.getTerminalSnapshot().rows).toBe(28);
+    expect(session.getTerminalMeta().columns).toBe(96);
+    expect(session.getTerminalMeta().rows).toBe(28);
     expect(session.getQueuedInputLength()).toBe(0);
 
     session.queueInput('a');
@@ -143,7 +145,7 @@ START
     expect(session.getQueuedInputLength()).toBe(0);
     expect(session.getPC()).toBe(0);
     expect(session.getLastInstruction()).toBe(DEFAULT_LAST_INSTRUCTION);
-    expect(session.getTerminalSnapshot().columns).toBe(96);
-    expect(session.getTerminalSnapshot().rows).toBe(28);
+    expect(session.getTerminalMeta().columns).toBe(96);
+    expect(session.getTerminalMeta().rows).toBe(28);
   });
 });

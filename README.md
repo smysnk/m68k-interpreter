@@ -74,10 +74,12 @@ React 18 · Redux Toolkit · TypeScript · Vite 7 · Vitest
 git clone https://github.com/gianlucarea/m68k-interpreter.git
 cd m68k-interpreter
 yarn install
-yarn workspace @m68k/ide dev
+cp .env.example .env
+yarn dev
 ```
 
 ```bash
+yarn dev:raw         # bypass mono-helper and use your own WEB_* env vars
 yarn build           # production build
 yarn test            # run tests
 yarn type-check      # workspace type-check

@@ -17,11 +17,11 @@ describe('interpreter-redux nibbles intro', () => {
       for (; step < 200000; step += 1) {
         session.emulationStep();
         if (step % 5000 === 0) {
-          lastRenderedText = session.getTerminalSnapshot().lines.join('\n');
+          lastRenderedText = session.getTerminalText();
         }
 
         if (session.isWaitingForInput()) {
-          lastRenderedText = session.getTerminalSnapshot().lines.join('\n');
+          lastRenderedText = session.getTerminalText();
           break;
         }
       }

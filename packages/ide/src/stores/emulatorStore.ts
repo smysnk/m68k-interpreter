@@ -5,9 +5,11 @@ import type {
   ExecutionState,
   MemoryCell,
   Registers,
+  TerminalMeta,
   TerminalSnapshot,
 } from '@m68k/interpreter';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
+import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import {
   ideStore,
   setEditorCode as setEditorCodeAction,
@@ -16,7 +18,7 @@ import {
   setFlags as setFlagsAction,
   setExecutionState as setExecutionStateAction,
   setEmulatorInstance as setEmulatorInstanceAction,
-  setTerminalSnapshot as setTerminalSnapshotAction,
+  setTerminalState as setTerminalStateAction,
   syncEmulatorFrame as syncEmulatorFrameAction,
   toggleShowFlags as toggleShowFlagsAction,
   setDelay as setDelayAction,
@@ -25,10 +27,12 @@ import {
   pushHistory as pushHistoryAction,
   popHistory as popHistoryAction,
   resetEmulatorState,
-  createEmptyTerminalSnapshot,
+  createEmptyTerminalState,
+  toTerminalRuntimeState,
   type RootState,
   type AppDispatch,
   type RuntimeMetrics,
+  type TerminalRuntimeState,
 } from '@/store';
 
 type EmulatorStoreFacade = RootState['emulator'] & {
@@ -39,11 +43,12 @@ type EmulatorStoreFacade = RootState['emulator'] & {
   setExecutionState: (state: Partial<ExecutionState>) => void;
   setEmulatorInstance: (emulator: IdeRuntimeSession | null) => void;
   setTerminalSnapshot: (snapshot: TerminalSnapshot) => void;
+  setTerminalMeta: (terminalMeta: TerminalRuntimeState | TerminalMeta) => void;
   syncEmulatorFrame: (frame: {
     registers: Registers;
     memory: MemoryCell;
     flags: ConditionFlags;
-    terminalSnapshot: TerminalSnapshot;
+    terminal: TerminalRuntimeState | TerminalMeta;
     executionState?: Partial<ExecutionState>;
     runtimeMetrics?: Partial<RuntimeMetrics>;
   }) => void;
@@ -95,12 +100,17 @@ function createActions(dispatch: AppDispatch) {
     setExecutionState: (nextState: Partial<ExecutionState>) => dispatch(setExecutionStateAction(nextState)),
     setEmulatorInstance: (emulator: IdeRuntimeSession | null) =>
       dispatch(setEmulatorInstanceAction(emulator)),
-    setTerminalSnapshot: (snapshot: TerminalSnapshot) => dispatch(setTerminalSnapshotAction(snapshot)),
+    setTerminalSnapshot: (snapshot: TerminalSnapshot) => {
+      terminalSurfaceStore.replaceFromSnapshot(snapshot);
+      dispatch(setTerminalStateAction(toTerminalRuntimeState(snapshot)));
+    },
+    setTerminalMeta: (terminalMeta: TerminalRuntimeState | TerminalMeta) =>
+      dispatch(setTerminalStateAction(toTerminalRuntimeState(terminalMeta))),
     syncEmulatorFrame: (frame: {
       registers: Registers;
       memory: MemoryCell;
       flags: ConditionFlags;
-      terminalSnapshot: TerminalSnapshot;
+      terminal: TerminalRuntimeState | TerminalMeta;
       executionState?: Partial<ExecutionState>;
       runtimeMetrics?: Partial<RuntimeMetrics>;
     }) => dispatch(syncEmulatorFrameAction(frame)),
@@ -110,7 +120,10 @@ function createActions(dispatch: AppDispatch) {
     setRuntimeMetrics: (runtimeMetrics: Partial<RuntimeMetrics>) => dispatch(setRuntimeMetricsAction(runtimeMetrics)),
     pushHistory: () => dispatch(pushHistoryAction()),
     popHistory: () => dispatch(popHistoryAction()),
-    reset: () => dispatch(resetEmulatorState()),
+    reset: () => {
+      terminalSurfaceStore.reset();
+      dispatch(resetEmulatorState());
+    },
     setRegister,
     setRegisterInEmulator: (name: keyof Registers, value: number) => {
       const emulator = ideStore.getState().emulator.emulatorInstance;
@@ -159,4 +172,4 @@ export const useEmulatorStore = Object.assign(useEmulatorStoreImpl, {
 }) as UseEmulatorStoreHook;
 
 export type { RuntimeMetrics };
-export { createEmptyTerminalSnapshot };
+export { createEmptyTerminalState };

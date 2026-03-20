@@ -21,4 +21,37 @@ describe('TerminalDevice', () => {
     expect(snapshot.cursorRow).toBe(1);
     expect(snapshot.cursorColumn).toBe(5);
   });
+
+  it('writes into a reusable frame buffer while preserving compatibility snapshots', () => {
+    const terminal = new TerminalDevice({ columns: 5, rows: 2 });
+    const frameBuffer = terminal.getFrameBuffer();
+    const backingStore = frameBuffer.data;
+
+    'ABCD'.split('').forEach((char) => {
+      terminal.writeByte(char.charCodeAt(0));
+    });
+    terminal.reset();
+    terminal.writeByte('Z'.charCodeAt(0));
+
+    expect(terminal.getFrameBuffer()).toBe(frameBuffer);
+    expect(terminal.getFrameBuffer().data).toBe(backingStore);
+    expect(terminal.getTerminalMeta().cursorColumn).toBe(1);
+    expect(terminal.getLines()[0].startsWith('Z')).toBe(true);
+    expect(terminal.getText().startsWith('Z')).toBe(true);
+    expect(terminal.getSnapshot().lines[0].startsWith('Z')).toBe(true);
+  });
+
+  it('scrolls by shifting the existing frame buffer instead of rebuilding row objects', () => {
+    const terminal = new TerminalDevice({ columns: 4, rows: 2 });
+    const frameBuffer = terminal.getFrameBuffer();
+    const backingStore = frameBuffer.data;
+
+    'ABCD'.split('').forEach((char) => terminal.writeByte(char.charCodeAt(0)));
+    'EFGH'.split('').forEach((char) => terminal.writeByte(char.charCodeAt(0)));
+    terminal.writeByte('I'.charCodeAt(0));
+
+    expect(terminal.getFrameBuffer()).toBe(frameBuffer);
+    expect(terminal.getFrameBuffer().data).toBe(backingStore);
+    expect(terminal.getLines()).toEqual(['EFGH', 'I   ']);
+  });
 });

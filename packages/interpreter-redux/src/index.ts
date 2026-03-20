@@ -26,6 +26,12 @@ export {
 } from './session';
 export { createStoreBackedReducerInterpreterAdapter } from './storeAdapter';
 export {
+  ReducerTerminalRuntime,
+  createReducerTerminalLines,
+  createReducerTerminalSnapshot,
+  createReducerTerminalText,
+} from './terminalRuntime';
+export {
   DEFAULT_LAST_INSTRUCTION,
   DEFAULT_STACK_POINTER,
   DEFAULT_TERMINAL_COLUMNS,
@@ -72,7 +78,6 @@ export type {
   InterpreterReducerState,
   LoadedProgramState,
   MemoryState,
-  TerminalCellState,
   TerminalState,
   TerminalStyleState,
 } from './state';

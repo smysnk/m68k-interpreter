@@ -32,6 +32,7 @@
     "react-dom": "^18.3.1",
     "react-github-btn": "^1.4.0",
     "react-redux": "^9.2.0",
+    "react-resizable-panels": "^2.1.7",
     "react-retro-display-tty-ansi": "npm:^0.1.15",
     "styled-components": "^6.3.11"
   },

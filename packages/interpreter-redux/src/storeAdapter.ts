@@ -1,4 +1,9 @@
-import type { ProgramSource, TerminalSnapshot } from '@m68k/interpreter';
+import type {
+  ProgramSource,
+  TerminalFrameBuffer,
+  TerminalMeta,
+  TerminalSnapshot,
+} from '@m68k/interpreter';
 import {
   interpreterReduxActions,
   type InterpreterReduxAction,
@@ -9,10 +14,10 @@ import {
   selectIsHalted,
   selectIsWaitingForInput,
   selectLastInstruction,
-  selectTerminalSnapshot,
 } from './selectors';
 import type { InterpreterReducerState } from './state';
 import type { ReducerInterpreterAdapter } from './session';
+import { ReducerTerminalRuntime } from './terminalRuntime';
 
 function normalizeQueuedInput(input: string | number | number[] | Uint8Array): number[] {
   if (typeof input === 'string') {
@@ -36,10 +41,15 @@ export interface StoreBackedReducerInterpreterAdapter extends ReducerInterpreter
 }
 
 class ReduxStoreInterpreterAdapter implements StoreBackedReducerInterpreterAdapter {
-  constructor(private readonly store: InterpreterReduxStoreBinding) {}
+  private readonly terminalRuntime: ReducerTerminalRuntime;
+
+  constructor(private readonly store: InterpreterReduxStoreBinding) {
+    this.terminalRuntime = new ReducerTerminalRuntime(this.store.getState().terminal);
+  }
 
   dispatch(action: InterpreterReduxAction): InterpreterReducerState {
     this.store.dispatch(action);
+    this.terminalRuntime.synchronize(this.store.getState().terminal);
     return this.store.getState();
   }
 
@@ -120,7 +130,33 @@ class ReduxStoreInterpreterAdapter implements StoreBackedReducerInterpreterAdapt
   }
 
   getTerminalSnapshot(): TerminalSnapshot {
-    return selectTerminalSnapshot(this.store.getState());
+    this.terminalRuntime.synchronize(this.store.getState().terminal);
+    return this.terminalRuntime.getSnapshot();
+  }
+
+  getTerminalDebugSnapshot(): TerminalSnapshot {
+    this.terminalRuntime.synchronize(this.store.getState().terminal);
+    return this.terminalRuntime.getDebugSnapshot();
+  }
+
+  getTerminalFrameBuffer(): TerminalFrameBuffer {
+    this.terminalRuntime.synchronize(this.store.getState().terminal);
+    return this.terminalRuntime.getFrameBuffer();
+  }
+
+  getTerminalMeta(): TerminalMeta {
+    this.terminalRuntime.synchronize(this.store.getState().terminal);
+    return this.terminalRuntime.getTerminalMeta();
+  }
+
+  getTerminalLines(): string[] {
+    this.terminalRuntime.synchronize(this.store.getState().terminal);
+    return this.terminalRuntime.getLines();
+  }
+
+  getTerminalText(): string {
+    this.terminalRuntime.synchronize(this.store.getState().terminal);
+    return this.terminalRuntime.getText();
   }
 
   getException(): string | undefined {

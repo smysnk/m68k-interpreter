@@ -1,5 +1,5 @@
 import { performance } from 'node:perf_hooks';
-import { Emulator, type TerminalSnapshot } from '@m68k/interpreter';
+import { Emulator, type TerminalMeta } from '@m68k/interpreter';
 import { ReducerInterpreterSession } from '@m68k/interpreter-redux';
 import type {
   BenchmarkEngineId,
@@ -37,7 +37,8 @@ interface BenchmarkSession {
   getRegisters(): Int32Array;
   getSymbolAddress(symbol: string): number | undefined;
   getSymbols(): Record<string, number>;
-  getTerminalSnapshot(): TerminalSnapshot;
+  getTerminalMeta(): TerminalMeta;
+  getTerminalText(): string;
   getVFlag(): number;
   getXFlag(): number;
   getZFlag(): number;
@@ -56,7 +57,8 @@ export interface EngineSnapshot {
     c: number;
     x: number;
   };
-  terminal: TerminalSnapshot;
+  terminalMeta: TerminalMeta;
+  terminalText: string;
   lastInstruction: string;
   errors: string[];
   exception?: string;
@@ -184,7 +186,8 @@ function collectSnapshot(session: BenchmarkSession): EngineSnapshot {
       c: session.getCFlag(),
       x: session.getXFlag(),
     },
-    terminal: session.getTerminalSnapshot(),
+    terminalMeta: session.getTerminalMeta(),
+    terminalText: session.getTerminalText(),
     lastInstruction: session.getLastInstruction(),
     errors: [...session.getErrors()],
     exception: session.getException(),
@@ -244,7 +247,7 @@ function assertScenarioTerminalMarkers(
     return;
   }
 
-  const renderedText = session.getTerminalSnapshot().lines.join('\n');
+  const renderedText = session.getTerminalText();
   for (const marker of scenario.terminalMarkers) {
     if (!renderedText.includes(marker)) {
       throw new Error(`Scenario ${scenario.id} expected terminal to include "${marker}"`);

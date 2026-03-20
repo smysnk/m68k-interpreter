@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faFileDownload } from '@fortawesome/free-solid-svg-icons';
 import { useEmulatorStore } from '@/stores/emulatorStore';
 
 const Memory: React.FC = () => {
@@ -33,8 +35,17 @@ const Memory: React.FC = () => {
   };
 
   return (
-    <div className="memory-container">
-      <h3 className="memory-title">Memory View</h3>
+    <div className="memory-container pane-surface">
+      <div className="pane-header">
+        <div className="pane-title-group">
+          <p className="pane-eyebrow">Machine State</p>
+          <h3 className="pane-title">Memory</h3>
+          <p className="pane-caption">Hex view from the selected start address.</p>
+        </div>
+        <button onClick={handleDownload} className="btn-download btn-pane-action" type="button" title="Download memory">
+          <FontAwesomeIcon icon={faFileDownload} size="lg" />
+        </button>
+      </div>
 
       <div className="memory-controls">
         <label htmlFor="mem-start">Start Address</label>
@@ -45,9 +56,6 @@ const Memory: React.FC = () => {
           onChange={handleAddressChange}
           placeholder="0x00000000"
         />
-        <button onClick={handleDownload} className="btn-download">
-          Download
-        </button>
       </div>
 
       <div className="memory-table-wrapper">

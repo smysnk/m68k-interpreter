@@ -257,14 +257,15 @@ _SPUTCH
 
     const emulator = new Emulator(code);
     runProgram(emulator);
-    const terminal = emulator.getTerminalSnapshot();
+    const terminalMeta = emulator.getTerminalMeta();
+    const terminalText = emulator.getTerminalText();
 
     expect(emulator.getException()).toBeUndefined();
     expect(emulator.getErrors()).toEqual([]);
     expect(emulator.isHalted()).toBe(true);
-    expect(terminal.output).toBe('A');
-    expect(terminal.lines[0].startsWith('A')).toBe(true);
-    expect(terminal.cursorColumn).toBe(1);
+    expect(terminalMeta.output).toBe('A');
+    expect(terminalText.startsWith('A')).toBe(true);
+    expect(terminalMeta.cursorColumn).toBe(1);
   });
 
   it('blocks on TRAP #15 task 3 until queued input is available', () => {
@@ -337,19 +338,19 @@ EXIT
     runUntil(
       emulator,
       (instance) => {
-        const renderedText = instance.getTerminalSnapshot().lines.join('\n');
+        const renderedText = instance.getTerminalText();
         return (
           renderedText.includes('Difficulty') && renderedText.includes('Programmed By Josh Henn')
         );
       },
       40000
     );
-    const terminal = emulator.getTerminalSnapshot();
-    const renderedText = terminal.lines.join('\n');
+    const terminalMeta = emulator.getTerminalMeta();
+    const renderedText = emulator.getTerminalText();
 
     expect(emulator.getException()).toBeUndefined();
     expect(emulator.getErrors()).toEqual([]);
-    expect(terminal.output.includes('\u001b[2J')).toBe(true);
+    expect(terminalMeta.output.includes('\u001b[2J')).toBe(true);
     expect(renderedText.includes('Difficulty')).toBe(true);
     expect(renderedText.includes('Programmed By Josh Henn')).toBe(true);
     },

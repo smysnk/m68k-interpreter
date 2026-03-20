@@ -5,9 +5,13 @@ const Flags: React.FC = () => {
   const { flags, registers } = useEmulatorStore();
 
   return (
-    <div className="flags-container">
-      <div className="registers-header">
-        <h3>CPU Flags</h3>
+    <div className="flags-container pane-surface">
+      <div className="pane-header">
+        <div className="pane-title-group">
+          <p className="pane-eyebrow">Machine State</p>
+          <h3 className="pane-title">Flags</h3>
+          <p className="pane-caption">Condition code bits and the current CCR value.</p>
+        </div>
       </div>
 
       <div className="registers-content">

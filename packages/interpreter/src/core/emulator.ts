@@ -4,7 +4,12 @@
  */
 
 import { loadProgramSource, type ProgramSource } from '../programLoader';
-import { TerminalDevice, type TerminalSnapshot } from '../devices/terminal';
+import {
+  TerminalDevice,
+  type TerminalMeta,
+  type TerminalSnapshot,
+} from '../devices/terminal';
+import type { TerminalFrameBuffer } from '../devices/terminalBuffer';
 import { Memory } from './memory';
 import { Undo } from './undo';
 import { Strings } from './strings';
@@ -2012,7 +2017,27 @@ export class Emulator {
   }
 
   getTerminalSnapshot(): TerminalSnapshot {
-    return this.terminal.getSnapshot();
+    return this.terminal.getDebugSnapshot();
+  }
+
+  getTerminalDebugSnapshot(): TerminalSnapshot {
+    return this.terminal.getDebugSnapshot();
+  }
+
+  getTerminalFrameBuffer(): TerminalFrameBuffer {
+    return this.terminal.getFrameBuffer();
+  }
+
+  getTerminalMeta(): TerminalMeta {
+    return this.terminal.getTerminalMeta();
+  }
+
+  getTerminalLines(): string[] {
+    return this.terminal.getLines();
+  }
+
+  getTerminalText(): string {
+    return this.terminal.getText();
   }
 
   queueInput(input: string | number | number[] | Uint8Array): void {

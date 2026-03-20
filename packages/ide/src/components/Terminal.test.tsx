@@ -1,7 +1,8 @@
-import type { Emulator } from '@m68k/interpreter';
+import { createTerminalFrameBuffer, type Emulator } from '@m68k/interpreter';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import Terminal from './Terminal';
+import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { useEmulatorStore } from '@/stores/emulatorStore';
 import { ideStore, resetSettingsState, setEditorTheme } from '@/store';
 import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
@@ -55,6 +56,36 @@ describe('Terminal', () => {
     expect(screen.queryByRole('button', { name: /focus terminal/i })).not.toBeInTheDocument();
     expect(retroDisplay).not.toBeNull();
     expect(retroDisplay).toHaveAttribute('data-grid-mode', 'auto');
+  });
+
+  it('renders from the terminal buffer even when no append output stream is present', async () => {
+    const frameBuffer = createTerminalFrameBuffer(6, 1);
+    frameBuffer.charBytes.set([
+      'G'.charCodeAt(0),
+      'A'.charCodeAt(0),
+      'M'.charCodeAt(0),
+      'E'.charCodeAt(0),
+      ' '.charCodeAt(0),
+      ' '.charCodeAt(0),
+    ]);
+    frameBuffer.dirtyRowFlags[0] = 1;
+    frameBuffer.version += 1;
+
+    terminalSurfaceStore.publishFrame(frameBuffer, {
+      columns: 6,
+      rows: 1,
+      cursorRow: 0,
+      cursorColumn: 4,
+      output: '',
+      version: frameBuffer.version,
+      geometryVersion: frameBuffer.geometryVersion,
+    });
+
+    renderWithIdeProviders(<Terminal />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('terminal-screen')).toHaveTextContent('GAME');
+    });
   });
 
   it('forwards terminal keyboard input into the emulator queue', () => {

@@ -5,6 +5,7 @@ import {
   resizeTerminalState,
   writeTerminalBytes,
 } from './terminalReducer';
+import { createReducerTerminalSnapshot } from './terminalRuntime';
 
 describe('terminalReducer', () => {
   it('applies cursor movement, clear-screen, and SGR state while preserving the raw output stream', () => {
@@ -14,8 +15,9 @@ describe('terminalReducer', () => {
       .map((char) => char.charCodeAt(0));
 
     const terminal = writeTerminalBytes(initialState, bytes);
-    const exclamationCell = terminal.cells[1][4];
-    const lines = terminal.cells.map((row) => row.map((cell) => cell.char).join(''));
+    const snapshot = createReducerTerminalSnapshot(terminal);
+    const exclamationCell = snapshot.cells[1][4];
+    const lines = snapshot.lines;
 
     expect(terminal.output).toBe('\u001b[2J\u001b[2;3HHi\u001b[33;40m!\u001b[0m');
     expect(lines[1].slice(2, 5)).toBe('Hi!');
@@ -31,7 +33,8 @@ describe('terminalReducer', () => {
     const bytes = 'AB\rC\nD\bE\0'.split('').map((char) => char.charCodeAt(0));
 
     const terminal = writeTerminalBytes(initialState, bytes);
-    const lines = terminal.cells.map((row) => row.map((cell) => cell.char).join(''));
+    const snapshot = createReducerTerminalSnapshot(terminal);
+    const lines = snapshot.lines;
 
     expect(lines[0]).toBe('CB  ');
     expect(lines[1]).toBe(' E  ');
@@ -52,11 +55,11 @@ describe('terminalReducer', () => {
     expect(resetState.output).toBe('');
     expect(resetState.cursorRow).toBe(0);
     expect(resetState.cursorColumn).toBe(0);
-    expect(resetState.cells).toHaveLength(2);
-    expect(resetState.cells[0]).toHaveLength(4);
+    expect(createReducerTerminalSnapshot(resetState).lines).toHaveLength(2);
+    expect(createReducerTerminalSnapshot(resetState).lines[0]).toHaveLength(4);
 
     expect(resizedState.output).toBe('');
-    expect(resizedState.cells).toHaveLength(3);
-    expect(resizedState.cells[0]).toHaveLength(6);
+    expect(createReducerTerminalSnapshot(resizedState).lines).toHaveLength(3);
+    expect(createReducerTerminalSnapshot(resizedState).lines[0]).toHaveLength(6);
   });
 });

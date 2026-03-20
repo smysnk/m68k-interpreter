@@ -6,14 +6,14 @@ import {
   createInitialInterpreterReducerState,
   createLoadedProgramState,
 } from './state';
-import { selectFlags, selectRegisters, selectTerminalSnapshot } from './selectors';
+import { selectFlags, selectRegisters, selectTerminalLines } from './selectors';
 
 describe('interpreter-redux phase 1 reducer contracts', () => {
   it('creates an initial reducer state with a serializable cpu and terminal model', () => {
     const state = createInitialInterpreterReducerState();
     const registers = selectRegisters(state);
     const flags = selectFlags(state);
-    const terminal = selectTerminalSnapshot(state);
+    const terminalLines = selectTerminalLines(state);
 
     expect(state.cpu.registers).toHaveLength(16);
     expect(registers.a7).toBe(DEFAULT_STACK_POINTER);
@@ -24,9 +24,9 @@ describe('interpreter-redux phase 1 reducer contracts', () => {
       c: 0,
       x: 0,
     });
-    expect(terminal.columns).toBe(80);
-    expect(terminal.rows).toBe(25);
-    expect(terminal.lines).toHaveLength(25);
+    expect(state.terminal.columns).toBe(80);
+    expect(state.terminal.rows).toBe(25);
+    expect(terminalLines).toHaveLength(25);
   });
 
   it('loads a program definition and resets memory/execution state around it', () => {

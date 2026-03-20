@@ -14,20 +14,16 @@ export interface SettingsState {
   engineMode: EngineMode;
   followSystemTheme: boolean;
   lineNumbers: boolean;
-  showHelp: boolean;
-  showRegisters: boolean;
 }
 
 export type EngineMode = 'interpreter' | 'interpreter-redux';
 
-const initialState: SettingsState = {
+export const initialSettingsState: SettingsState = {
   themes: defaultEditorThemes,
   editorTheme: defaultEditorTheme,
   engineMode: 'interpreter',
   followSystemTheme: true,
   lineNumbers: true,
-  showHelp: false,
-  showRegisters: true,
 };
 
 function getOppositeTheme(currentTheme: EditorThemeId): EditorThemeId {
@@ -38,7 +34,7 @@ function getOppositeTheme(currentTheme: EditorThemeId): EditorThemeId {
 
 const settingsSlice = createSlice({
   name: 'settings',
-  initialState,
+  initialState: initialSettingsState,
   reducers: {
     setEditorTheme(state, action: PayloadAction<EditorThemeId>) {
       if (!state.themes.includes(action.payload)) {
@@ -66,14 +62,8 @@ const settingsSlice = createSlice({
     setLineNumbers(state, action: PayloadAction<boolean>) {
       state.lineNumbers = action.payload;
     },
-    toggleHelp(state) {
-      state.showHelp = !state.showHelp;
-    },
-    toggleRegisters(state) {
-      state.showRegisters = !state.showRegisters;
-    },
     resetSettingsState() {
-      return { ...initialState };
+      return { ...initialSettingsState };
     },
   },
 });
@@ -85,8 +75,6 @@ export const {
   syncSystemTheme,
   setFollowSystemTheme,
   setLineNumbers,
-  toggleHelp,
-  toggleRegisters,
   resetSettingsState,
 } = settingsSlice.actions;
 

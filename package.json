@@ -6,7 +6,8 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "yarn workspace @m68k/ide dev",
+    "dev": "./scripts/mono-helper.sh env yarn dev:raw",
+    "dev:raw": "yarn workspace @m68k/ide dev",
     "build": "yarn workspaces foreach -Apt --exclude m68k-interpreter-monorepo run build",
     "build:interpreter": "yarn workspace @m68k/interpreter build",
     "build:interpreter-redux": "yarn workspace @m68k/interpreter-redux build",
@@ -31,6 +32,7 @@
     "test:performance:browser:test-station": "tsx ./tests/benchmarks/emitNibblesBrowserBenchmarkSuite.ts",
     "test:integration": "vitest run --config vitest.config.ts",
     "test:e2e": "playwright test --config playwright.config.ts",
+    "test:e2e:shell": "playwright test --config playwright.config.ts tests/e2e/ide-shell.spec.ts",
     "test:e2e:headed": "playwright test --config playwright.config.ts --headed",
     "test:e2e:install": "playwright install chromium",
     "bench:engines": "vitest bench --config vitest.performance.config.ts tests/benchmarks/**/*.bench.ts --run --execArgv=--expose-gc",
@@ -59,6 +61,7 @@
     "@typescript-eslint/parser": "^8.57.0",
     "@vitejs/plugin-react": "^4.2.1",
     "@vitest/coverage-v8": "^4.0.0",
+    "dotenv": "^16.6.1",
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react": "^7.33.2",

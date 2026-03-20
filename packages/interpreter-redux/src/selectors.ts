@@ -1,7 +1,6 @@
-import type {
-  InterpreterReducerState,
-  TerminalCellState,
-} from './state';
+import type { TerminalSnapshot } from '@m68k/interpreter';
+import type { InterpreterReducerState } from './state';
+import { createReducerTerminalLines, createReducerTerminalSnapshot } from './terminalRuntime';
 
 export interface InterpreterReduxRegisters {
   d0: number;
@@ -32,15 +31,7 @@ export interface InterpreterReduxFlags {
   x: number;
 }
 
-export interface InterpreterReduxTerminalSnapshot {
-  columns: number;
-  rows: number;
-  cursorRow: number;
-  cursorColumn: number;
-  output: string;
-  lines: string[];
-  cells: TerminalCellState[][];
-}
+export type InterpreterReduxTerminalSnapshot = TerminalSnapshot;
 
 export function selectRegisters(state: InterpreterReducerState): InterpreterReduxRegisters {
   const registers = state.cpu.registers;
@@ -79,21 +70,13 @@ export function selectFlags(state: InterpreterReducerState): InterpreterReduxFla
 }
 
 export function selectTerminalLines(state: InterpreterReducerState): string[] {
-  return state.terminal.cells.map((row) => row.map((cell) => cell.char).join(''));
+  return createReducerTerminalLines(state.terminal);
 }
 
 export function selectTerminalSnapshot(
   state: InterpreterReducerState
 ): InterpreterReduxTerminalSnapshot {
-  return {
-    columns: state.terminal.columns,
-    rows: state.terminal.rows,
-    cursorRow: state.terminal.cursorRow,
-    cursorColumn: state.terminal.cursorColumn,
-    output: state.terminal.output,
-    lines: selectTerminalLines(state),
-    cells: state.terminal.cells.map((row) => row.map((cell) => ({ ...cell }))),
-  };
+  return createReducerTerminalSnapshot(state.terminal);
 }
 
 export function selectLastInstruction(state: InterpreterReducerState): string {
