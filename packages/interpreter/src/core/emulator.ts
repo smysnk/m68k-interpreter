@@ -132,7 +132,7 @@ export class Emulator {
       this.pc,
       this.ccr,
       this.registers,
-      this.memory.getMemory(),
+      this.memory.createSnapshot(),
       this.errors,
       Strings.LAST_INSTRUCTION_DEFAULT_TEXT,
       this.line
@@ -834,7 +834,7 @@ export class Emulator {
         this.pc,
         this.ccr,
         this.registers,
-        this.memory.getMemory(),
+        this.memory.createSnapshot(),
         this.errors,
         this.lastInstruction,
         this.line
@@ -2016,6 +2016,20 @@ export class Emulator {
     return this.memory.getMemory();
   }
 
+  getMemoryMeta(): { usedBytes: number; minAddress: number | null; maxAddress: number | null; version: number } {
+    const addressRange = this.memory.getAddressRange();
+    return {
+      usedBytes: this.memory.getUsedBytes(),
+      minAddress: addressRange.minAddress,
+      maxAddress: addressRange.maxAddress,
+      version: this.memory.getMemoryVersion(),
+    };
+  }
+
+  readMemoryRange(address: number, length: number): Uint8Array {
+    return this.memory.readRange(address, length);
+  }
+
   getTerminalSnapshot(): TerminalSnapshot {
     return this.terminal.getDebugSnapshot();
   }
@@ -2126,7 +2140,7 @@ export class Emulator {
     this.lastInstruction = frame.lastInstruction;
     this.line = frame.line;
     this.registers = new Int32Array(frame.registers);
-    this.memory.setMemory(frame.memory);
+    this.memory.restoreSnapshot(frame.memory);
     this.errors = [...frame.errors];
     this.waitingForInput = false;
     this.halted = false;
@@ -2158,7 +2172,7 @@ export class Emulator {
       this.pc,
       this.ccr,
       this.registers,
-      this.memory.getMemory(),
+      this.memory.createSnapshot(),
       this.errors,
       Strings.LAST_INSTRUCTION_DEFAULT_TEXT,
       this.line

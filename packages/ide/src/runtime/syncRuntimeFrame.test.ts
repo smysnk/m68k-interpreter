@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTerminalFrameBuffer } from '@m68k/interpreter';
+import { memorySurfaceStore } from '@/runtime/memorySurfaceStore';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { syncRuntimeFrameToIde } from '@/runtime/syncRuntimeFrame';
 
 describe('syncRuntimeFrameToIde', () => {
   beforeEach(() => {
+    memorySurfaceStore.reset();
     terminalSurfaceStore.reset();
   });
 
-  it('publishes the runtime frame buffer and syncs only terminal metadata to Redux', () => {
+  it('publishes the runtime frame buffer, memory runtime, and syncs only metadata to Redux', () => {
     const frameBuffer = createTerminalFrameBuffer(4, 1);
     frameBuffer.charBytes.set([...'TEST'].map((char) => char.charCodeAt(0)));
     frameBuffer.dirtyRowFlags[0] = 1;
@@ -43,6 +45,20 @@ describe('syncRuntimeFrameToIde', () => {
         })),
       ],
     }));
+    const getMemory = vi.fn(() => ({ 0x1000: 0x4e }));
+    const getMemoryMeta = vi.fn(() => ({
+      usedBytes: 1,
+      minAddress: 0x1000,
+      maxAddress: 0x1000,
+      version: 4,
+    }));
+    const readMemoryRange = vi.fn((address: number, length: number) => {
+      const bytes = new Uint8Array(length);
+      if (address === 0x1000 && length > 0) {
+        bytes[0] = 0x4e;
+      }
+      return bytes;
+    });
     const syncEmulatorFrame = vi.fn();
 
     syncRuntimeFrameToIde(
@@ -51,10 +67,12 @@ describe('syncRuntimeFrameToIde', () => {
         getErrors: () => [],
         getException: () => undefined,
         getLastInstruction: () => 'MOVE.B #1,D0',
-        getMemory: () => ({ 0x1000: 0x4e }),
+        getMemory,
+        getMemoryMeta,
         getNFlag: () => 0,
         getPC: () => 0x1000,
         getRegisters: () => Int32Array.from(Array.from({ length: 16 }, (_, index) => index)),
+        readMemoryRange,
         getSymbolAddress: () => undefined,
         getSymbols: () => ({}),
         getTerminalFrameBuffer,
@@ -90,10 +108,17 @@ describe('syncRuntimeFrameToIde', () => {
     expect(getTerminalMeta).toHaveBeenCalledTimes(1);
     expect(getTerminalFrameBuffer).toHaveBeenCalledTimes(1);
     expect(getTerminalSnapshot).not.toHaveBeenCalled();
+    expect(getMemoryMeta).toHaveBeenCalledTimes(1);
+    expect(getMemory).not.toHaveBeenCalled();
     expect(syncEmulatorFrame).toHaveBeenCalledWith(
       expect.objectContaining({
         terminal: terminalMeta,
-        memory: { 0x1000: 0x4e },
+        memory: {
+          usedBytes: 1,
+          minAddress: 0x1000,
+          maxAddress: 0x1000,
+          version: 4,
+        },
         executionState: expect.objectContaining({
           started: true,
           lastInstruction: 'MOVE.B #1,D0',
@@ -110,5 +135,7 @@ describe('syncRuntimeFrameToIde', () => {
     expect(terminalSurfaceStore.getSnapshot().frameBuffer).toBe(frameBuffer);
     expect(terminalSurfaceStore.getSnapshot().meta).toEqual(terminalMeta);
     expect(terminalSurfaceStore.getText()).toBe('TEST');
+    expect(Array.from(memorySurfaceStore.readRange(0x1000, 4))).toEqual([0x4e, 0x00, 0x00, 0x00]);
+    expect(readMemoryRange).toHaveBeenCalledWith(0x1000, 4);
   });
 });

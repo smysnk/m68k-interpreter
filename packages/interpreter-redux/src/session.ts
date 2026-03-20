@@ -7,16 +7,9 @@ import type {
 } from '@m68k/interpreter';
 import { interpreterReduxActions, type InterpreterReduxAction } from './actions';
 import { createInterpreterReduxStateForProgram } from './instructionReducer';
-import { interpreterReducer } from './reducer';
-import {
-  selectErrors,
-  selectException,
-  selectIsHalted,
-  selectIsWaitingForInput,
-  selectLastInstruction,
-} from './selectors';
+import { selectErrors, selectException, selectIsHalted, selectIsWaitingForInput, selectLastInstruction } from './selectors';
 import type { InterpreterReducerState } from './state';
-import { ReducerTerminalRuntime } from './terminalRuntime';
+import { ReducerRuntimeStore } from './runtimeStore';
 
 type EmulatorCompatibleContract = Pick<
   Emulator,
@@ -27,10 +20,12 @@ type EmulatorCompatibleContract = Pick<
   | 'getException'
   | 'getLastInstruction'
   | 'getMemory'
+  | 'getMemoryMeta'
   | 'getNFlag'
   | 'getPC'
   | 'getQueuedInputLength'
   | 'getRegisters'
+  | 'readMemoryRange'
   | 'getSymbolAddress'
   | 'getSymbols'
   | 'getTerminalLines'
@@ -77,195 +72,169 @@ function normalizeQueuedInput(input: string | number | number[] | Uint8Array): n
 }
 
 export class ReducerInterpreterSession implements ReducerInterpreterAdapter {
-  private state: InterpreterReducerState;
-  private readonly terminalRuntime: ReducerTerminalRuntime;
+  private readonly runtimeStore: ReducerRuntimeStore;
 
   constructor(program: ProgramSource = '') {
-    this.state = createInterpreterReduxStateForProgram(program);
-    this.terminalRuntime = new ReducerTerminalRuntime(this.state.terminal);
+    this.runtimeStore = new ReducerRuntimeStore(createInterpreterReduxStateForProgram(program));
   }
 
   dispatch(action: InterpreterReduxAction): InterpreterReducerState {
-    if (action.type === 'stepRequested') {
-      this.state = interpreterReducer(this.state, action);
-      this.terminalRuntime.synchronize(this.state.terminal);
-      return this.state;
-    }
-
-    this.state = interpreterReducer(this.state, action);
-    this.terminalRuntime.synchronize(this.state.terminal);
-    return this.state;
+    return this.runtimeStore.dispatch(action);
   }
 
   loadProgram(program: ProgramSource): void {
-    this.state = createInterpreterReduxStateForProgram(program, {
-      columns: this.state.terminal.columns,
-      rows: this.state.terminal.rows,
-    });
-    this.terminalRuntime.synchronize(this.state.terminal);
+    this.runtimeStore.loadProgram(program);
   }
 
   resizeTerminal(columns: number, rows: number): void {
-    this.state = interpreterReducer(
-      this.state,
-      interpreterReduxActions.terminalResized({ columns, rows })
-    );
+    this.runtimeStore.resizeTerminal(columns, rows);
   }
 
   emulationStep(): boolean {
-    if (this.state.cpu.pc / 4 >= this.state.program.instructions.length) {
-      const lastInstruction = this.state.program.instructions[this.state.program.instructions.length - 1]?.[0];
+    const state = this.runtimeStore.getState();
+
+    if (state.cpu.pc / 4 >= state.program.instructions.length) {
+      const lastInstruction = state.program.instructions[state.program.instructions.length - 1]?.[0];
       if (lastInstruction !== undefined) {
-      this.state = {
-        ...this.state,
-        execution: {
-          ...this.state.execution,
-          lastInstruction,
-          },
-        };
+        this.runtimeStore.dispatch(
+          interpreterReduxActions.runtimeStateHydrated({
+            ...state,
+            execution: {
+              ...state.execution,
+              lastInstruction,
+            },
+          })
+        );
       }
 
       return true;
     }
 
-    if (shouldStopBeforeStep(this.state)) {
+    if (shouldStopBeforeStep(state)) {
       return true;
     }
 
-    this.state = interpreterReducer(this.state, interpreterReduxActions.stepRequested());
-    return this.state.execution.halted || this.state.diagnostics.exception !== undefined;
+    return this.runtimeStore.step();
   }
 
   queueInput(input: string | number | number[] | Uint8Array): void {
-    this.state = interpreterReducer(
-      this.state,
-      interpreterReduxActions.inputQueued(normalizeQueuedInput(input))
-    );
+    this.runtimeStore.queueInput(normalizeQueuedInput(input));
   }
 
   clearInputQueue(): void {
-    this.state = {
-      ...this.state,
-      input: {
-        ...this.state.input,
-        queue: [],
-      },
-    };
+    this.runtimeStore.clearInputQueue();
   }
 
   getQueuedInputLength(): number {
-    return this.state.input.queue.length;
+    return this.runtimeStore.getState().input.queue.length;
   }
 
   reset(): void {
-    this.state = interpreterReducer(this.state, interpreterReduxActions.resetRequested());
-    this.terminalRuntime.synchronize(this.state.terminal);
+    this.runtimeStore.reset();
   }
 
   undoFromStack(): void {
-    this.state = interpreterReducer(this.state, interpreterReduxActions.undoRequested());
-    this.terminalRuntime.synchronize(this.state.terminal);
+    this.runtimeStore.undo();
   }
 
   getState(): InterpreterReducerState {
-    return this.state;
+    return this.runtimeStore.getState();
   }
 
   getRegisters(): Int32Array {
-    return Int32Array.from(this.state.cpu.registers);
+    return Int32Array.from(this.runtimeStore.getState().cpu.registers);
   }
 
   getMemory(): Record<number, number> {
-    return {
-      ...this.state.memory.baseBytes,
-      ...this.state.memory.overrides,
-    };
+    return this.runtimeStore.getMemory();
+  }
+
+  getMemoryMeta(): InterpreterReducerState['memory'] {
+    return this.runtimeStore.getMemoryMeta();
+  }
+
+  readMemoryRange(address: number, length: number): Uint8Array {
+    return this.runtimeStore.readMemoryRange(address, length);
   }
 
   getPC(): number {
-    return this.state.cpu.pc;
+    return this.runtimeStore.getState().cpu.pc;
   }
 
   getCCR(): number {
-    return this.state.cpu.ccr;
+    return this.runtimeStore.getState().cpu.ccr;
   }
 
   getTerminalSnapshot(): TerminalSnapshot {
-    this.terminalRuntime.synchronize(this.state.terminal);
-    return this.terminalRuntime.getSnapshot();
+    return this.runtimeStore.getTerminalSnapshot();
   }
 
   getTerminalDebugSnapshot(): TerminalSnapshot {
-    this.terminalRuntime.synchronize(this.state.terminal);
-    return this.terminalRuntime.getDebugSnapshot();
+    return this.runtimeStore.getTerminalSnapshot();
   }
 
   getTerminalFrameBuffer(): TerminalFrameBuffer {
-    this.terminalRuntime.synchronize(this.state.terminal);
-    return this.terminalRuntime.getFrameBuffer();
+    return this.runtimeStore.getTerminalFrameBuffer();
   }
 
   getTerminalMeta(): TerminalMeta {
-    this.terminalRuntime.synchronize(this.state.terminal);
-    return this.terminalRuntime.getTerminalMeta();
+    return this.runtimeStore.getTerminalMeta();
   }
 
   getTerminalLines(): string[] {
-    this.terminalRuntime.synchronize(this.state.terminal);
-    return this.terminalRuntime.getLines();
+    return this.runtimeStore.getTerminalLines();
   }
 
   getTerminalText(): string {
-    this.terminalRuntime.synchronize(this.state.terminal);
-    return this.terminalRuntime.getText();
+    return this.runtimeStore.getTerminalText();
   }
 
   getException(): string | undefined {
-    return selectException(this.state);
+    return selectException(this.runtimeStore.getState());
   }
 
   getErrors(): string[] {
-    return selectErrors(this.state);
+    return selectErrors(this.runtimeStore.getState());
   }
 
   getLastInstruction(): string {
-    return selectLastInstruction(this.state);
+    return selectLastInstruction(this.runtimeStore.getState());
   }
 
   isHalted(): boolean {
-    return selectIsHalted(this.state);
+    return selectIsHalted(this.runtimeStore.getState());
   }
 
   isWaitingForInput(): boolean {
-    return selectIsWaitingForInput(this.state);
+    return selectIsWaitingForInput(this.runtimeStore.getState());
   }
 
   getSymbols(): Record<string, number> {
-    return { ...this.state.program.symbols };
+    return { ...this.runtimeStore.getState().program.symbols };
   }
 
   getSymbolAddress(symbol: string): number | undefined {
-    return this.state.program.symbolLookup[symbol.trim().toLowerCase()];
+    return this.runtimeStore.getState().program.symbolLookup[symbol.trim().toLowerCase()];
   }
 
   getZFlag(): number {
-    return (this.state.cpu.ccr & 0x04) >>> 2;
+    return (this.runtimeStore.getState().cpu.ccr & 0x04) >>> 2;
   }
 
   getVFlag(): number {
-    return (this.state.cpu.ccr & 0x02) >>> 1;
+    return (this.runtimeStore.getState().cpu.ccr & 0x02) >>> 1;
   }
 
   getNFlag(): number {
-    return (this.state.cpu.ccr & 0x08) >>> 3;
+    return (this.runtimeStore.getState().cpu.ccr & 0x08) >>> 3;
   }
 
   getCFlag(): number {
-    return this.state.cpu.ccr & 0x01;
+    return this.runtimeStore.getState().cpu.ccr & 0x01;
   }
 
   getXFlag(): number {
-    return (this.state.cpu.ccr & 0x10) >>> 4;
+    return (this.runtimeStore.getState().cpu.ccr & 0x10) >>> 4;
   }
 }
 

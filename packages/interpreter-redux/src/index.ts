@@ -24,6 +24,7 @@ export {
   createReducerInterpreterSession,
   ReducerInterpreterSession,
 } from './session';
+export { createInterpreterReduxIoMiddleware } from './ioMiddleware';
 export { createStoreBackedReducerInterpreterAdapter } from './storeAdapter';
 export {
   ReducerTerminalRuntime,
@@ -63,6 +64,10 @@ export {
 export type { InterpreterReduxAction, FrameRequestOptions, TerminalResizePayload } from './actions';
 export type { MemorySizeCode } from './memoryReducer';
 export type { ReducerInterpreterAdapter } from './session';
+export type {
+  InterpreterReduxIoMiddlewareController,
+  InterpreterReduxIoMiddlewareOptions,
+} from './ioMiddleware';
 export type {
   InterpreterReduxStoreBinding,
   StoreBackedReducerInterpreterAdapter,

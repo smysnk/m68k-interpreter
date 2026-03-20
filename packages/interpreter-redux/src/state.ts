@@ -38,9 +38,10 @@ export interface CpuState {
 }
 
 export interface MemoryState {
-  baseBytes: Record<number, number>;
-  overrides: Record<number, number>;
-  bytes: Record<number, number>;
+  usedBytes: number;
+  minAddress: number | null;
+  maxAddress: number | null;
+  version: number;
 }
 
 export interface InputState {
@@ -71,7 +72,7 @@ export interface InterpreterHistoryFrame {
 }
 
 export interface HistoryState {
-  undoFrames: InterpreterHistoryFrame[];
+  undoDepth: number;
 }
 
 export interface InterpreterReducerState {
@@ -174,31 +175,44 @@ export function cloneCpuState(cpu: CpuState): CpuState {
   return createCpuState(cpu);
 }
 
-function createMemoryView(
-  baseBytes: Record<number, number>,
-  overrides: Record<number, number>
-): Record<number, number> {
-  return Object.assign(Object.create(baseBytes), overrides);
+function createMemoryMetadataFromBytes(
+  bytes: Record<number, number>
+): Pick<MemoryState, 'usedBytes' | 'minAddress' | 'maxAddress'> {
+  const addresses = Object.keys(bytes)
+    .map(Number)
+    .filter((address) => Number.isFinite(address))
+    .sort((left, right) => left - right);
+
+  if (addresses.length === 0) {
+    return {
+      usedBytes: 0,
+      minAddress: null,
+      maxAddress: null,
+    };
+  }
+
+  return {
+    usedBytes: addresses.length,
+    minAddress: addresses[0] ?? null,
+    maxAddress: addresses[addresses.length - 1] ?? null,
+  };
 }
 
-export function createMemoryState(bytes: Record<number, number> = {}): MemoryState {
-  const baseBytes = { ...bytes };
-  const overrides: Record<number, number> = {};
+export function createMemoryState(
+  overrides: Partial<MemoryState> = {},
+  bytes: Record<number, number> = {}
+): MemoryState {
+  const derivedMetadata = createMemoryMetadataFromBytes(bytes);
   return {
-    baseBytes,
-    overrides,
-    bytes: createMemoryView(baseBytes, overrides),
+    usedBytes: overrides.usedBytes ?? derivedMetadata.usedBytes,
+    minAddress: overrides.minAddress ?? derivedMetadata.minAddress,
+    maxAddress: overrides.maxAddress ?? derivedMetadata.maxAddress,
+    version: overrides.version ?? 1,
   };
 }
 
 export function cloneMemoryState(memory: MemoryState): MemoryState {
-  const baseBytes = { ...memory.baseBytes };
-  const overrides = { ...memory.overrides };
-  return {
-    baseBytes,
-    overrides,
-    bytes: createMemoryView(baseBytes, overrides),
-  };
+  return createMemoryState(memory);
 }
 
 export function createInputState(overrides: Partial<InputState> = {}): InputState {
@@ -260,21 +274,12 @@ export function createHistoryState(
   overrides: Partial<HistoryState> = {}
 ): HistoryState {
   return {
-    undoFrames: overrides.undoFrames ? [...overrides.undoFrames] : [],
+    undoDepth: overrides.undoDepth ?? 0,
   };
 }
 
 export function cloneHistoryState(history: HistoryState): HistoryState {
-  return {
-    undoFrames: history.undoFrames.map((frame) => ({
-      cpu: cloneCpuState(frame.cpu),
-      memory: cloneMemoryState(frame.memory),
-      terminal: cloneTerminalState(frame.terminal),
-      input: cloneInputState(frame.input),
-      execution: cloneExecutionRuntimeState(frame.execution),
-      diagnostics: cloneDiagnosticsState(frame.diagnostics),
-    })),
-  };
+  return createHistoryState(history);
 }
 
 export interface CreateInterpreterReducerStateOptions {
@@ -296,7 +301,7 @@ export function createInitialInterpreterReducerState(
       memoryImage: { ...initialMemory },
     },
     cpu: createCpuState(),
-    memory: createMemoryState(initialMemory),
+    memory: createMemoryState({}, initialMemory),
     terminal: createEmptyTerminalState(options.columns, options.rows),
     input: createInputState(),
     execution: createExecutionRuntimeState({
@@ -304,5 +309,20 @@ export function createInitialInterpreterReducerState(
     }),
     diagnostics: createDiagnosticsState(),
     history: createHistoryState(),
+  };
+}
+
+export function cloneInterpreterReducerState(
+  state: InterpreterReducerState
+): InterpreterReducerState {
+  return {
+    program: cloneLoadedProgramState(state.program),
+    cpu: cloneCpuState(state.cpu),
+    memory: cloneMemoryState(state.memory),
+    terminal: cloneTerminalState(state.terminal),
+    input: cloneInputState(state.input),
+    execution: cloneExecutionRuntimeState(state.execution),
+    diagnostics: cloneDiagnosticsState(state.diagnostics),
+    history: cloneHistoryState(state.history),
   };
 }

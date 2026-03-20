@@ -1,6 +1,26 @@
 export { Emulator } from './core/emulator';
 export { Memory } from './core/memory';
 export {
+  DEFAULT_MEMORY_BUFFER_PAGE_SIZE,
+  MAX_MEMORY_BUFFER_ADDRESS,
+  clearMemoryBuffer,
+  clearMemoryBufferDirtyPages,
+  cloneMemoryBuffer,
+  createMemoryBuffer,
+  exportMemoryBufferMap,
+  getMemoryBufferAddressRange,
+  getMemoryBufferDirtyPageIndices,
+  getMemoryBufferPageCount,
+  getMemoryBufferUsedByteCount,
+  loadMemoryBufferBaseImage,
+  readMemoryBufferByte,
+  readMemoryBufferRange,
+  resetMemoryBuffer,
+  replaceMemoryBufferState,
+  writeMemoryBufferByte,
+  writeMemoryBufferRange,
+} from './core/memoryBuffer';
+export {
   BYTE_MASK,
   CODE_BYTE,
   CODE_LONG,
@@ -33,11 +53,22 @@ export {
 } from './devices/terminalBuffer';
 export { loadProgramSource } from './programLoader';
 export type {
+  MemorySnapshot,
+  MemoryUndoPageEntry,
+} from './core/memory';
+export type {
+  MemoryBuffer,
+  MemoryBufferAddressRange,
+  MemoryBufferPage,
+  MemoryBufferUndoPageEntry,
+} from './core/memoryBuffer';
+export type {
   ConditionFlags,
   EmulationStep,
   ExecutionState,
   InstructionSet,
   MemoryCell,
+  MemoryMeta,
   Operand,
   Register,
   Registers,

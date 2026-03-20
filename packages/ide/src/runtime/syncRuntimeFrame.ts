@@ -1,6 +1,7 @@
-import type { ConditionFlags, ExecutionState, Registers, TerminalMeta } from '@m68k/interpreter';
+import type { ConditionFlags, ExecutionState, MemoryMeta, Registers, TerminalMeta } from '@m68k/interpreter';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import type { RuntimeMetrics } from '@/stores/emulatorStore';
+import { memorySurfaceStore } from '@/runtime/memorySurfaceStore';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 
 function buildFlags(emulator: IdeRuntimeSession): ConditionFlags {
@@ -45,7 +46,7 @@ export interface RuntimeFrameSyncOptions {
 
 export interface RuntimeFrameSyncPayload {
   registers: Registers;
-  memory: Record<number, number>;
+  memory: MemoryMeta;
   flags: ConditionFlags;
   terminal: TerminalMeta;
   executionState?: Partial<ExecutionState>;
@@ -59,12 +60,14 @@ export function syncRuntimeFrameToIde(
 ): void {
   const flags = buildFlags(emulator);
   const terminal = emulator.getTerminalMeta();
+  const memory = emulator.getMemoryMeta();
 
   terminalSurfaceStore.publishFrame(emulator.getTerminalFrameBuffer(), terminal);
+  memorySurfaceStore.replaceFromRuntime(emulator, memory);
 
   syncEmulatorFrame({
     registers: buildRegisters(emulator, flags),
-    memory: emulator.getMemory(),
+    memory,
     flags,
     terminal,
     executionState: {

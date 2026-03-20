@@ -1,34 +1,13 @@
 import {
+  cloneInterpreterReducerState,
   cloneLoadedProgramState,
-  cloneCpuState,
-  cloneMemoryState,
-  cloneTerminalState,
   cloneInputState,
-  cloneExecutionRuntimeState,
-  cloneDiagnosticsState,
-  createHistoryFrame,
-  createHistoryState,
   createInitialInterpreterReducerState,
-  MAX_HISTORY_FRAMES,
   type InterpreterReducerState,
 } from './state';
 import type { InterpreterReduxAction } from './actions';
-import { createInterpreterReduxStateForProgram, reduceInstructionStep } from './instructionReducer';
+import { createInterpreterReduxStateForProgram } from './instructionReducer';
 import { resizeTerminalState } from './terminalReducer';
-
-function pushHistoryFrame(state: InterpreterReducerState): InterpreterReducerState {
-  const undoFrames = [...state.history.undoFrames, createHistoryFrame(state)];
-  if (undoFrames.length > MAX_HISTORY_FRAMES) {
-    undoFrames.shift();
-  }
-
-  return {
-    ...state,
-    history: createHistoryState({
-      undoFrames,
-    }),
-  };
-}
 
 function resetRuntimeState(
   state: InterpreterReducerState,
@@ -48,6 +27,12 @@ export function interpreterReducer(
   action: InterpreterReduxAction
 ): InterpreterReducerState {
   switch (action.type) {
+    case 'programLoadedCommitted':
+    case 'stepCommitted':
+    case 'frameCommitted':
+    case 'undoCommitted':
+    case 'resetCommitted':
+      return cloneInterpreterReducerState(action.payload.state);
     case 'programLoaded':
       return createInitialInterpreterReducerState({
         program: cloneLoadedProgramState(action.payload),
@@ -60,29 +45,14 @@ export function interpreterReducer(
         columns: action.payload.columns ?? state.terminal.columns,
         rows: action.payload.rows ?? state.terminal.rows,
       });
+    case 'runtimeStateHydrated':
+      return cloneInterpreterReducerState(action.payload);
     case 'resetRequested':
       return resetRuntimeState(state);
-    case 'undoRequested': {
-      const undoFrames = state.history.undoFrames;
-      const previousFrame = undoFrames[undoFrames.length - 1];
-
-      if (previousFrame === undefined) {
-        return state;
-      }
-
-      return {
-        program: cloneLoadedProgramState(state.program),
-        cpu: cloneCpuState(previousFrame.cpu),
-        memory: cloneMemoryState(previousFrame.memory),
-        terminal: cloneTerminalState(previousFrame.terminal),
-        input: cloneInputState(previousFrame.input),
-        execution: cloneExecutionRuntimeState(previousFrame.execution),
-        diagnostics: cloneDiagnosticsState(previousFrame.diagnostics),
-        history: createHistoryState({
-          undoFrames: undoFrames.slice(0, -1),
-        }),
-      };
-    }
+    case 'undoRequested':
+    case 'stepRequested':
+    case 'frameRequested':
+      return state;
     case 'inputCleared':
       return {
         ...state,
@@ -124,32 +94,6 @@ export function interpreterReducer(
         },
       };
     }
-    case 'stepRequested':
-      if (state.cpu.pc / 4 >= state.program.instructions.length) {
-        const lastInstruction =
-          state.program.instructions[state.program.instructions.length - 1]?.[0] ??
-          state.execution.lastInstruction;
-
-        return {
-          ...state,
-          execution: {
-            ...state.execution,
-            lastInstruction,
-          },
-        };
-      }
-
-      if (
-        state.execution.halted ||
-        state.diagnostics.exception !== undefined ||
-        state.input.waitingForInput
-      ) {
-        return state;
-      }
-
-      return reduceInstructionStep(pushHistoryFrame(state));
-    case 'frameRequested':
-      return state;
     default:
       return state;
   }

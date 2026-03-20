@@ -1,40 +1,91 @@
 /**
- * Memory management for M68K emulator
- * Handles byte, word, and long-word memory access
+ * Memory management for the M68K emulator.
+ *
+ * Internally this now uses the shared paged bytearray memory buffer so the
+ * runtime can reuse backing storage instead of rebuilding large object maps.
  */
 
 import { CODE_LONG, CODE_WORD, CODE_BYTE } from './operations';
+import {
+  captureMemoryBufferUndoPageEntry,
+  clearMemoryBuffer,
+  clearMemoryBufferDirtyPages,
+  cloneMemoryBuffer,
+  createMemoryBuffer,
+  exportMemoryBufferMap,
+  getMemoryBufferAddressRange,
+  getMemoryBufferDirtyPageIndices,
+  getMemoryBufferUsedByteCount,
+  loadMemoryBufferBaseImage,
+  readMemoryBufferByte,
+  readMemoryBufferRange,
+  restoreMemoryBufferUndoPageEntries,
+  replaceMemoryBufferState,
+  writeMemoryBufferByte,
+  type MemoryBuffer,
+  type MemoryBufferAddressRange,
+  type MemoryBufferUndoPageEntry,
+} from './memoryBuffer';
+
+export type MemorySnapshot = MemoryBuffer;
+export type MemoryUndoPageEntry = MemoryBufferUndoPageEntry;
 
 const MAX_ADDRESS = 0x7fffffff;
 
 export class Memory {
-  private memory: Record<number, number> = {};
+  private readonly memoryBuffer: MemoryBuffer;
+
+  constructor(initialMemory: Record<number, number> = {}) {
+    this.memoryBuffer = createMemoryBuffer(initialMemory);
+  }
 
   /**
-   * Get entire memory map
+   * Get entire memory map.
+   *
+   * This is intentionally an expensive debug/export helper.
    */
   getMemory(): Record<number, number> {
-    return { ...this.memory };
+    return exportMemoryBufferMap(this.memoryBuffer);
   }
 
   /**
-   * Set entire memory from external map
+   * Replace the current base memory image.
    */
   setMemory(memoryMap: Record<number, number>): void {
-    this.memory = { ...memoryMap };
+    loadMemoryBufferBaseImage(this.memoryBuffer, memoryMap);
   }
 
   /**
-   * Get a single byte from memory
+   * Create a deep snapshot suitable for undo storage.
+   */
+  createSnapshot(): MemorySnapshot {
+    return cloneMemoryBuffer(this.memoryBuffer);
+  }
+
+  /**
+   * Restore a previously captured memory snapshot.
+   */
+  restoreSnapshot(snapshot: MemorySnapshot): void {
+    replaceMemoryBufferState(this.memoryBuffer, snapshot);
+  }
+
+  captureUndoPage(pageIndex: number): MemoryUndoPageEntry {
+    return captureMemoryBufferUndoPageEntry(this.memoryBuffer, pageIndex);
+  }
+
+  restoreUndoPages(entries: MemoryUndoPageEntry[]): void {
+    restoreMemoryBufferUndoPageEntries(this.memoryBuffer, entries);
+  }
+
+  /**
+   * Get a single byte from memory.
    */
   getByte(address: number): number {
-    address = address >>> 0;
-    if (this.memory[address] === undefined) return 0x00;
-    return this.memory[address];
+    return readMemoryBufferByte(this.memoryBuffer, address);
   }
 
   /**
-   * Get a word (2 bytes) from memory
+   * Get a word (2 bytes) from memory.
    */
   getWord(address: number): number {
     const firstByte = this.getByte(address);
@@ -46,7 +97,7 @@ export class Memory {
   }
 
   /**
-   * Get a long-word (4 bytes) from memory
+   * Get a long-word (4 bytes) from memory.
    */
   getLong(address: number): number {
     const byte0 = this.getByte(address);
@@ -63,15 +114,14 @@ export class Memory {
   }
 
   /**
-   * Set a single byte in memory
+   * Set a single byte in memory.
    */
   setByte(address: number, value: number): void {
-    address = address >>> 0;
-    this.memory[address] = (value & 0xff) >>> 0;
+    writeMemoryBufferByte(this.memoryBuffer, address, (value & 0xff) >>> 0);
   }
 
   /**
-   * Set a word (2 bytes) in memory
+   * Set a word (2 bytes) in memory.
    */
   setWord(address: number, value: number): void {
     address = address >>> 0;
@@ -80,7 +130,7 @@ export class Memory {
   }
 
   /**
-   * Set a long-word (4 bytes) in memory
+   * Set a long-word (4 bytes) in memory.
    */
   setLong(address: number, value: number): void {
     address = address >>> 0;
@@ -91,10 +141,7 @@ export class Memory {
   }
 
   /**
-   * Set value in memory based on size code
-   * @param address - Memory address
-   * @param value - Value to set
-   * @param size - Size code: CODE_BYTE (0), CODE_WORD (1), CODE_LONG (2)
+   * Set value in memory based on size code.
    */
   set(address: number, value: number, size: number): void {
     switch (size) {
@@ -111,7 +158,53 @@ export class Memory {
   }
 
   /**
-   * Check if address is valid
+   * Read a byte range from memory.
+   */
+  readRange(address: number, length: number): Uint8Array {
+    return readMemoryBufferRange(this.memoryBuffer, address, length);
+  }
+
+  /**
+   * Get the current memory version.
+   */
+  getMemoryVersion(): number {
+    return this.memoryBuffer.version;
+  }
+
+  getPageSize(): number {
+    return this.memoryBuffer.pageSize;
+  }
+
+  /**
+   * Get the dirty page indices since the last clear.
+   */
+  getDirtyPages(): number[] {
+    return getMemoryBufferDirtyPageIndices(this.memoryBuffer);
+  }
+
+  /**
+   * Clear dirty page markers.
+   */
+  clearDirtyPages(): void {
+    clearMemoryBufferDirtyPages(this.memoryBuffer);
+  }
+
+  /**
+   * Get the byte count currently defined in memory.
+   */
+  getUsedBytes(): number {
+    return getMemoryBufferUsedByteCount(this.memoryBuffer);
+  }
+
+  /**
+   * Get the address range currently defined in memory.
+   */
+  getAddressRange(): MemoryBufferAddressRange {
+    return getMemoryBufferAddressRange(this.memoryBuffer);
+  }
+
+  /**
+   * Check if address is valid.
    */
   isValidAddress(address: number): boolean {
     address = address >>> 0;
@@ -119,16 +212,16 @@ export class Memory {
   }
 
   /**
-   * Clear all memory
+   * Clear all memory and release all pages back to the pool.
    */
   clear(): void {
-    this.memory = {};
+    clearMemoryBuffer(this.memoryBuffer);
   }
 
   /**
-   * Get number of used memory addresses
+   * Get number of used memory addresses.
    */
   getUsedSize(): number {
-    return Object.keys(this.memory).length;
+    return this.getUsedBytes();
   }
 }

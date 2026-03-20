@@ -2,7 +2,7 @@ import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import type {
   ConditionFlags,
   ExecutionState,
-  MemoryCell,
+  MemoryMeta,
   Registers,
   TerminalMeta,
   TerminalSnapshot,
@@ -27,7 +27,7 @@ export interface TerminalRuntimeState {
 export interface EmulatorState {
   editorCode: string;
   registers: Registers;
-  memory: MemoryCell;
+  memory: MemoryMeta;
   flags: ConditionFlags;
   executionState: ExecutionState;
   emulatorInstance: IdeRuntimeSession | null;
@@ -38,7 +38,6 @@ export interface EmulatorState {
   runtimeMetrics: RuntimeMetrics;
   history: Array<{
     registers: Registers;
-    memory: MemoryCell;
     flags: ConditionFlags;
     pc: number;
   }>;
@@ -89,6 +88,15 @@ export const initialRuntimeMetrics: RuntimeMetrics = {
   lastStopReason: 'idle',
 };
 
+export function createEmptyMemoryState(): MemoryMeta {
+  return {
+    usedBytes: 0,
+    minAddress: null,
+    maxAddress: null,
+    version: 1,
+  };
+}
+
 export function toTerminalRuntimeState(
   terminal:
     | TerminalRuntimeState
@@ -124,7 +132,7 @@ END`;
 const initialState: EmulatorState = {
   editorCode: initialEditorCode,
   registers: initialRegisters,
-  memory: {},
+  memory: createEmptyMemoryState(),
   flags: initialFlags,
   executionState: initialExecutionState,
   emulatorInstance: null,
@@ -146,7 +154,7 @@ const emulatorSlice = createSlice({
     setRegisters(state, action: PayloadAction<Partial<Registers>>) {
       state.registers = { ...state.registers, ...action.payload };
     },
-    setMemory(state, action: PayloadAction<MemoryCell>) {
+    setMemory(state, action: PayloadAction<MemoryMeta>) {
       state.memory = action.payload;
     },
     setFlags(state, action: PayloadAction<Partial<ConditionFlags>>) {
@@ -168,7 +176,7 @@ const emulatorSlice = createSlice({
       state,
       action: PayloadAction<{
         registers: Registers;
-        memory: MemoryCell;
+        memory: MemoryMeta;
         flags: ConditionFlags;
         terminal: TerminalRuntimeState | TerminalMeta;
         executionState?: Partial<ExecutionState>;
@@ -201,7 +209,6 @@ const emulatorSlice = createSlice({
     pushHistory(state) {
       state.history.push({
         registers: { ...state.registers },
-        memory: { ...state.memory },
         flags: { ...state.flags },
         pc: state.registers.pc,
       });
@@ -212,14 +219,13 @@ const emulatorSlice = createSlice({
         return;
       }
       state.registers = { ...lastState.registers };
-      state.memory = { ...lastState.memory };
       state.flags = { ...lastState.flags };
     },
     resetEmulatorState(state) {
       const preservedDelay = state.delay;
       const preservedSpeedMultiplier = state.speedMultiplier;
       state.registers = { ...initialRegisters };
-      state.memory = {};
+      state.memory = createEmptyMemoryState();
       state.flags = { ...initialFlags };
       state.executionState = { ...initialExecutionState };
       state.emulatorInstance = null;

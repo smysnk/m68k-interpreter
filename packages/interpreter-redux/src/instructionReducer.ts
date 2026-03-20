@@ -21,11 +21,7 @@ import {
   type InterpreterReducerState,
   type LoadedProgramState,
 } from './state';
-import {
-  getMemoryValue,
-  type MemorySizeCode,
-  setMemoryValue,
-} from './memoryReducer';
+import type { MemorySizeCode, ReducerMemoryRuntime } from './memoryRuntime';
 import { writeTerminalByte } from './terminalReducer';
 
 const TOKEN_IMMEDIATE = 0;
@@ -38,6 +34,7 @@ const TOKEN_REGISTER_LIST = 6;
 
 const SYMBOL_REGEX = /^[_a-zA-Z.$][_a-zA-Z0-9.$]*$/;
 const STACK_POINTER_REGISTER = 7;
+let activeMemoryRuntime: ReducerMemoryRuntime | null = null;
 
 interface ReducerOperand {
   value: number;
@@ -290,11 +287,15 @@ function resolveOperandAddress(
 }
 
 function readMemoryValue(
-  state: InterpreterReducerState,
+  _state: InterpreterReducerState,
   address: number,
   size: MemorySizeCode
 ): number {
-  return getMemoryValue(state.memory, address, size);
+  if (activeMemoryRuntime === null) {
+    throw new Error('Reducer memory runtime is not active during instruction reduction');
+  }
+
+  return activeMemoryRuntime.readValue(address, size);
 }
 
 function appendError(state: InterpreterReducerState, message: string): InterpreterReducerState {
@@ -534,7 +535,7 @@ function readOperandValue(
   if (operand.type === TOKEN_OFFSET) {
     return {
       state,
-      value: getMemoryValue(state.memory, operand.value, size),
+      value: readMemoryValue(state, operand.value, size),
     };
   }
 
@@ -592,9 +593,14 @@ function writeOperandValue(
   }
 
   if (operand.type === TOKEN_OFFSET) {
+    if (activeMemoryRuntime === null) {
+      throw new Error('Reducer memory runtime is not active during operand write');
+    }
+
+    activeMemoryRuntime.writeValue(operand.value, value, size);
     return {
       ...state,
-      memory: setMemoryValue(state.memory, operand.value, value, size),
+      memory: activeMemoryRuntime.toMemoryState(),
     };
   }
 
@@ -611,9 +617,14 @@ function writeOperandValue(
       return appendError(nextState, Strings.UNKNOWN_OPERAND + Strings.AT_LINE + state.execution.currentLine);
     }
 
+    if (activeMemoryRuntime === null) {
+      throw new Error('Reducer memory runtime is not active during indirect operand write');
+    }
+
+    activeMemoryRuntime.writeValue(address, value, size);
     nextState = {
       ...nextState,
-      memory: setMemoryValue(nextState.memory, address, value, size),
+      memory: activeMemoryRuntime.toMemoryState(),
     };
 
     if (operand.postIncrement) {
@@ -748,9 +759,14 @@ function servicePendingInputTrap(state: InterpreterReducerState): InterpreterRed
 function pushLongToStack(state: InterpreterReducerState, value: number): InterpreterReducerState {
   const nextStackPointer = state.cpu.registers[STACK_POINTER_REGISTER] - 4;
   const withStackPointer = setRegisterValue(state, STACK_POINTER_REGISTER, nextStackPointer);
+  if (activeMemoryRuntime === null) {
+    throw new Error('Reducer memory runtime is not active during stack push');
+  }
+
+  activeMemoryRuntime.writeValue(nextStackPointer, value >>> 0, CODE_LONG);
   return {
     ...withStackPointer,
-    memory: setMemoryValue(withStackPointer.memory, nextStackPointer, value >>> 0, CODE_LONG),
+    memory: activeMemoryRuntime.toMemoryState(),
   };
 }
 
@@ -758,7 +774,7 @@ function popLongFromStack(
   state: InterpreterReducerState
 ): { state: InterpreterReducerState; value: number } {
   const stackPointer = state.cpu.registers[STACK_POINTER_REGISTER];
-  const value = getMemoryValue(state.memory, stackPointer, CODE_LONG);
+  const value = readMemoryValue(state, stackPointer, CODE_LONG);
   const nextState = setRegisterValue(state, STACK_POINTER_REGISTER, stackPointer + 4);
 
   return {
@@ -1079,15 +1095,18 @@ function executeMovem(
       address = resolvedAddress;
     }
 
-    let nextMemory = nextState.memory;
     for (const register of registers) {
-      nextMemory = setMemoryValue(nextMemory, address, nextState.cpu.registers[register], transferSize);
+      if (activeMemoryRuntime === null) {
+        throw new Error('Reducer memory runtime is not active during MOVEM write');
+      }
+
+      activeMemoryRuntime.writeValue(address, nextState.cpu.registers[register], transferSize);
       address += bytesPerRegister;
     }
 
     nextState = {
       ...nextState,
-      memory: nextMemory,
+      memory: activeMemoryRuntime?.toMemoryState() ?? nextState.memory,
     };
 
     if (op2.type === TOKEN_OFFSET_ADDR && op2.postIncrement) {
@@ -1299,40 +1318,49 @@ function executeInstruction(state: InterpreterReducerState, instr: string): Inte
   }
 }
 
-export function reduceInstructionStep(state: InterpreterReducerState): InterpreterReducerState {
-  if (state.diagnostics.exception !== undefined || state.execution.halted) {
-    return state;
+export function reduceInstructionStep(
+  state: InterpreterReducerState,
+  memoryRuntime: ReducerMemoryRuntime
+): InterpreterReducerState {
+  activeMemoryRuntime = memoryRuntime;
+
+  try {
+    if (state.diagnostics.exception !== undefined || state.execution.halted) {
+      return state;
+    }
+
+    if (state.input.waitingForInput) {
+      return servicePendingInputTrap(state);
+    }
+
+    if (state.cpu.pc / 4 >= state.program.instructions.length) {
+      return state;
+    }
+
+    if (!checkPC(state.cpu.pc)) {
+      return setException(state, Strings.INVALID_PC_EXCEPTION);
+    }
+
+    const instrIdx = Math.floor(state.cpu.pc / 4);
+    const instruction = state.program.instructions[instrIdx];
+    if (instruction === undefined) {
+      return state;
+    }
+
+    const [instr, line, isDirective] = instruction;
+    const lastInstruction = state.program.sourceLines[line - 1] || instr;
+    const steppedState = updateCpuAndExecution(state, {
+      pc: state.cpu.pc + 4,
+      currentLine: line,
+      lastInstruction,
+    });
+
+    if (isDirective) {
+      return steppedState;
+    }
+
+    return executeInstruction(steppedState, instr);
+  } finally {
+    activeMemoryRuntime = null;
   }
-
-  if (state.input.waitingForInput) {
-    return servicePendingInputTrap(state);
-  }
-
-  if (state.cpu.pc / 4 >= state.program.instructions.length) {
-    return state;
-  }
-
-  if (!checkPC(state.cpu.pc)) {
-    return setException(state, Strings.INVALID_PC_EXCEPTION);
-  }
-
-  const instrIdx = Math.floor(state.cpu.pc / 4);
-  const instruction = state.program.instructions[instrIdx];
-  if (instruction === undefined) {
-    return state;
-  }
-
-  const [instr, line, isDirective] = instruction;
-  const lastInstruction = state.program.sourceLines[line - 1] || instr;
-  const steppedState = updateCpuAndExecution(state, {
-    pc: state.cpu.pc + 4,
-    currentLine: line,
-    lastInstruction,
-  });
-
-  if (isDirective) {
-    return steppedState;
-  }
-
-  return executeInstruction(steppedState, instr);
 }

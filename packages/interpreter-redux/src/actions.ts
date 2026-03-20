@@ -1,5 +1,5 @@
 import type { ProgramSource } from '@m68k/interpreter';
-import type { LoadedProgramState } from './state';
+import type { InterpreterReducerState, LoadedProgramState } from './state';
 
 export interface FrameRequestOptions {
   frameBudgetMs?: number;
@@ -21,6 +21,10 @@ export interface ProgramSourceLoadPayload {
 export interface RegisterValuePayload {
   register: number;
   value: number;
+}
+
+export interface CommittedRuntimePayload {
+  state: InterpreterReducerState;
 }
 
 export const interpreterReduxActions = {
@@ -59,6 +63,36 @@ export const interpreterReduxActions = {
   registerValueSet: (payload: RegisterValuePayload) =>
     ({
       type: 'registerValueSet',
+      payload,
+    }) as const,
+  runtimeStateHydrated: (payload: InterpreterReducerState) =>
+    ({
+      type: 'runtimeStateHydrated',
+      payload,
+    }) as const,
+  programLoadedCommitted: (payload: CommittedRuntimePayload) =>
+    ({
+      type: 'programLoadedCommitted',
+      payload,
+    }) as const,
+  stepCommitted: (payload: CommittedRuntimePayload) =>
+    ({
+      type: 'stepCommitted',
+      payload,
+    }) as const,
+  frameCommitted: (payload: CommittedRuntimePayload) =>
+    ({
+      type: 'frameCommitted',
+      payload,
+    }) as const,
+  undoCommitted: (payload: CommittedRuntimePayload) =>
+    ({
+      type: 'undoCommitted',
+      payload,
+    }) as const,
+  resetCommitted: (payload: CommittedRuntimePayload) =>
+    ({
+      type: 'resetCommitted',
       payload,
     }) as const,
   stepRequested: () =>

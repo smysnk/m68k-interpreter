@@ -41,6 +41,13 @@ export interface MemoryCell {
   [address: number]: number;
 }
 
+export interface MemoryMeta {
+  usedBytes: number;
+  minAddress: number | null;
+  maxAddress: number | null;
+  version: number;
+}
+
 export interface ExecutionState {
   started: boolean;
   ended: boolean;
@@ -85,6 +92,8 @@ export interface Emulator {
   pc: number;
   getRegisters(): Registers;
   getMemory(): MemoryCell;
+  getMemoryMeta(): MemoryMeta;
+  readMemoryRange(address: number, length: number): Uint8Array;
   getFlags(): ConditionFlags;
   getPC(): number;
   step(): boolean; // Returns true if execution ended

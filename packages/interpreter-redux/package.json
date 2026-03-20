@@ -19,7 +19,8 @@
   ],
   "sideEffects": false,
   "dependencies": {
-    "@m68k/interpreter": "workspace:*"
+    "@m68k/interpreter": "workspace:*",
+    "@reduxjs/toolkit": "^2.11.2"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

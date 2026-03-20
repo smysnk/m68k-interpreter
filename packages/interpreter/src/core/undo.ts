@@ -1,3 +1,5 @@
+import type { MemorySnapshot } from './memory';
+
 /**
  * Undo system for M68K emulator
  * Maintains a stack of execution states for undo functionality
@@ -7,7 +9,7 @@ export interface UndoFrame {
   pc: number;
   ccr: number;
   registers: Int32Array;
-  memory: Record<number, number>;
+  memory: MemorySnapshot;
   errors: string[];
   lastInstruction: string;
   line: number;
@@ -17,12 +19,12 @@ export class Undo {
   private stack: UndoFrame[] = [];
   private static readonly MAX_FRAMES = 256;
 
-  push(pc: number, ccr: number, registers: Int32Array, memory: Record<number, number>, errors: string[], lastInstruction: string, line: number): void {
+  push(pc: number, ccr: number, registers: Int32Array, memory: MemorySnapshot, errors: string[], lastInstruction: string, line: number): void {
     this.stack.push({
       pc,
       ccr,
       registers: new Int32Array(registers),
-      memory: { ...memory },
+      memory,
       errors: [...errors],
       lastInstruction,
       line,

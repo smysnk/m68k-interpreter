@@ -1,6 +1,7 @@
 import { Emulator } from '@m68k/interpreter';
 import { describe, expect, it } from 'vitest';
-import { createInterpreterReduxStateForProgram, reduceInstructionStep } from './instructionReducer';
+import { createInterpreterReduxStateForProgram } from './instructionReducer';
+import { ReducerRuntimeStore } from './runtimeStore';
 import { ReducerInterpreterSession } from './session';
 
 function runClassEmulator(code: string, maxSteps = 200): Emulator {
@@ -27,8 +28,8 @@ function runReducerSession(code: string, maxSteps = 200): ReducerInterpreterSess
   throw new Error('Reducer session did not finish within the step budget');
 }
 
-describe('instructionReducer', () => {
-  it('steps through directive lines and simple MOVE/ADD/CMP/branch execution', () => {
+describe('instructionReducer runtime flow', () => {
+  it('creates metadata-only reducer state and executes through the runtime store', () => {
     const code = `
 RESULT DC.L 0
 START
@@ -45,18 +46,21 @@ DONE
   END START
 `;
 
-    let state = createInterpreterReduxStateForProgram(code);
+    const runtimeStore = new ReducerRuntimeStore(createInterpreterReduxStateForProgram(code));
 
     for (let step = 0; step < 8; step += 1) {
-      state = reduceInstructionStep(state);
-      expect(state.diagnostics.exception).toBeUndefined();
-      expect(state.diagnostics.errors).toEqual([]);
+      runtimeStore.step();
+      expect(runtimeStore.getState().diagnostics.exception).toBeUndefined();
+      expect(runtimeStore.getState().diagnostics.errors).toEqual([]);
     }
 
-    const resultAddress = state.program.symbolLookup.result;
+    const resultAddress = runtimeStore.getState().program.symbolLookup.result;
+    const memory = runtimeStore.getMemory();
+
     expect(resultAddress).toBeDefined();
-    expect(state.memory.bytes[resultAddress ?? 0]).toBe(0x00);
-    expect(state.memory.bytes[(resultAddress ?? 0) + 3]).toBe(0x02);
+    expect(memory[resultAddress ?? 0]).toBe(0x00);
+    expect(memory[(resultAddress ?? 0) + 3]).toBe(0x02);
+    expect(runtimeStore.getState().memory.usedBytes).toBeGreaterThan(0);
   });
 
   it('matches the class emulator on a direct-memory arithmetic and branch fixture', () => {

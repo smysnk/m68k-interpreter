@@ -9,6 +9,7 @@ import { ideStore } from '@/store';
 import { runEmulationFrame } from '@/runtime/executionLoop';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import { syncRuntimeFrameToIde } from '@/runtime/syncRuntimeFrame';
+import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { useEmulatorStore, type RuntimeMetrics } from '@/stores/emulatorStore';
 import type { AppDispatch, RootState } from '@/store';
 
@@ -20,7 +21,8 @@ declare global {
 }
 
 const FRAME_FALLBACK_MS = 16;
-const TEST_FRAME_BUDGET_MS = 100;
+const TEST_FRAME_FALLBACK_MS = 0;
+const TEST_FRAME_BUDGET_MS = 250;
 const HIDDEN_FRAME_BUDGET_MS = 24;
 
 function isJsdomEnvironment(): boolean {
@@ -48,6 +50,10 @@ function getFrameBudgetForEnvironment(): number | undefined {
 }
 
 function requestFrame(callback: () => void): number {
+  if (isJsdomEnvironment()) {
+    return window.setTimeout(callback, TEST_FRAME_FALLBACK_MS) as unknown as number;
+  }
+
   if (
     typeof window !== 'undefined' &&
     typeof window.requestAnimationFrame === 'function' &&
@@ -138,6 +144,7 @@ export const useEmulatorEvents = () => {
         dispatch: (action: InterpreterReduxAction) =>
           ideStore.dispatch(action as Parameters<AppDispatch>[0]),
         getState: () => ideStore.getState().interpreterRedux,
+        getRuntimeStore: () => ideStore.getInterpreterReduxRuntimeStore(),
       });
 
       adapter.loadProgram(code);
@@ -354,6 +361,8 @@ export const useEmulatorEvents = () => {
 
     const handleReset = (): void => {
       clearScheduledExecution();
+      const { columns, rows } = ideStore.getState().emulator.terminal;
+      terminalSurfaceStore.reset(columns, rows);
       reset();
       emulatorRef.current = null;
       setEmulatorInstance(null);
@@ -379,6 +388,10 @@ export const useEmulatorEvents = () => {
       window.removeEventListener('emulator:reset', handleReset);
       window.removeEventListener('emulator:showflags', handleShowFlags);
       clearScheduledExecution();
+      terminalSurfaceStore.reset();
+      emulatorRef.current = null;
+      setEmulatorInstance(null);
+      window.emulatorInstance = null;
     };
   }, [reset, setExecutionState, setEmulatorInstance, syncEmulatorFrame, toggleShowFlags]);
 };

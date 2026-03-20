@@ -8,8 +8,8 @@ import {
 } from './state';
 import { selectFlags, selectRegisters, selectTerminalLines } from './selectors';
 
-describe('interpreter-redux phase 1 reducer contracts', () => {
-  it('creates an initial reducer state with a serializable cpu and terminal model', () => {
+describe('interpreter-redux reducer contracts', () => {
+  it('creates an initial reducer state with serializable cpu, terminal, and memory metadata', () => {
     const state = createInitialInterpreterReducerState();
     const registers = selectRegisters(state);
     const flags = selectFlags(state);
@@ -27,9 +27,15 @@ describe('interpreter-redux phase 1 reducer contracts', () => {
     expect(state.terminal.columns).toBe(80);
     expect(state.terminal.rows).toBe(25);
     expect(terminalLines).toHaveLength(25);
+    expect(state.memory).toEqual({
+      usedBytes: 0,
+      minAddress: null,
+      maxAddress: null,
+      version: 1,
+    });
   });
 
-  it('loads a program definition and resets memory/execution state around it', () => {
+  it('loads a program definition and resets memory metadata around it', () => {
     const initialState = createInitialInterpreterReducerState();
     const program = createLoadedProgramState({
       source: 'ORG $1000\nEND',
@@ -49,8 +55,12 @@ describe('interpreter-redux phase 1 reducer contracts', () => {
     );
 
     expect(nextState.program.source).toBe('ORG $1000\nEND');
-    expect(nextState.memory.bytes[0x1000]).toBe(0xaa);
-    expect(nextState.memory.bytes[0x1001]).toBe(0xbb);
+    expect(nextState.memory).toEqual({
+      usedBytes: 2,
+      minAddress: 0x1000,
+      maxAddress: 0x1001,
+      version: 1,
+    });
     expect(nextState.execution.endPointer).toEqual([2, 2]);
     expect(nextState.cpu.registers[7]).toBe(DEFAULT_STACK_POINTER);
   });
@@ -76,7 +86,40 @@ describe('interpreter-redux phase 1 reducer contracts', () => {
     expect(nextState.input.pendingInputTask).toBe(3);
   });
 
-  it('resets back to the loaded program memory image', () => {
+  it('applies compact committed runtime payloads for middleware-driven stepping', () => {
+    const initialState = createInitialInterpreterReducerState();
+    const committedState = {
+      ...initialState,
+      cpu: {
+        ...initialState.cpu,
+        pc: 4,
+        registers: initialState.cpu.registers.map((value, index) => (index === 8 ? 1 : value)),
+      },
+      memory: {
+        usedBytes: 4,
+        minAddress: 0,
+        maxAddress: 3,
+        version: 2,
+      },
+      history: {
+        undoDepth: 1,
+      },
+    };
+
+    const nextState = interpreterReducer(
+      initialState,
+      interpreterReduxActions.stepCommitted({
+        state: committedState,
+      })
+    );
+
+    expect(nextState.cpu.pc).toBe(4);
+    expect(nextState.cpu.registers[8]).toBe(1);
+    expect(nextState.memory.version).toBe(2);
+    expect(nextState.history.undoDepth).toBe(1);
+  });
+
+  it('resets back to the loaded program metadata image', () => {
     const loadedState = interpreterReducer(
       createInitialInterpreterReducerState(),
       interpreterReduxActions.programLoaded(
@@ -92,18 +135,10 @@ describe('interpreter-redux phase 1 reducer contracts', () => {
     const mutatedState = {
       ...loadedState,
       memory: {
-        ...loadedState.memory,
-        overrides: {
-          ...loadedState.memory.overrides,
-          0x2000: 0xff,
-        },
-        bytes: Object.assign(
-          Object.create(loadedState.memory.baseBytes),
-          {
-            ...loadedState.memory.overrides,
-            0x2000: 0xff,
-          }
-        ),
+        usedBytes: 3,
+        minAddress: 0x2000,
+        maxAddress: 0x2002,
+        version: 4,
       },
       cpu: {
         ...loadedState.cpu,
@@ -116,8 +151,12 @@ describe('interpreter-redux phase 1 reducer contracts', () => {
       interpreterReduxActions.resetRequested()
     );
 
-    expect(resetState.memory.bytes[0x2000]).toBe(0x11);
-    expect(resetState.memory.bytes[0x2001]).toBe(0x22);
+    expect(resetState.memory).toEqual({
+      usedBytes: 2,
+      minAddress: 0x2000,
+      maxAddress: 0x2001,
+      version: 1,
+    });
     expect(resetState.cpu.pc).toBe(0);
   });
 });

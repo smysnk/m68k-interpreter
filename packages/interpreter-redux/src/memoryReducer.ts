@@ -1,150 +1,86 @@
-import type { MemoryState } from './state';
+import { CODE_BYTE, CODE_LONG, CODE_WORD } from '@m68k/interpreter';
+import { ReducerMemoryRuntime, type MemorySizeCode } from './memoryRuntime';
 
-export const MEMORY_CODE_BYTE = 0;
-export const MEMORY_CODE_WORD = 1;
-export const MEMORY_CODE_LONG = 2;
+export const MEMORY_CODE_BYTE = CODE_BYTE;
+export const MEMORY_CODE_WORD = CODE_WORD;
+export const MEMORY_CODE_LONG = CODE_LONG;
 export const MAX_MEMORY_ADDRESS = 0x7fffffff;
 
-export type MemorySizeCode =
-  | typeof MEMORY_CODE_BYTE
-  | typeof MEMORY_CODE_WORD
-  | typeof MEMORY_CODE_LONG;
+export { type MemorySizeCode };
 
 export function isValidMemoryAddress(address: number): boolean {
   const normalizedAddress = address >>> 0;
   return 0 <= normalizedAddress && normalizedAddress <= MAX_MEMORY_ADDRESS;
 }
 
-export function getMemoryByte(state: MemoryState, address: number): number {
-  const normalizedAddress = address >>> 0;
-  if (state.bytes[normalizedAddress] === undefined) {
-    return 0x00;
-  }
-
-  return state.bytes[normalizedAddress];
+export function createReducerMemoryState(
+  initialBytes: Record<number, number> = {}
+): ReducerMemoryRuntime {
+  return new ReducerMemoryRuntime(initialBytes);
 }
 
-export function getMemoryWord(state: MemoryState, address: number): number {
-  const firstByte = getMemoryByte(state, address);
-
-  if (!isValidMemoryAddress(address + 1)) {
-    return 0x0000;
-  }
-
-  const secondByte = getMemoryByte(state, address + 1);
-  return (((firstByte << 8) | secondByte) & 0xffff) >>> 0;
+export function getMemoryByte(runtime: ReducerMemoryRuntime, address: number): number {
+  return runtime.readByte(address);
 }
 
-export function getMemoryLong(state: MemoryState, address: number): number {
-  const byte0 = getMemoryByte(state, address);
-  if (!isValidMemoryAddress(address + 1)) {
-    return 0;
-  }
+export function getMemoryWord(runtime: ReducerMemoryRuntime, address: number): number {
+  return runtime.readWord(address);
+}
 
-  const byte1 = getMemoryByte(state, address + 1);
-  if (!isValidMemoryAddress(address + 2)) {
-    return 0;
-  }
-
-  const byte2 = getMemoryByte(state, address + 2);
-  if (!isValidMemoryAddress(address + 3)) {
-    return 0;
-  }
-
-  const byte3 = getMemoryByte(state, address + 3);
-  return (((byte0 << 24) | (byte1 << 16) | (byte2 << 8) | byte3) >>> 0);
+export function getMemoryLong(runtime: ReducerMemoryRuntime, address: number): number {
+  return runtime.readLong(address);
 }
 
 export function getMemoryValue(
-  state: MemoryState,
+  runtime: ReducerMemoryRuntime,
   address: number,
   size: MemorySizeCode
 ): number {
-  switch (size) {
-    case MEMORY_CODE_BYTE:
-      return getMemoryByte(state, address);
-    case MEMORY_CODE_WORD:
-      return getMemoryWord(state, address);
-    case MEMORY_CODE_LONG:
-    default:
-      return getMemoryLong(state, address);
-  }
+  return runtime.readValue(address, size);
 }
 
-function createPatchedMemoryState(
-  baseBytes: Record<number, number>,
-  overrides: Record<number, number>
-): MemoryState {
-  return {
-    baseBytes,
-    overrides,
-    bytes: Object.assign(Object.create(baseBytes), overrides),
-  };
+export function setMemoryByte(
+  runtime: ReducerMemoryRuntime,
+  address: number,
+  value: number
+): ReducerMemoryRuntime {
+  runtime.writeByte(address, value);
+  return runtime;
 }
 
-export function setMemoryByte(state: MemoryState, address: number, value: number): MemoryState {
-  const normalizedAddress = address >>> 0;
-  const normalizedValue = (value & 0xff) >>> 0;
-
-  if (state.bytes[normalizedAddress] === normalizedValue) {
-    return state;
-  }
-
-  return createPatchedMemoryState(state.baseBytes, {
-    ...state.overrides,
-    [normalizedAddress]: normalizedValue,
-  });
+export function setMemoryWord(
+  runtime: ReducerMemoryRuntime,
+  address: number,
+  value: number
+): ReducerMemoryRuntime {
+  runtime.writeWord(address, value);
+  return runtime;
 }
 
-export function setMemoryWord(state: MemoryState, address: number, value: number): MemoryState {
-  const normalizedAddress = address >>> 0;
-  const nextOverrides = {
-    ...state.overrides,
-    [normalizedAddress]: ((value >>> 8) & 0xff) >>> 0,
-    [(normalizedAddress + 1) >>> 0]: (value & 0xff) >>> 0,
-  };
-
-  return createPatchedMemoryState(state.baseBytes, nextOverrides);
-}
-
-export function setMemoryLong(state: MemoryState, address: number, value: number): MemoryState {
-  const normalizedAddress = address >>> 0;
-  const nextOverrides = {
-    ...state.overrides,
-    [normalizedAddress]: ((value >>> 24) & 0xff) >>> 0,
-    [(normalizedAddress + 1) >>> 0]: ((value >>> 16) & 0xff) >>> 0,
-    [(normalizedAddress + 2) >>> 0]: ((value >>> 8) & 0xff) >>> 0,
-    [(normalizedAddress + 3) >>> 0]: (value & 0xff) >>> 0,
-  };
-
-  return createPatchedMemoryState(state.baseBytes, nextOverrides);
+export function setMemoryLong(
+  runtime: ReducerMemoryRuntime,
+  address: number,
+  value: number
+): ReducerMemoryRuntime {
+  runtime.writeLong(address, value);
+  return runtime;
 }
 
 export function setMemoryValue(
-  state: MemoryState,
+  runtime: ReducerMemoryRuntime,
   address: number,
   value: number,
   size: MemorySizeCode
-): MemoryState {
-  switch (size) {
-    case MEMORY_CODE_LONG:
-      return setMemoryLong(state, address, value);
-    case MEMORY_CODE_WORD:
-      return setMemoryWord(state, address, value);
-    case MEMORY_CODE_BYTE:
-    default:
-      return setMemoryByte(state, address, value);
-  }
+): ReducerMemoryRuntime {
+  runtime.writeValue(address, value, size);
+  return runtime;
 }
 
-export function clearMemoryState(state: MemoryState): MemoryState {
-  if (Object.keys(state.baseBytes).length === 0 && Object.keys(state.overrides).length === 0) {
-    return state;
-  }
-
-  return createPatchedMemoryState({}, {});
+export function clearMemoryState(runtime: ReducerMemoryRuntime): ReducerMemoryRuntime {
+  runtime.reset({});
+  return runtime;
 }
 
-export function getUsedMemorySize(state: MemoryState): number {
-  return new Set([...Object.keys(state.baseBytes), ...Object.keys(state.overrides)]).size;
+export function getUsedMemorySize(runtime: ReducerMemoryRuntime): number {
+  return runtime.toMemoryState().usedBytes;
 }

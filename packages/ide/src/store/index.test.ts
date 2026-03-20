@@ -1,16 +1,24 @@
-import { interpreterReduxActions } from '@m68k/interpreter-redux';
-import { describe, expect, it } from 'vitest';
+import { interpreterReduxActions, ReducerInterpreterSession } from '@m68k/interpreter-redux';
+import { configureStore } from '@reduxjs/toolkit';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  createEmptyMemoryState,
   createEmptyTerminalState,
+  createActionSizeGuardMiddleware,
   createIdeStore,
+  measureSerializedSize,
   resetEmulatorState,
+  sanitizeIdeDevToolsAction,
+  sanitizeIdeDevToolsState,
   syncEmulatorFrame,
   setEngineMode,
+  setEditorCode,
+  setEmulatorInstance,
   setRootHorizontalLayout,
   setRootHorizontalWithContextLayout,
   toggleContextView,
 } from '@/store';
-import { initialFlags, initialRegisters } from '@/store/emulatorSlice';
+import emulatorReducerForTest, { initialFlags, initialRegisters } from '@/store/emulatorSlice';
 
 describe('ideStore', () => {
   it('mounts interpreter-redux state and persists engine selection in Redux', () => {
@@ -27,15 +35,12 @@ describe('ideStore', () => {
 
   it('resets the mounted interpreter-redux slice when the emulator UI resets', () => {
     const store = createIdeStore();
-
-    store.dispatch(
-      interpreterReduxActions.programSourceLoaded({
-        source: `START
+    const session = new ReducerInterpreterSession(`START
   MOVE.L #1,D0
-  END START`,
-      })
-    );
-    store.dispatch(interpreterReduxActions.stepRequested());
+  END START`);
+
+    session.emulationStep();
+    store.dispatch(interpreterReduxActions.runtimeStateHydrated(session.getState()));
 
     expect(store.getState().interpreterRedux.cpu.registers[8]).toBe(1);
 
@@ -51,7 +56,7 @@ describe('ideStore', () => {
     store.dispatch(
       syncEmulatorFrame({
         registers: initialRegisters,
-        memory: {},
+        memory: createEmptyMemoryState(),
         flags: initialFlags,
         terminal: createEmptyTerminalState(96, 30),
       })
@@ -68,6 +73,7 @@ describe('ideStore', () => {
     expect(store.getState().emulator.terminal).not.toHaveProperty('output');
     expect(store.getState().emulator.terminal).not.toHaveProperty('lines');
     expect(store.getState().emulator.terminal).not.toHaveProperty('cells');
+    expect(store.getState().emulator.memory).toEqual(createEmptyMemoryState());
   });
 
   it('stores compact and help-expanded shell layout sizes in Redux', () => {
@@ -80,5 +86,54 @@ describe('ideStore', () => {
     expect(store.getState().uiShell.layout.rootHorizontal).toEqual([57, 43]);
     expect(store.getState().uiShell.layout.rootHorizontalWithContext).toEqual([46, 34, 20]);
     expect(store.getState().uiShell.contextOpen).toBe(true);
+  });
+
+  it('sanitizes devtools state and actions so large traces stay compact', () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const store = createIdeStore();
+    const largeSource = 'MOVE.L D0,D0\n'.repeat(5000);
+    const session = new ReducerInterpreterSession(largeSource);
+
+    store.dispatch(setEditorCode(largeSource));
+    store.dispatch(setEmulatorInstance(session));
+    store.dispatch(interpreterReduxActions.runtimeStateHydrated(session.getState()));
+
+    const rawAction = interpreterReduxActions.runtimeStateHydrated(session.getState());
+    const sanitizedAction = sanitizeIdeDevToolsAction(rawAction);
+    const rawState = store.getState();
+    const sanitizedState = sanitizeIdeDevToolsState(rawState);
+
+    expect(measureSerializedSize(sanitizedAction)).toBeLessThan(measureSerializedSize(rawAction));
+    expect(measureSerializedSize(sanitizedState)).toBeLessThan(measureSerializedSize(rawState));
+    expect(sanitizedState?.emulator.emulatorInstance).toBe('<runtime>');
+    expect(sanitizedState?.emulator.editorCode).toEqual(
+      expect.objectContaining({
+        length: largeSource.length,
+      })
+    );
+
+    consoleWarn.mockRestore();
+  });
+
+  it('warns when an action exceeds the configured size guardrail', () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const guardStore = configureStore({
+      reducer: emulatorReducerForTest,
+      middleware: (getDefaultMiddleware) =>
+        getDefaultMiddleware({
+          serializableCheck: false,
+        }).concat(createActionSizeGuardMiddleware(32)),
+    });
+
+    guardStore.dispatch({
+      type: 'oversized/custom',
+      payload: 'A'.repeat(256),
+    });
+
+    expect(consoleWarn).toHaveBeenCalledWith(
+      expect.stringContaining('[redux-size-guard] action oversized/custom serialized to')
+    );
+
+    consoleWarn.mockRestore();
   });
 });

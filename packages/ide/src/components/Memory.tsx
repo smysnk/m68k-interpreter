@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFileDownload } from '@fortawesome/free-solid-svg-icons';
-import { useEmulatorStore } from '@/stores/emulatorStore';
+import { memorySurfaceStore } from '@/runtime/memorySurfaceStore';
+import { useMemorySurface } from '@/runtime/useMemorySurface';
+
+const MEMORY_VIEWPORT_COLUMNS = 16;
+const MEMORY_VIEWPORT_ROWS = 16;
+const MEMORY_VIEWPORT_LENGTH = MEMORY_VIEWPORT_COLUMNS * MEMORY_VIEWPORT_ROWS;
 
 const Memory: React.FC = () => {
-  const { memory } = useEmulatorStore();
+  const { meta } = useMemorySurface();
   const [startAddress, setStartAddress] = useState<number>(0x1000);
 
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
@@ -15,7 +20,7 @@ const Memory: React.FC = () => {
   };
 
   const handleDownload = (): void => {
-    const memoryData = Object.entries(memory)
+    const memoryData = Object.entries(memorySurfaceStore.exportMemory())
       .map(([addr, val]) => `${addr}=${val.toString(16).padStart(2, '0')}`)
       .join('\n');
 
@@ -29,10 +34,11 @@ const Memory: React.FC = () => {
     document.body.removeChild(element);
   };
 
-  const getValue = (addr: number): string => {
-    const value = memory[addr];
-    return value !== undefined ? value.toString(16).padStart(2, '0') : '00';
-  };
+  const visibleBytes = memorySurfaceStore.readRange(startAddress, MEMORY_VIEWPORT_LENGTH);
+
+  const getValue = (offset: number): string => (visibleBytes[offset] ?? 0).toString(16).padStart(2, '0');
+  const formatAddress = (address: number | null): string =>
+    address === null ? 'n/a' : `0x${address.toString(16).padStart(8, '0')}`;
 
   return (
     <div className="memory-container pane-surface">
@@ -69,18 +75,18 @@ const Memory: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {Array.from({ length: 16 }).map((_, row) => {
-              const rowStart = startAddress + row * 16;
+            {Array.from({ length: MEMORY_VIEWPORT_ROWS }).map((_, row) => {
+              const rowStart = startAddress + row * MEMORY_VIEWPORT_COLUMNS;
               return (
                 <tr key={row}>
                   <td className="addr-cell">
                     {`0x${rowStart.toString(16).padStart(8, '0')}`}
                   </td>
-                  {Array.from({ length: 16 }).map((_, col) => {
-                    const addr = rowStart + col;
+                  {Array.from({ length: MEMORY_VIEWPORT_COLUMNS }).map((_, col) => {
+                    const offset = row * MEMORY_VIEWPORT_COLUMNS + col;
                     return (
                       <td key={col} className="mem-cell">
-                        {getValue(addr)}
+                        {getValue(offset)}
                       </td>
                     );
                   })}
@@ -92,8 +98,8 @@ const Memory: React.FC = () => {
       </div>
 
       <div className="memory-stats">
-        <p>Used bytes: {Object.keys(memory).length}</p>
-        <p>Address range: 0x00000000 - 0x7FFFFFFF</p>
+        <p>Used bytes: {meta.usedBytes}</p>
+        <p>Address range: {formatAddress(meta.minAddress)} - {formatAddress(meta.maxAddress)}</p>
       </div>
     </div>
   );

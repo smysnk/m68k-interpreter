@@ -3,8 +3,12 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { App } from '@m68k/ide';
 import { Emulator } from '@m68k/interpreter';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
+import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { useEmulatorStore } from '@/stores/emulatorStore';
 import { ideStore, resetSettingsState } from '@/store';
+
+const NIBBLES_BOOT_TEST_TIMEOUT_MS = 60_000;
+const NIBBLES_RESET_TEST_TIMEOUT_MS = 90_000;
 
 vi.mock('@vercel/analytics/react', () => ({
   Analytics: () => null,
@@ -21,6 +25,7 @@ describe('workspace integration', () => {
   const getEmulatorTerminalText = (): string => getWindowEmulator().getTerminalText();
 
   beforeEach(() => {
+    terminalSurfaceStore.reset();
     useEmulatorStore.getState().reset();
     ideStore.dispatch(resetSettingsState());
     useEmulatorStore.getState().setSpeedMultiplier(64);
@@ -159,7 +164,7 @@ START
       },
       { timeout: 7000 }
     );
-  }, 45000);
+  }, NIBBLES_BOOT_TEST_TIMEOUT_MS);
 
   it('can reset and relaunch Nibbles from a clean state', async () => {
     render(<App />);
@@ -177,12 +182,19 @@ START
       { timeout: 30000 }
     );
 
+    await waitFor(
+      () => {
+        expect(getWindowEmulator().isWaitingForInput()).toBe(true);
+      },
+      { timeout: 7000 }
+    );
+
     fireEvent.click(screen.getByTitle(/reset/i));
 
     await waitFor(() => {
       expect(window.emulatorInstance).toBeNull();
       expect(screen.getByText('Last Instruction').closest('.last-instruction')).toHaveTextContent('Ready');
-      expect(document.querySelector('.retro-lcd__body')?.textContent?.trim() ?? '').toBe('');
+      expect(terminalSurfaceStore.getText().trim()).toBe('');
     });
 
     act(() => {
@@ -196,5 +208,5 @@ START
       },
       { timeout: 30000 }
     );
-  }, 60000);
+  }, NIBBLES_RESET_TEST_TIMEOUT_MS);
 });

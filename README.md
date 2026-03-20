@@ -1,5 +1,11 @@
 # m68k-interpreter
 
+[![tests](https://img.shields.io/endpoint?url=https%3A%2F%2Ftest-station.smysnk.com%2Fapi%2Fbadges%2Ftests.json%3FprojectKey%3Dm68k-interpreter)](https://test-station.smysnk.com/projects/m68k-interpreter)
+[![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Ftest-station.smysnk.com%2Fapi%2Fbadges%2Fcoverage.json%3FprojectKey%3Dm68k-interpreter)](https://test-station.smysnk.com/projects/m68k-interpreter)
+[![health](https://img.shields.io/endpoint?url=https%3A%2F%2Ftest-station.smysnk.com%2Fapi%2Fbadges%2Fhealth.json%3FprojectKey%3Dm68k-interpreter)](https://test-station.smysnk.com/projects/m68k-interpreter)
+
+Report: [Hosted project history](https://test-station.smysnk.com/projects/m68k-interpreter)
+
 A Motorola 68000 assembly emulator that runs entirely in the browser.  
 Write, step through, and debug m68k assembly — no installation needed.
 

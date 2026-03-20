@@ -3,12 +3,13 @@ import { useDispatch, useSelector } from 'react-redux';
 import type {
   ConditionFlags,
   ExecutionState,
-  MemoryCell,
+  MemoryMeta,
   Registers,
   TerminalMeta,
   TerminalSnapshot,
 } from '@m68k/interpreter';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
+import { memorySurfaceStore } from '@/runtime/memorySurfaceStore';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import {
   ideStore,
@@ -38,18 +39,18 @@ import {
 type EmulatorStoreFacade = RootState['emulator'] & {
   setEditorCode: (code: string) => void;
   setRegisters: (registers: Partial<Registers>) => void;
-  setMemory: (memory: MemoryCell) => void;
+  setMemory: (memory: MemoryMeta) => void;
   setFlags: (flags: Partial<ConditionFlags>) => void;
   setExecutionState: (state: Partial<ExecutionState>) => void;
   setEmulatorInstance: (emulator: IdeRuntimeSession | null) => void;
   setTerminalSnapshot: (snapshot: TerminalSnapshot) => void;
-  setTerminalMeta: (terminalMeta: TerminalRuntimeState | TerminalMeta) => void;
-  syncEmulatorFrame: (frame: {
-    registers: Registers;
-    memory: MemoryCell;
-    flags: ConditionFlags;
-    terminal: TerminalRuntimeState | TerminalMeta;
-    executionState?: Partial<ExecutionState>;
+    setTerminalMeta: (terminalMeta: TerminalRuntimeState | TerminalMeta) => void;
+    syncEmulatorFrame: (frame: {
+      registers: Registers;
+      memory: MemoryMeta;
+      flags: ConditionFlags;
+      terminal: TerminalRuntimeState | TerminalMeta;
+      executionState?: Partial<ExecutionState>;
     runtimeMetrics?: Partial<RuntimeMetrics>;
   }) => void;
   toggleShowFlags: () => void;
@@ -95,7 +96,7 @@ function createActions(dispatch: AppDispatch) {
   return {
     setEditorCode: (code: string) => dispatch(setEditorCodeAction(code)),
     setRegisters: (registers: Partial<Registers>) => dispatch(setRegistersAction(registers)),
-    setMemory: (memory: MemoryCell) => dispatch(setMemoryAction(memory)),
+    setMemory: (memory: MemoryMeta) => dispatch(setMemoryAction(memory)),
     setFlags: (flags: Partial<ConditionFlags>) => dispatch(setFlagsAction(flags)),
     setExecutionState: (nextState: Partial<ExecutionState>) => dispatch(setExecutionStateAction(nextState)),
     setEmulatorInstance: (emulator: IdeRuntimeSession | null) =>
@@ -108,7 +109,7 @@ function createActions(dispatch: AppDispatch) {
       dispatch(setTerminalStateAction(toTerminalRuntimeState(terminalMeta))),
     syncEmulatorFrame: (frame: {
       registers: Registers;
-      memory: MemoryCell;
+      memory: MemoryMeta;
       flags: ConditionFlags;
       terminal: TerminalRuntimeState | TerminalMeta;
       executionState?: Partial<ExecutionState>;
@@ -121,6 +122,7 @@ function createActions(dispatch: AppDispatch) {
     pushHistory: () => dispatch(pushHistoryAction()),
     popHistory: () => dispatch(popHistoryAction()),
     reset: () => {
+      memorySurfaceStore.reset();
       terminalSurfaceStore.reset();
       dispatch(resetEmulatorState());
     },
