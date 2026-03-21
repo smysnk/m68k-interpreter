@@ -12,7 +12,11 @@ import {
 import { useTerminalSurface } from '@/runtime/useTerminalSurface';
 import { useEmulatorStore } from '@/stores/emulatorStore';
 
-function mapKeyboardEventToInput(event: React.KeyboardEvent<HTMLDivElement>): string | number | null {
+type KeyboardLikeEvent = {
+  key: string;
+};
+
+function mapKeyboardEventToInput(event: KeyboardLikeEvent): string | number | null {
   switch (event.key) {
     case 'ArrowUp':
       return 'w';
@@ -33,6 +37,86 @@ function mapKeyboardEventToInput(event: React.KeyboardEvent<HTMLDivElement>): st
   }
 
   return null;
+}
+
+function shouldIgnoreGlobalKeyboardEvent(event: KeyboardEvent): boolean {
+  if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
+    return true;
+  }
+
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (target.closest('[data-testid="terminal-screen"]')) {
+    return true;
+  }
+
+  if (
+    target.closest(
+      [
+        'input',
+        'textarea',
+        'select',
+        'button',
+        '[contenteditable="true"]',
+        '[role="textbox"]',
+        '.cm-editor',
+        '.cm-content',
+        '.cm-scroller',
+        '.navbar-menu',
+        '.navbar-submenu',
+        '.status-engine-menu',
+      ].join(', ')
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function isPageEligibleForAssemblerInput(): boolean {
+  if (document.visibilityState === 'hidden') {
+    return false;
+  }
+
+  const isJsdom =
+    typeof navigator !== 'undefined' && typeof navigator.userAgent === 'string'
+      ? /jsdom/i.test(navigator.userAgent)
+      : false;
+
+  if (isJsdom) {
+    return true;
+  }
+
+  return document.hasFocus();
+}
+
+function queueAssemblerInput(
+  emulatorInstance: ReturnType<typeof useEmulatorStore>['emulatorInstance'],
+  executionState: ReturnType<typeof useEmulatorStore>['executionState'],
+  event: KeyboardLikeEvent,
+  preventDefault?: () => void
+): boolean {
+  if (!emulatorInstance) {
+    return false;
+  }
+
+  const input = mapKeyboardEventToInput(event);
+  if (input === null) {
+    return false;
+  }
+
+  preventDefault?.();
+  emulatorInstance.queueInput(input);
+
+  if (executionState.started && !executionState.ended) {
+    window.dispatchEvent(new CustomEvent('emulator:resume'));
+  }
+
+  return true;
 }
 
 const Terminal: React.FC = () => {
@@ -92,21 +176,7 @@ const Terminal: React.FC = () => {
   }, [dirtyRows, frameBuffer, meta.columns, meta.cursorColumn, meta.cursorRow, meta.geometryVersion, meta.rows, meta.version]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
-    if (!emulatorInstance) {
-      return;
-    }
-
-    const input = mapKeyboardEventToInput(event);
-    if (input === null) {
-      return;
-    }
-
-    event.preventDefault();
-    emulatorInstance.queueInput(input);
-
-    if (executionState.started && !executionState.ended) {
-      window.dispatchEvent(new CustomEvent('emulator:resume'));
-    }
+    queueAssemblerInput(emulatorInstance, executionState, event, () => event.preventDefault());
   };
 
   const focusTerminal = (): void => {
@@ -119,12 +189,34 @@ const Terminal: React.FC = () => {
       focusTerminal();
     };
 
+    const handleWindowKeyDown = (event: KeyboardEvent): void => {
+      if (!isPageEligibleForAssemblerInput()) {
+        return;
+      }
+
+      if (shouldIgnoreGlobalKeyboardEvent(event)) {
+        return;
+      }
+
+      const overlayOpen =
+        document.getElementById('navbar-app-menu') !== null ||
+        document.getElementById('status-engine-menu') !== null;
+
+      if (overlayOpen) {
+        return;
+      }
+
+      queueAssemblerInput(emulatorInstance, executionState, event, () => event.preventDefault());
+    };
+
     window.addEventListener('emulator:focus-terminal', handleFocusTerminal);
+    window.addEventListener('keydown', handleWindowKeyDown);
 
     return () => {
       window.removeEventListener('emulator:focus-terminal', handleFocusTerminal);
+      window.removeEventListener('keydown', handleWindowKeyDown);
     };
-  }, []);
+  }, [emulatorInstance, executionState]);
 
   return (
     <section className="terminal-container" data-terminal-theme={theme.surfaceMode}>

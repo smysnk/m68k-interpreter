@@ -1,14 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import StatusBar from './StatusBar';
-import { nibblesSource } from '@/programs/nibbles';
 import { useEmulatorStore } from '@/stores/emulatorStore';
 import {
   ideStore,
+  resetFilesState,
   resetSettingsState,
   setEngineMode,
   setEditorCursorPosition,
-  setEditorCode,
   setWorkspaceTab,
 } from '@/store';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
@@ -16,6 +15,7 @@ import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
 describe('StatusBar', () => {
   beforeEach(() => {
     useEmulatorStore.getState().reset();
+    ideStore.dispatch(resetFilesState());
     ideStore.dispatch(resetSettingsState());
   });
 
@@ -40,10 +40,7 @@ describe('StatusBar', () => {
     expect(screen.getByText(/Ln 12, Col 7/)).toBeInTheDocument();
   });
 
-  it('identifies the nibbles program when it is loaded', () => {
-    useEmulatorStore.getState().setEditorCode(nibblesSource);
-    ideStore.dispatch(setEditorCode(nibblesSource));
-
+  it('keeps the status bar focused on runtime info rather than program labels', () => {
     renderWithIdeProviders(<StatusBar />);
 
     expect(screen.queryByText(/Program:/)).not.toBeInTheDocument();

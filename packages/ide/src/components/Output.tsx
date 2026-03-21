@@ -54,17 +54,41 @@ const Output: React.FC = () => {
               <p>{displayInstruction}</p>
             </div>
             <div className="last-instruction-actions" aria-label="Execution controls">
-              <button className="btn-command" onClick={handleRun} title="Run program" type="button">
-                <FontAwesomeIcon icon={faPlay} size="lg" />
+              <button
+                aria-label="Run program"
+                className="btn-toolbar btn-toolbar-icon btn-toolbar-accent"
+                onClick={handleRun}
+                title="Run program"
+                type="button"
+              >
+                <FontAwesomeIcon icon={faPlay} size="sm" />
               </button>
-              <button className="btn-command" onClick={handleReset} title="Reset" type="button">
-                <FontAwesomeIcon icon={faStop} size="lg" />
+              <button
+                aria-label="Reset"
+                className="btn-toolbar btn-toolbar-icon"
+                onClick={handleReset}
+                title="Reset"
+                type="button"
+              >
+                <FontAwesomeIcon icon={faStop} size="sm" />
               </button>
-              <button className="btn-command" onClick={handleStep} title="Step" type="button">
-                <FontAwesomeIcon icon={faRedo} size="lg" />
+              <button
+                aria-label="Step"
+                className="btn-toolbar btn-toolbar-icon"
+                onClick={handleStep}
+                title="Step"
+                type="button"
+              >
+                <FontAwesomeIcon icon={faRedo} size="sm" />
               </button>
-              <button className="btn-command" onClick={handleUndo} title="Undo" type="button">
-                <FontAwesomeIcon icon={faUndo} size="lg" />
+              <button
+                aria-label="Undo"
+                className="btn-toolbar btn-toolbar-icon"
+                onClick={handleUndo}
+                title="Undo"
+                type="button"
+              >
+                <FontAwesomeIcon icon={faUndo} size="sm" />
               </button>
             </div>
           </div>

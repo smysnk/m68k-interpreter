@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   createIdeStore,
+  setActiveFile,
   setEditorCode,
   setEditorCursorPosition,
   setRuntimeMetrics,
   setWorkspaceTab,
 } from '@/store';
-import { nibblesSource } from '@/programs/nibbles';
 import { selectActiveInspectorPane, selectStatusBarModel } from '@/store/statusBarSelectors';
 
 describe('statusBarSelectors', () => {
@@ -16,22 +16,23 @@ describe('statusBarSelectors', () => {
 
     expect(model.runtime.label).toBe('Ready');
     expect(model.engineLabel).toBe('Interpreter');
-    expect(model.programLabel).toBe('Custom source');
+    expect(model.programLabel).toBe('nibbles.asm');
     expect(model.terminalGeometryLabel).toBe('80x25');
     expect(model.locationLabel).toBe('Cursor 1:1');
     expect(model.stopLabel).toBe('idle');
   });
 
-  it('switches location labels for the code workspace and recognizes nibbles', () => {
+  it('switches location labels for the code workspace and tracks the active file name', () => {
     const store = createIdeStore();
 
+    store.dispatch(setActiveFile('workspace:scratch.asm'));
     store.dispatch(setWorkspaceTab('code'));
     store.dispatch(setEditorCursorPosition({ line: 18, column: 9 }));
-    store.dispatch(setEditorCode(nibblesSource));
+    store.dispatch(setEditorCode('MOVE.L #1,D0'));
 
     const model = selectStatusBarModel(store.getState());
 
-    expect(model.programLabel).toBe('Nibbles');
+    expect(model.programLabel).toBe('scratch.asm');
     expect(model.viewLabel).toBe('Code');
     expect(model.locationLabel).toBe('Ln 18, Col 9');
   });

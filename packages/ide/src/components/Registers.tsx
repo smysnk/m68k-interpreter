@@ -42,8 +42,14 @@ const Registers: React.FC = () => {
           <h3 className="pane-title">Registers</h3>
           <p className="pane-caption">Live data, address, and control registers.</p>
         </div>
-        <button className="btn-download btn-pane-action" onClick={handleDownload} title="Download registers" type="button">
-          <FontAwesomeIcon icon={faFileDownload} size="lg" />
+        <button
+          aria-label="Download registers"
+          className="btn-toolbar btn-toolbar-icon btn-pane-action"
+          onClick={handleDownload}
+          title="Download registers"
+          type="button"
+        >
+          <FontAwesomeIcon icon={faFileDownload} size="sm" />
         </button>
       </div>
 

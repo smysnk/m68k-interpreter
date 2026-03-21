@@ -48,8 +48,14 @@ const Memory: React.FC = () => {
           <h3 className="pane-title">Memory</h3>
           <p className="pane-caption">Hex view from the selected start address.</p>
         </div>
-        <button onClick={handleDownload} className="btn-download btn-pane-action" type="button" title="Download memory">
-          <FontAwesomeIcon icon={faFileDownload} size="lg" />
+        <button
+          aria-label="Download memory"
+          onClick={handleDownload}
+          className="btn-toolbar btn-toolbar-icon btn-pane-action"
+          type="button"
+          title="Download memory"
+        >
+          <FontAwesomeIcon icon={faFileDownload} size="sm" />
         </button>
       </div>
 

@@ -5,7 +5,7 @@ import { Emulator } from '@m68k/interpreter';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { useEmulatorStore } from '@/stores/emulatorStore';
-import { ideStore, resetSettingsState } from '@/store';
+import { ideStore, resetFilesState, resetSettingsState } from '@/store';
 
 const NIBBLES_BOOT_TEST_TIMEOUT_MS = 60_000;
 const NIBBLES_RESET_TEST_TIMEOUT_MS = 90_000;
@@ -27,6 +27,7 @@ describe('workspace integration', () => {
   beforeEach(() => {
     terminalSurfaceStore.reset();
     useEmulatorStore.getState().reset();
+    ideStore.dispatch(resetFilesState());
     ideStore.dispatch(resetSettingsState());
     useEmulatorStore.getState().setSpeedMultiplier(64);
     window.editorCode = '';
@@ -97,10 +98,11 @@ START
     expect(getWindowEmulator().getMemory()[valueAddress + 3]).toBe(2);
   });
 
-  it('loads Nibbles in the ide, renders the splash screen, and forwards gameplay input', async () => {
+  it('loads Nibbles from the file explorer, renders the splash screen, and forwards gameplay input', async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: /load nibbles/i }));
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /open file explorer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
     expect(window.editorCode).toContain('END NIBBLES');
 
     act(() => {
@@ -124,9 +126,7 @@ START
       { timeout: 7000 }
     );
 
-    const terminalScreen = screen.getByTestId('terminal-screen');
-
-    fireEvent.keyDown(terminalScreen, { key: 's' });
+    fireEvent.keyDown(window, { key: 's' });
 
     await waitFor(
       () => {
@@ -138,7 +138,7 @@ START
       { timeout: 7000 }
     );
 
-    fireEvent.keyDown(terminalScreen, { key: 'Enter' });
+    fireEvent.keyDown(window, { key: 'Enter' });
 
     await waitFor(
       () => {
@@ -149,7 +149,7 @@ START
       { timeout: 30000 }
     );
 
-    fireEvent.keyDown(terminalScreen, { key: 'd' });
+    fireEvent.keyDown(window, { key: 'd' });
 
     await waitFor(
       () => {
@@ -169,7 +169,8 @@ START
   it('can reset and relaunch Nibbles from a clean state', async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: /load nibbles/i }));
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /open file explorer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
 
     act(() => {
       window.dispatchEvent(new CustomEvent('emulator:run'));

@@ -1,9 +1,11 @@
+import type { FilesState } from '@/store/filesSlice';
 import type { SettingsState } from '@/store/settingsSlice';
 import type { UiShellState } from '@/store/uiShellSlice';
 
 export const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v1';
 
 export interface PersistedIdeState {
+  files?: FilesState;
   settings?: Pick<SettingsState, 'editorTheme' | 'followSystemTheme' | 'lineNumbers' | 'engineMode'>;
   uiShell?: Pick<
     UiShellState,

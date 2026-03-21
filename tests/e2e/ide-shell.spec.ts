@@ -7,17 +7,49 @@ test.describe('browser e2e ide shell', () => {
     await page.goto('/');
 
     const appContainer = page.getByTestId('app-container');
-    const contextToggle = page.getByTitle(/compatibility notes/i);
+    const appMenuButton = page.getByRole('button', { name: /open app menu/i });
+    const terminalTab = page.getByRole('tab', { name: /terminal/i });
     const codeTab = page.getByRole('tab', { name: /code/i });
+    const fileExplorerTab = page.getByRole('button', { name: /open file explorer/i });
     const initialTheme = await appContainer.getAttribute('data-theme');
-    const toggleLabel =
-      initialTheme === 'dark' ? /switch to light mode/i : /switch to dark mode/i;
+    const themeMenuLabel = initialTheme === 'dark' ? /m68k light/i : /m68k dark/i;
     const expectedTheme = initialTheme === 'dark' ? 'light' : 'dark';
 
-    await page.getByRole('button', { name: toggleLabel }).click();
+    const menuButtonBox = await appMenuButton.boundingBox();
+    const terminalTabBox = await terminalTab.boundingBox();
+    expect(menuButtonBox).not.toBeNull();
+    expect(terminalTabBox).not.toBeNull();
+    expect((menuButtonBox?.x ?? 0) + (menuButtonBox?.width ?? 0)).toBeLessThan(
+      terminalTabBox?.x ?? 0
+    );
+    const explorerTabBox = await fileExplorerTab.boundingBox();
+    expect(explorerTabBox).not.toBeNull();
+    expect(explorerTabBox?.x ?? 999).toBeLessThan(4);
+
+    await appMenuButton.click();
+    const appMenu = page.getByTestId('navbar-app-menu');
+    const styleMenuItem = page.getByRole('menuitem', { name: /style/i });
+    await expect(appMenu).toBeVisible();
+    await styleMenuItem.click({ trial: true });
+
+    const menuBox = await appMenu.boundingBox();
+    const buttonBox = await appMenuButton.boundingBox();
+    expect(menuBox).not.toBeNull();
+    expect(buttonBox).not.toBeNull();
+    expect(Math.abs((menuBox?.x ?? 0) - (buttonBox?.x ?? 0))).toBeLessThan(16);
+
+    await styleMenuItem.click();
+
+    const styleSubmenu = page.getByTestId('navbar-style-submenu');
+    const themeMenuItem = page.getByRole('menuitem', { name: themeMenuLabel });
+    await expect(styleSubmenu).toBeVisible();
+    await themeMenuItem.click({ trial: true });
+
+    await themeMenuItem.click();
     await expect(appContainer).toHaveAttribute('data-theme', expectedTheme);
 
-    await contextToggle.click();
+    await appMenuButton.click();
+    await page.getByRole('menuitem', { name: /compatibility notes/i }).click();
     await expect(page.getByLabel('Compatibility notes')).toBeVisible();
 
     await codeTab.click();

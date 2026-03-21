@@ -27,7 +27,7 @@ test.describe('browser e2e nibbles', () => {
 
     const terminalTab = page.getByRole('tab', { name: /terminal/i });
     const terminalScreen = page.getByTestId('terminal-screen');
-    const loadNibblesButton = page.getByRole('button', { name: /load nibbles/i });
+    const fileExplorerTab = page.getByRole('button', { name: /open file explorer/i });
     const runButton = page.getByRole('button', { name: /run program/i });
     const speedInput = page.getByLabel('Speed (x)');
 
@@ -38,7 +38,8 @@ test.describe('browser e2e nibbles', () => {
     expect(terminalBounds?.width ?? 0).toBeGreaterThan(200);
     expect(terminalBounds?.height ?? 0).toBeGreaterThan(200);
 
-    await loadNibblesButton.click();
+    await fileExplorerTab.hover();
+    await page.getByRole('button', { name: /nibbles\.asm/i }).click();
     await speedInput.fill('8');
     await runButton.click();
 
@@ -80,7 +81,6 @@ test.describe('browser e2e nibbles', () => {
 
     console.info(`Nibbles intro screen reached in ${Date.now() - introStartedAt}ms`);
 
-    await terminalScreen.click();
     await page.keyboard.press('s');
     await page.keyboard.press('Enter');
 

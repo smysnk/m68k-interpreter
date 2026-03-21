@@ -4,13 +4,20 @@ import {
   interpreterReducer as interpreterReduxReducer,
 } from '@m68k/interpreter-redux';
 import emulatorReducer from '@/store/emulatorSlice';
+import filesReducer, {
+  getActiveFile,
+  normalizeFilesState,
+  setActiveFileContent,
+  type FilesState,
+} from '@/store/filesSlice';
 import { readPersistedIdeState, writePersistedIdeState, type PersistedIdeState } from '@/store/persistence';
 import settingsReducer, { initialSettingsState } from '@/store/settingsSlice';
 import uiShellReducer, { initialUiShellState } from '@/store/uiShellSlice';
-import { resetEmulatorState } from '@/store/emulatorSlice';
+import { resetEmulatorState, setEditorCode } from '@/store/emulatorSlice';
 
 const combinedReducer = combineReducers({
   emulator: emulatorReducer,
+  files: filesReducer,
   interpreterRedux: interpreterReduxReducer,
   settings: settingsReducer,
   uiShell: uiShellReducer,
@@ -56,6 +63,19 @@ function sanitizeInterpreterReduxState(interpreterRedux: ReturnType<typeof combi
   };
 }
 
+function sanitizeFilesState(files: FilesState) {
+  return {
+    activeFileId: files.activeFileId,
+    items: files.items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      path: item.path,
+      kind: item.kind,
+      content: createSourceSummary(item.content),
+    })),
+  };
+}
+
 export function measureSerializedSize(value: unknown): number {
   try {
     const serialized = JSON.stringify(value);
@@ -72,10 +92,13 @@ export function sanitizeIdeDevToolsAction<A extends UnknownAction>(action: A, _i
 
   switch (action.type) {
     case 'emulator/setEditorCode':
+    case 'files/setActiveFileContent':
       return {
         ...action,
         payload: createSourceSummary(typeof action.payload === 'string' ? action.payload : ''),
       } as A;
+    case 'files/setActiveFile':
+      return action;
     case 'emulator/setEmulatorInstance':
       return {
         ...action,
@@ -136,6 +159,7 @@ export function sanitizeIdeDevToolsState<S>(state: S, _index?: number): S {
         length: typedState.emulator.history.length,
       },
     },
+    files: sanitizeFilesState(typedState.files),
     interpreterRedux: sanitizeInterpreterReduxState(typedState.interpreterRedux),
   } as S;
 }
@@ -173,34 +197,48 @@ const rootReducer = (
     );
   }
 
+  if (action.type === setEditorCode.type && state) {
+    return combinedReducer(
+      {
+        ...state,
+        files: filesReducer(state.files, setActiveFileContent((action as ReturnType<typeof setEditorCode>).payload)),
+      },
+      action
+    );
+  }
+
   return combinedReducer(state, action);
 };
 
 export function createIdeStore() {
   const persisted = readPersistedIdeState();
   const initialState = combinedReducer(undefined, { type: '@@INIT' });
-  const preloadedState =
-    persisted !== undefined
+  const files = normalizeFilesState(persisted?.files);
+  const activeFile = getActiveFile(files);
+  const preloadedState = {
+    ...initialState,
+    emulator: {
+      ...initialState.emulator,
+      editorCode: activeFile.content,
+    },
+    files,
+    settings: persisted?.settings
       ? {
-          ...initialState,
-          settings: persisted.settings
-            ? {
-                ...initialSettingsState,
-                ...persisted.settings,
-              }
-            : initialState.settings,
-          uiShell: persisted.uiShell
-            ? {
-                ...initialUiShellState,
-                ...persisted.uiShell,
-                layout: {
-                  ...initialUiShellState.layout,
-                  ...persisted.uiShell.layout,
-                },
-              }
-            : initialState.uiShell,
+          ...initialSettingsState,
+          ...persisted.settings,
         }
-      : undefined;
+      : initialState.settings,
+    uiShell: persisted?.uiShell
+      ? {
+          ...initialUiShellState,
+          ...persisted.uiShell,
+          layout: {
+            ...initialUiShellState.layout,
+            ...persisted.uiShell.layout,
+          },
+        }
+      : initialState.uiShell,
+  };
 
   const interpreterReduxIo = createInterpreterReduxIoMiddleware<ReturnType<typeof combinedReducer>>({
     selectState: (rootState) => rootState.interpreterRedux,
@@ -227,6 +265,7 @@ export function createIdeStore() {
   store.subscribe(() => {
     const state = store.getState();
     const persistableState: PersistedIdeState = {
+      files: state.files,
       settings: {
         editorTheme: state.settings.editorTheme,
         followSystemTheme: state.settings.followSystemTheme,
@@ -263,5 +302,6 @@ export type AppStore = ReturnType<typeof createIdeStore>;
 export type AppDispatch = AppStore['dispatch'];
 
 export * from '@/store/emulatorSlice';
+export * from '@/store/filesSlice';
 export * from '@/store/settingsSlice';
 export * from '@/store/uiShellSlice';

@@ -4,7 +4,7 @@ import App, { AppShell } from './App';
 import { nibblesSource } from '@/programs/nibbles';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { useEmulatorStore } from '@/stores/emulatorStore';
-import { createIdeStore, ideStore, resetSettingsState, setEngineMode } from '@/store';
+import { createIdeStore, ideStore, resetFilesState, resetSettingsState, setActiveFile, setEngineMode } from '@/store';
 import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
 import { IDE_PERSISTENCE_KEY } from '@/store/persistence';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
@@ -12,6 +12,15 @@ import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
 vi.mock('@vercel/analytics/react', () => ({
   Analytics: () => null,
 }));
+
+function openAppMenu(): void {
+  fireEvent.click(screen.getByRole('button', { name: /open app menu/i }));
+}
+
+function openStyleMenu(): void {
+  openAppMenu();
+  fireEvent.click(screen.getByRole('menuitem', { name: /style/i }));
+}
 
 function mockSystemTheme(theme: 'light' | 'dark'): void {
   Object.defineProperty(window, 'matchMedia', {
@@ -35,20 +44,23 @@ describe('App', () => {
     mockSystemTheme('light');
     window.localStorage.clear();
     useEmulatorStore.getState().reset();
+    ideStore.dispatch(resetFilesState());
     ideStore.dispatch(resetSettingsState());
-    useEmulatorStore.getState().setEditorCode(`ORG $1000
-  * Write your M68K assembly code here
-  * Your code goes here
-END`);
     window.editorCode = '';
     window.emulatorInstance = null;
   });
 
-  it('loads the Nibbles source into the editor', () => {
+  it('loads the selected sidebar file into the editor', () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /code/i }));
-    fireEvent.click(screen.getByRole('button', { name: /load nibbles/i }));
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /open file explorer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /scratch\.asm/i }));
+
+    expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
+    expect(useEmulatorStore.getState().editorCode).toContain('Write your M68K assembly code here');
+
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /open file explorer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
 
     expect(useEmulatorStore.getState().editorCode).toBe(nibblesSource);
     expect(window.editorCode).toContain('END NIBBLES');
@@ -67,16 +79,23 @@ END`);
     expect(screen.getByTestId('assembly-editor')).toBeInTheDocument();
   });
 
-  it('forces the default Interpreter engine when loading Nibbles', () => {
+  it('keeps Nibbles selected in the persisted file state', () => {
+    render(<App />);
+
+    expect(ideStore.getState().files.activeFileId).toBe('example:nibbles.asm');
+  });
+
+  it('forces the default Interpreter engine when opening Nibbles from the sidebar', () => {
     ideStore.dispatch(setEngineMode('interpreter-redux'));
+    ideStore.dispatch(setActiveFile('workspace:scratch.asm'));
 
     render(<App />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /code/i }));
-    fireEvent.click(screen.getByRole('button', { name: /load nibbles/i }));
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /open file explorer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
 
     expect(ideStore.getState().settings.engineMode).toBe('interpreter');
-    expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('stores the selected interpreter engine in Redux and resets the active runtime', () => {
@@ -140,10 +159,12 @@ END`);
 
     expect(screen.queryByLabelText('Compatibility notes')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle(/compatibility notes/i));
+    openAppMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /compatibility notes/i }));
     expect(screen.getByLabelText('Compatibility notes')).toBeVisible();
 
-    fireEvent.click(screen.getByTitle(/compatibility notes/i));
+    openAppMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /compatibility notes/i }));
     expect(screen.queryByLabelText('Compatibility notes')).not.toBeInTheDocument();
   });
 
@@ -153,7 +174,8 @@ END`);
     expect(container.querySelectorAll('[data-testid="resize-handle-root"]').length).toBe(1);
     expect(container.querySelectorAll('[data-testid="resize-handle-context"]').length).toBe(0);
 
-    fireEvent.click(screen.getByTitle(/compatibility notes/i));
+    openAppMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /compatibility notes/i }));
 
     expect(screen.getByLabelText('Compatibility notes')).toBeVisible();
     expect(container.querySelectorAll('[data-testid="resize-handle-context"]').length).toBe(1);
@@ -181,6 +203,25 @@ END`);
             inspectorVertical: [52, 48],
           },
         },
+        files: {
+          activeFileId: 'workspace:scratch.asm',
+          items: [
+            {
+              id: 'workspace:scratch.asm',
+              name: 'scratch.asm',
+              path: 'workspace/scratch.asm',
+              kind: 'workspace',
+              content: 'MOVE.L #7,D0',
+            },
+            {
+              id: 'example:nibbles.asm',
+              name: 'nibbles.asm',
+              path: 'examples/nibbles.asm',
+              kind: 'example',
+              content: nibblesSource,
+            },
+          ],
+        },
       })
     );
 
@@ -190,6 +231,7 @@ END`);
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-theme', 'dark');
     expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByLabelText('Compatibility notes')).toBeVisible();
+    expect(store.getState().emulator.editorCode).toBe('MOVE.L #7,D0');
   });
 
   it('propagates the overall app theme into the terminal surface', () => {
@@ -201,21 +243,27 @@ END`);
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(document.querySelector('.terminal-container')).toHaveAttribute('data-terminal-theme', 'dark');
     expect(document.querySelector('.retro-lcd')).toHaveAttribute('data-display-surface-mode', 'dark');
-    expect(screen.getByRole('button', { name: /switch to light mode/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /open app menu/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /interpreter engine/i })).toHaveTextContent('Interpreter');
   });
 
-  it('lets the navbar theme toggle switch the whole IDE theme', () => {
+  it('lets the app menu style selector switch the whole IDE theme', () => {
     mockSystemTheme('dark');
 
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: /switch to light mode/i }));
+    openStyleMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /m68k light/i }));
 
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-theme', 'light');
     expect(document.documentElement.dataset.theme).toBe('light');
     expect(document.querySelector('.terminal-container')).toHaveAttribute('data-terminal-theme', 'light');
     expect(document.querySelector('.retro-lcd')).toHaveAttribute('data-display-surface-mode', 'light');
-    expect(screen.getByRole('button', { name: /switch to dark mode/i })).toBeInTheDocument();
+
+    openStyleMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /m68k dark/i }));
+
+    expect(screen.getByTestId('app-container')).toHaveAttribute('data-theme', 'dark');
+    expect(document.documentElement.dataset.theme).toBe('dark');
   });
 });

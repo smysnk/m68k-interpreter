@@ -1,5 +1,5 @@
 import { createSelector } from '@reduxjs/toolkit';
-import { nibblesSource } from '@/programs/nibbles';
+import { selectActiveFileName } from '@/store/filesSlice';
 import type { RootState } from '@/store';
 
 export type RuntimeTone = 'good' | 'warn' | 'danger' | 'neutral';
@@ -35,7 +35,7 @@ const humanizeStatusToken = (value: string): string => value.replace(/_/g, ' ');
 export const selectStatusBarModel = createSelector(
   [
     (state: RootState) => state.settings.engineMode,
-    (state: RootState) => state.emulator.editorCode,
+    selectActiveFileName,
     (state: RootState) => state.emulator.executionState,
     (state: RootState) => state.emulator.delay,
     (state: RootState) => state.emulator.speedMultiplier,
@@ -49,7 +49,7 @@ export const selectStatusBarModel = createSelector(
   ],
   (
     engineMode,
-    editorCode,
+    activeFileName,
     executionState,
     delay,
     speedMultiplier,
@@ -72,8 +72,6 @@ export const selectStatusBarModel = createSelector(
               ? { label: 'Running', tone: 'good' as const }
               : { label: 'Ready', tone: 'neutral' as const };
 
-    const programLabel =
-      editorCode === nibblesSource ? 'Nibbles' : editorCode.trim().length > 0 ? 'Custom source' : 'Empty buffer';
     const locationLabel =
       workspaceTab === 'code'
         ? `Ln ${editorCursorLine}, Col ${editorCursorColumn}`
@@ -82,7 +80,7 @@ export const selectStatusBarModel = createSelector(
     return {
       runtime,
       engineLabel: engineMode === 'interpreter-redux' ? 'Interpreter Redux' : 'Interpreter',
-      programLabel,
+      programLabel: activeFileName,
       inspectorLabel: activeInspectorPane,
       helpLabel: contextOpen ? 'Open' : 'Closed',
       terminalGeometryLabel: `${terminal.columns}x${terminal.rows}`,

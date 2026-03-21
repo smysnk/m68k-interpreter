@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { flushSync } from 'react-dom';
 import { useTheme } from 'styled-components';
@@ -14,23 +14,22 @@ import Terminal from './Terminal';
 import HelpPanel from './HelpPanel';
 import Memory from './Memory';
 import Flags from './Flags';
+import FileExplorerSidebar from './FileExplorerSidebar';
 import { useEmulatorEvents } from '@/hooks/useEmulatorEvents';
 import { IdeProviders } from '@/theme/IdeProviders';
 import { editorThemes } from '@/theme/editorThemeRegistry';
-import { nibblesSource } from '@/programs/nibbles';
 import {
   ideStore,
+  setEditorTheme,
   setInspectorView,
-  setEditorCode,
-  setEngineMode,
+  setFollowSystemTheme,
   setInspectorVerticalLayout,
+  setLineNumbers,
   setRootHorizontalLayout,
   setRootHorizontalWithContextLayout,
   setWorkspaceTab,
   syncSystemTheme,
   toggleContextView,
-  toggleEditorTheme,
-  toggleInspectorView,
   toggleShowFlags,
   type RootState,
   type AppDispatch,
@@ -40,6 +39,12 @@ import '../styles/main.css';
 function AppShell(): React.ReactElement {
   const dispatch = useDispatch<AppDispatch>();
   const theme = useTheme();
+  const navbarShellRef = useRef<HTMLDivElement | null>(null);
+  const statusBarShellRef = useRef<HTMLDivElement | null>(null);
+  const [chromeOffsets, setChromeOffsets] = useState({
+    bottom: 38,
+    top: 58,
+  });
   const showFlags = useSelector((state: RootState) => state.emulator.showFlags);
   const workspaceTab = useSelector((state: RootState) => state.uiShell.workspaceTab);
   const inspectorView = useSelector((state: RootState) => state.uiShell.inspectorView);
@@ -54,10 +59,35 @@ function AppShell(): React.ReactElement {
     (state: RootState) => state.uiShell.contextOpen && state.uiShell.contextView === 'help'
   );
   const followSystemTheme = useSelector((state: RootState) => state.settings.followSystemTheme);
+  const editorTheme = useSelector((state: RootState) => state.settings.editorTheme);
   const engineMode = useSelector((state: RootState) => state.settings.engineMode);
+  const lineNumbers = useSelector((state: RootState) => state.settings.lineNumbers);
   const activeInspectorPane = showFlags ? 'flags' : inspectorView;
 
   useEmulatorEvents();
+
+  useLayoutEffect(() => {
+    const updateChromeOffsets = (): void => {
+      const top = navbarShellRef.current?.getBoundingClientRect().height ?? chromeOffsets.top;
+      const bottom = statusBarShellRef.current?.getBoundingClientRect().height ?? chromeOffsets.bottom;
+
+      setChromeOffsets((current) =>
+        current.top === top && current.bottom === bottom
+          ? current
+          : {
+              top,
+              bottom,
+            }
+      );
+    };
+
+    updateChromeOffsets();
+    window.addEventListener('resize', updateChromeOffsets);
+
+    return () => {
+      window.removeEventListener('resize', updateChromeOffsets);
+    };
+  }, [chromeOffsets.bottom, chromeOffsets.top]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
@@ -116,22 +146,26 @@ function AppShell(): React.ReactElement {
     };
   }, [dispatch]);
 
-  const handleLoadNibbles = (): void => {
-    dispatch(setWorkspaceTab('terminal'));
-    dispatch(setEngineMode('interpreter'));
-    dispatch(setEditorCode(nibblesSource));
-    window.editorCode = nibblesSource;
-    window.dispatchEvent(new CustomEvent('emulator:reset'));
-  };
-
-  const handleToggleInspector = (): void => {
+  const handleShowRegisters = (): void => {
     if (showFlags) {
       dispatch(toggleShowFlags());
-      dispatch(setInspectorView('memory'));
-      return;
     }
 
-    dispatch(toggleInspectorView());
+    dispatch(setInspectorView('registers'));
+  };
+
+  const handleShowMemory = (): void => {
+    if (showFlags) {
+      dispatch(toggleShowFlags());
+    }
+
+    dispatch(setInspectorView('memory'));
+  };
+
+  const handleShowFlags = (): void => {
+    if (!showFlags) {
+      dispatch(toggleShowFlags());
+    }
   };
 
   const handleRootLayout = (sizes: number[]): void => {
@@ -147,18 +181,26 @@ function AppShell(): React.ReactElement {
 
   return (
     <div className="app-container" data-testid="app-container" data-theme={theme.surfaceMode}>
-      <Navbar
-        activeInspectorPane={activeInspectorPane}
-        activeWorkspaceTab={workspaceTab}
-        onLoadNibbles={handleLoadNibbles}
-        onWorkspaceTabChange={(tab) => dispatch(setWorkspaceTab(tab))}
-        onToggleTheme={() => dispatch(toggleEditorTheme())}
-        onToggleHelp={() => dispatch(toggleContextView('help'))}
-        onToggleMemory={handleToggleInspector}
-        engineMode={engineMode}
-        theme={theme.surfaceMode}
-        showHelp={showHelp}
-      />
+      <div className="app-chrome-top" ref={navbarShellRef}>
+        <Navbar
+          activeInspectorPane={activeInspectorPane}
+          activeWorkspaceTab={workspaceTab}
+          editorTheme={editorTheme}
+          onSetEditorTheme={(nextTheme) => dispatch(setEditorTheme(nextTheme))}
+          onSetFollowSystemTheme={(value) => dispatch(setFollowSystemTheme(value))}
+          onSetLineNumbers={(value) => dispatch(setLineNumbers(value))}
+          onShowFlags={handleShowFlags}
+          onShowMemory={handleShowMemory}
+          onShowRegisters={handleShowRegisters}
+          onWorkspaceTabChange={(tab) => dispatch(setWorkspaceTab(tab))}
+          onToggleHelp={() => dispatch(toggleContextView('help'))}
+          engineMode={engineMode}
+          followSystemTheme={followSystemTheme}
+          lineNumbers={lineNumbers}
+          showHelp={showHelp}
+        />
+      </div>
+      <FileExplorerSidebar bottomOffset={chromeOffsets.bottom} topOffset={chromeOffsets.top} />
       <main className="main-content">
         <PanelGroup
           className="main-shell"
@@ -261,7 +303,9 @@ function AppShell(): React.ReactElement {
           ) : null}
         </PanelGroup>
       </main>
-      <StatusBar />
+      <div className="app-chrome-bottom" ref={statusBarShellRef}>
+        <StatusBar />
+      </div>
       <Analytics />
     </div>
   );

@@ -14,6 +14,7 @@ import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import {
   ideStore,
   setEditorCode as setEditorCodeAction,
+  setActiveFileContent as setActiveFileContentAction,
   setRegisters as setRegistersAction,
   setMemory as setMemoryAction,
   setFlags as setFlagsAction,
@@ -94,7 +95,10 @@ function createActions(dispatch: AppDispatch) {
   };
 
   return {
-    setEditorCode: (code: string) => dispatch(setEditorCodeAction(code)),
+    setEditorCode: (code: string) => {
+      dispatch(setActiveFileContentAction(code));
+      dispatch(setEditorCodeAction(code));
+    },
     setRegisters: (registers: Partial<Registers>) => dispatch(setRegistersAction(registers)),
     setMemory: (memory: MemoryMeta) => dispatch(setMemoryAction(memory)),
     setFlags: (flags: Partial<ConditionFlags>) => dispatch(setFlagsAction(flags)),

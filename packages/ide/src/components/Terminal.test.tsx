@@ -109,6 +109,44 @@ describe('Terminal', () => {
     expect(queueInput).toHaveBeenNthCalledWith(3, 'd');
   });
 
+  it('forwards page-level keyboard input into the emulator queue when the page is active', () => {
+    const queueInput = vi.fn();
+    const hasFocusSpy = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+
+    useEmulatorStore.getState().setEmulatorInstance({
+      queueInput,
+    } as unknown as Emulator);
+
+    renderWithIdeProviders(<Terminal />);
+
+    fireEvent.keyDown(document.body, { key: 'ArrowLeft' });
+    fireEvent.keyDown(document.body, { key: 'Enter' });
+
+    expect(queueInput).toHaveBeenNthCalledWith(1, 'a');
+    expect(queueInput).toHaveBeenNthCalledWith(2, 0x0d);
+
+    hasFocusSpy.mockRestore();
+  });
+
+  it('does not steal input from editable elements on the page', () => {
+    const queueInput = vi.fn();
+
+    useEmulatorStore.getState().setEmulatorInstance({
+      queueInput,
+    } as unknown as Emulator);
+
+    renderWithIdeProviders(
+      <div>
+        <input aria-label="Notes" />
+        <Terminal />
+      </div>
+    );
+
+    fireEvent.keyDown(screen.getByRole('textbox', { name: /notes/i }), { key: 'd' });
+
+    expect(queueInput).not.toHaveBeenCalled();
+  });
+
   it('syncs the retro display surface mode with the provided app theme', () => {
     ideStore.dispatch(setEditorTheme(EditorThemeEnum.M68K_LIGHT));
 

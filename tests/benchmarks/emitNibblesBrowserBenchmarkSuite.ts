@@ -100,15 +100,16 @@ async function runGameplayScenarios(browser: Browser): Promise<BrowserBenchmarkS
 
     const terminalTab = page.getByRole('tab', { name: /terminal/i });
     const terminalScreen = page.getByTestId('terminal-screen');
-    const loadNibblesButton = page.getByRole('button', { name: /load nibbles/i });
+    const fileExplorerTab = page.getByRole('button', { name: /open file explorer/i });
     const runButton = page.getByRole('button', { name: /run program/i });
     const speedInput = page.getByLabel('Speed (x)');
 
     await terminalTab.waitFor({ state: 'visible', timeout: 30_000 });
     await terminalScreen.waitFor({ state: 'visible', timeout: 30_000 });
-    await loadNibblesButton.waitFor({ state: 'visible', timeout: 30_000 });
+    await fileExplorerTab.waitFor({ state: 'visible', timeout: 30_000 });
     await runButton.waitFor({ state: 'visible', timeout: 30_000 });
-    await loadNibblesButton.click();
+    await fileExplorerTab.hover();
+    await page.getByRole('button', { name: /nibbles\.asm/i }).click();
     await speedInput.fill(speedMultiplier);
 
     const introStartedAt = performance.now();

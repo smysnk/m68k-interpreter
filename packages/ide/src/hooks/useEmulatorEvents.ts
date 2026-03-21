@@ -5,7 +5,7 @@ import {
   type InterpreterReduxAction,
 } from '@m68k/interpreter-redux';
 import { Emulator, type ExecutionState } from '@m68k/interpreter';
-import { ideStore } from '@/store';
+import { ideStore, selectActiveFile } from '@/store';
 import { runEmulationFrame } from '@/runtime/executionLoop';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import { syncRuntimeFrameToIde } from '@/runtime/syncRuntimeFrame';
@@ -80,16 +80,9 @@ function cancelFrame(handle: number): void {
 
 export const useEmulatorEvents = () => {
   const engineMode = useSelector((state: RootState) => state.settings.engineMode);
-  const {
-    editorCode,
-    reset,
-    setExecutionState,
-    setEmulatorInstance,
-    syncEmulatorFrame,
-    toggleShowFlags,
-    delay,
-    speedMultiplier,
-  } = useEmulatorStore();
+  const { reset, setExecutionState, setEmulatorInstance, syncEmulatorFrame, toggleShowFlags, delay, speedMultiplier } =
+    useEmulatorStore();
+  const activeFile = useSelector((state: RootState) => selectActiveFile(state));
   const emulatorRef = useRef<IdeRuntimeSession | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const executionDelayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -99,8 +92,8 @@ export const useEmulatorEvents = () => {
   const engineModeRef = useRef(engineMode);
 
   useEffect(() => {
-    window.editorCode = editorCode;
-  }, [editorCode]);
+    window.editorCode = activeFile.content;
+  }, [activeFile.content]);
 
   useEffect(() => {
     delayRef.current = delay;
@@ -211,13 +204,10 @@ export const useEmulatorEvents = () => {
       queueFrame();
     };
 
-    const initializeEmulator = (code: string): IdeRuntimeSession | null => {
+    const initializeEmulator = (code: string, nextEngineMode = engineModeRef.current): IdeRuntimeSession | null => {
       clearScheduledExecution();
 
-      const emulator =
-        engineModeRef.current === 'interpreter-redux'
-          ? createReducerEngine(code)
-          : new Emulator(code);
+      const emulator = nextEngineMode === 'interpreter-redux' ? createReducerEngine(code) : new Emulator(code);
       emulatorRef.current = emulator;
       setEmulatorInstance(emulator);
       window.emulatorInstance = emulator;
@@ -254,7 +244,8 @@ export const useEmulatorEvents = () => {
       return emulator;
     };
 
-    const getCurrentEditorCode = (): string => ideStore.getState().emulator.editorCode || '';
+    const getCurrentEditorCode = (): string =>
+      selectActiveFile(ideStore.getState()).content || ideStore.getState().emulator.editorCode || '';
 
     const handleRun = (): void => {
       const code = getCurrentEditorCode();
