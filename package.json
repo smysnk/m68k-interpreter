@@ -14,6 +14,7 @@
     "build:ide": "yarn workspace @m68k/ide build",
     "build:pages": "yarn workspace @m68k/ide build:pages",
     "capture:readme-demo": "node ./scripts/capture-readme-demo.mjs",
+    "readme:videos": "node ./scripts/upload-readme-videos.mjs",
     "preview": "yarn workspace @m68k/ide preview --hostname ${WEB_HOST:-127.0.0.1} --port ${WEB_PORT:-3000}",
     "preview:e2e": "yarn build:ide && yarn workspace @m68k/ide preview --hostname 127.0.0.1 --port 4173",
     "test": "yarn test:station",
