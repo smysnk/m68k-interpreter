@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import Registers from './Registers';
 import { createIdeStore, setFlags, setRegisters } from '@/store';
@@ -12,6 +12,10 @@ function expandRegisterGroup(name: RegExp | string): void {
 }
 
 describe('Registers', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   it('renders all supported registers with inline hex, decimal, and binary views', () => {
     const store = createIdeStore();
     store.dispatch(
@@ -67,15 +71,15 @@ describe('Registers', () => {
     expect(screen.queryByLabelText('Download registers')).not.toBeInTheDocument();
     expect(document.querySelector('.registers-matrix')).not.toBeInTheDocument();
     expect(document.querySelector('.register-group-section')).not.toBeInTheDocument();
-    expect(screen.getByText('D0')).toBeInTheDocument();
-    expect(screen.getByText('D7')).toBeInTheDocument();
-    expect(screen.getByText('A0')).toBeInTheDocument();
-    expect(screen.getByText('A7')).toBeInTheDocument();
-    expect(screen.getByText('PC')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle D0 register view' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle D7 register view' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle A0 register view' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle A7 register view' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle PC register view' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Toggle CCR register view' })).toBeInTheDocument();
-    expect(screen.getByText('SR')).toBeInTheDocument();
-    expect(screen.getByText('USP')).toBeInTheDocument();
-    expect(screen.getByText('SSP')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle SR register view' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle USP register view' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle SSP register view' })).toBeInTheDocument();
 
     expect(screen.getByLabelText('D0 full hex value')).toHaveValue('0x000000FF');
     expect(screen.getByLabelText('SR full hex value')).toHaveTextContent('0x000000A5');

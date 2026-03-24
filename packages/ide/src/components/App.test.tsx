@@ -51,21 +51,23 @@ describe('App', () => {
   });
 
   it('loads the selected sidebar file into the editor', async () => {
-    render(<App />);
+    const store = createIdeStore();
+
+    renderWithIdeProviders(<AppShell />, { store });
 
     fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
     fireEvent.click(await screen.findByRole('button', { name: /scratch\.asm/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
-      expect(useEmulatorStore.getState().editorCode).toContain('Write your M68K assembly code here');
+      expect(store.getState().emulator.editorCode).toContain('Write your M68K assembly code here');
     });
 
     fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
     fireEvent.click(await screen.findByRole('button', { name: /nibbles\.asm/i }));
 
     await waitFor(() => {
-      expect(useEmulatorStore.getState().editorCode).toBe(nibblesSource);
+      expect(store.getState().emulator.editorCode).toBe(nibblesSource);
       expect(window.editorCode).toContain('END NIBBLES');
     });
   });
