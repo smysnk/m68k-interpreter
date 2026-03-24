@@ -1,11 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { chromium } from '@playwright/test';
 
 const baseUrl = process.env.DEMO_BASE_URL || 'http://127.0.0.1:4173';
 const outputDir = path.resolve(process.cwd(), '.tmp/readme-demo');
 const finalVideoPath = path.resolve(process.cwd(), 'docs/assets/m68k-interpreter-nibbles-demo.webm');
 const persistenceKey = 'm68k.ide.preferences.v1';
+const trimmedVideoPath = path.resolve(outputDir, 'trimmed-readme-demo.webm');
+const leadingTrimSeconds = process.env.DEMO_TRIM_START_SECONDS || '0.8';
 
 async function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -179,5 +182,23 @@ if (!capturedVideo) {
   throw new Error('No recorded demo video was produced.');
 }
 
-fs.copyFileSync(capturedVideo, finalVideoPath);
+execFileSync(
+  'ffmpeg',
+  [
+    '-y',
+    '-ss',
+    leadingTrimSeconds,
+    '-i',
+    capturedVideo,
+    '-c:v',
+    'libvpx',
+    '-an',
+    trimmedVideoPath,
+  ],
+  {
+    stdio: 'ignore',
+  }
+);
+
+fs.copyFileSync(trimmedVideoPath, finalVideoPath);
 console.log(`Saved demo video to ${finalVideoPath}`);
