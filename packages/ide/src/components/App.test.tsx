@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App, { AppShell } from './App';
+import FileExplorerSidebar from './FileExplorerSidebar';
 import { nibblesSource } from '@/programs/nibbles';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { useEmulatorStore } from '@/stores/emulatorStore';
@@ -53,13 +54,13 @@ describe('App', () => {
   it('loads the selected sidebar file into the editor', async () => {
     const store = createIdeStore();
 
-    renderWithIdeProviders(<AppShell />, { store });
+    renderWithIdeProviders(<FileExplorerSidebar />, { store });
 
     fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
     fireEvent.click(await screen.findByRole('button', { name: /scratch\.asm/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
+      expect(store.getState().uiShell.workspaceTab).toBe('code');
       expect(store.getState().emulator.editorCode).toContain('Write your M68K assembly code here');
     });
 

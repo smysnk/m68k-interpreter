@@ -59,27 +59,35 @@ describe('Registers', () => {
     expandRegisterGroup(/data registers \(d0-d7\)/i);
     expandRegisterGroup(/address registers \(a0-a7\)/i);
     expandRegisterGroup(/control registers/i);
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle D0 register view' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle D7 register view' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle CCR register view' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle SR register view' }));
-    expect(screen.getByRole('button', { name: 'Toggle D0 register view' })).toHaveAttribute(
-      'data-register-group',
-      'data'
-    );
+
+    const d0Toggle = screen.getByRole('button', { name: 'Toggle D0 register view' });
+    const d7Toggle = screen.getByRole('button', { name: 'Toggle D7 register view' });
+    const a0Toggle = screen.getByRole('button', { name: 'Toggle A0 register view' });
+    const a7Toggle = screen.getByRole('button', { name: 'Toggle A7 register view' });
+    const pcToggle = screen.getByRole('button', { name: 'Toggle PC register view' });
+    const ccrToggle = screen.getByRole('button', { name: 'Toggle CCR register view' });
+    const srToggle = screen.getByRole('button', { name: 'Toggle SR register view' });
+    const uspToggle = screen.getByRole('button', { name: 'Toggle USP register view' });
+    const sspToggle = screen.getByRole('button', { name: 'Toggle SSP register view' });
+
+    fireEvent.click(d0Toggle);
+    fireEvent.click(d7Toggle);
+    fireEvent.click(ccrToggle);
+    fireEvent.click(srToggle);
+
+    expect(d0Toggle).toHaveAttribute('data-register-group', 'data');
     expect(screen.queryByText('Registers')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Download registers')).not.toBeInTheDocument();
     expect(document.querySelector('.registers-matrix')).not.toBeInTheDocument();
     expect(document.querySelector('.register-group-section')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Toggle D0 register view' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Toggle D7 register view' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Toggle A0 register view' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Toggle A7 register view' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Toggle PC register view' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Toggle CCR register view' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Toggle SR register view' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Toggle USP register view' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Toggle SSP register view' })).toBeInTheDocument();
+    expect(d7Toggle).toBeInTheDocument();
+    expect(a0Toggle).toBeInTheDocument();
+    expect(a7Toggle).toBeInTheDocument();
+    expect(pcToggle).toBeInTheDocument();
+    expect(ccrToggle).toBeInTheDocument();
+    expect(srToggle).toBeInTheDocument();
+    expect(uspToggle).toBeInTheDocument();
+    expect(sspToggle).toBeInTheDocument();
 
     expect(screen.getByLabelText('D0 full hex value')).toHaveValue('0x000000FF');
     expect(screen.getByLabelText('SR full hex value')).toHaveTextContent('0x000000A5');
