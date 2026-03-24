@@ -11,23 +11,15 @@ export interface StatusBarModel {
   };
   engineLabel: string;
   programLabel: string;
-  inspectorLabel: string;
-  helpLabel: string;
-  terminalGeometryLabel: string;
-  speedLabel: string;
-  delayLabel: string;
-  viewLabel: string;
   locationLabel: string;
   frameLabel: string;
   stopLabel: string;
 }
 
 export const selectWorkspaceTab = (state: RootState) => state.uiShell.workspaceTab;
-export const selectContextOpen = (state: RootState) =>
-  state.uiShell.contextOpen && state.uiShell.contextView === 'help';
 export const selectActiveInspectorPane = createSelector(
-  [(state: RootState) => state.emulator.showFlags, (state: RootState) => state.uiShell.inspectorView],
-  (showFlags, inspectorView) => (showFlags ? 'flags' : inspectorView)
+  [(state: RootState) => state.uiShell.inspectorView],
+  (inspectorView) => inspectorView
 );
 
 const humanizeStatusToken = (value: string): string => value.replace(/_/g, ' ');
@@ -37,29 +29,21 @@ export const selectStatusBarModel = createSelector(
     (state: RootState) => state.settings.engineMode,
     selectActiveFileName,
     (state: RootState) => state.emulator.executionState,
-    (state: RootState) => state.emulator.delay,
-    (state: RootState) => state.emulator.speedMultiplier,
     (state: RootState) => state.emulator.runtimeMetrics,
     (state: RootState) => state.emulator.terminal,
     (state: RootState) => state.uiShell.editorCursorLine,
     (state: RootState) => state.uiShell.editorCursorColumn,
     selectWorkspaceTab,
-    selectContextOpen,
-    selectActiveInspectorPane,
   ],
   (
     engineMode,
     activeFileName,
     executionState,
-    delay,
-    speedMultiplier,
     runtimeMetrics,
     terminal,
     editorCursorLine,
     editorCursorColumn,
-    workspaceTab,
-    contextOpen,
-    activeInspectorPane
+    workspaceTab
   ): StatusBarModel => {
     const runtime =
       executionState.exception !== null
@@ -81,12 +65,6 @@ export const selectStatusBarModel = createSelector(
       runtime,
       engineLabel: engineMode === 'interpreter-redux' ? 'Interpreter Redux' : 'Interpreter',
       programLabel: activeFileName,
-      inspectorLabel: activeInspectorPane,
-      helpLabel: contextOpen ? 'Open' : 'Closed',
-      terminalGeometryLabel: `${terminal.columns}x${terminal.rows}`,
-      speedLabel: `${speedMultiplier}x`,
-      delayLabel: `${delay}s`,
-      viewLabel: workspaceTab === 'code' ? 'Code' : 'Terminal',
       locationLabel,
       frameLabel: `${runtimeMetrics.lastFrameInstructions} instr / ${runtimeMetrics.lastFrameDurationMs.toFixed(1)} ms`,
       stopLabel: humanizeStatusToken(runtimeMetrics.lastStopReason),

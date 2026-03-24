@@ -48,6 +48,9 @@ START
 
     adapter.setRegisterValue(9, 0x1234);
     expect(adapter.getRegisters()[9]).toBe(0x1234);
+    expect(adapter.getUSP()).toBe(adapter.getRegisters()[7] >>> 0);
+    expect(adapter.getSSP()).toBe(adapter.getRegisters()[7] >>> 0);
+    expect(adapter.getSR()).toBe(adapter.getCCR() & 0x1f);
 
     for (let step = 0; step < 8; step += 1) {
       if (adapter.emulationStep()) {
@@ -94,6 +97,9 @@ START
 
     adapter.setRegisterValue(9, 0x1234);
     expect(adapter.getRegisters()[9]).toBe(0x1234);
+    expect(adapter.getUSP()).toBe(adapter.getRegisters()[7] >>> 0);
+    expect(adapter.getSSP()).toBe(adapter.getRegisters()[7] >>> 0);
+    expect(adapter.getSR()).toBe(adapter.getCCR() & 0x1f);
 
     for (let step = 0; step < 8; step += 1) {
       if (adapter.emulationStep()) {

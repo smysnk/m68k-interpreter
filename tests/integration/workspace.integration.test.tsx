@@ -43,7 +43,6 @@ describe('workspace integration', () => {
 
     expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'false');
-    expect(screen.getByText('Last Instruction')).toBeInTheDocument();
     expect(screen.getByTestId('terminal-screen')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /code/i }));
@@ -112,7 +111,7 @@ START
     await waitFor(
       () => {
         expect(getEmulatorTerminalText()).toContain('Difficulty');
-        expect(getEmulatorTerminalText()).toContain('Programmed By Josh Henn');
+        expect(getEmulatorTerminalText()).toContain('Programmed By Joshua Bellamy');
         expect(document.querySelector('.terminal-container')).toHaveAttribute('data-terminal-theme', 'light');
         expect(document.querySelector('.retro-lcd')).toHaveAttribute('data-display-surface-mode', 'light');
       },
@@ -194,7 +193,7 @@ START
 
     await waitFor(() => {
       expect(window.emulatorInstance).toBeNull();
-      expect(screen.getByText('Last Instruction').closest('.last-instruction')).toHaveTextContent('Ready');
+      expect(useEmulatorStore.getState().executionState.lastInstruction).toBe('Ready');
       expect(terminalSurfaceStore.getText().trim()).toBe('');
     });
 
@@ -205,7 +204,7 @@ START
     await waitFor(
       () => {
         expect(getEmulatorTerminalText()).toContain('Difficulty');
-        expect(getEmulatorTerminalText()).toContain('Programmed By Josh Henn');
+        expect(getEmulatorTerminalText()).toContain('Programmed By Joshua Bellamy');
       },
       { timeout: 30000 }
     );

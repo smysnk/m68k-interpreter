@@ -55,4 +55,13 @@ describe('terminalAnsiPatch', () => {
     expect(patch).toContain('XYZ');
     expect(patch).toContain('789');
   });
+
+  it('emits decoded CP437 glyphs in ANSI patches', () => {
+    const frameBuffer = createTerminalFrameBuffer(3, 1);
+    frameBuffer.charBytes.set([0xda, 0xc4, 0xbf]);
+
+    const patch = buildTerminalAnsiFullRedraw(frameBuffer);
+
+    expect(patch).toContain('┌─┐');
+  });
 });

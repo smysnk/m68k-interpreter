@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   createStoreBackedReducerInterpreterAdapter,
   type InterpreterReduxAction,
@@ -10,8 +10,15 @@ import { runEmulationFrame } from '@/runtime/executionLoop';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import { syncRuntimeFrameToIde } from '@/runtime/syncRuntimeFrame';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
-import { useEmulatorStore, type RuntimeMetrics } from '@/stores/emulatorStore';
-import type { AppDispatch, RootState } from '@/store';
+import type { RuntimeMetrics } from '@/stores/emulatorStore';
+import {
+  resetEmulatorState,
+  setEmulatorInstance as setEmulatorInstanceAction,
+  setExecutionState as setExecutionStateAction,
+  syncEmulatorFrame as syncEmulatorFrameAction,
+  type AppDispatch,
+  type RootState,
+} from '@/store';
 
 declare global {
   interface Window {
@@ -24,6 +31,15 @@ const FRAME_FALLBACK_MS = 16;
 const TEST_FRAME_FALLBACK_MS = 0;
 const TEST_FRAME_BUDGET_MS = 250;
 const HIDDEN_FRAME_BUDGET_MS = 24;
+const REGISTER_SYNC_INTERVAL_MS = 250;
+
+function getCurrentTimestamp(): number {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now();
+  }
+
+  return Date.now();
+}
 
 function isJsdomEnvironment(): boolean {
   return typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
@@ -79,9 +95,12 @@ function cancelFrame(handle: number): void {
 }
 
 export const useEmulatorEvents = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  const runtimeIntents = useSelector((state: RootState) => state.emulator.runtimeIntents);
   const engineMode = useSelector((state: RootState) => state.settings.engineMode);
-  const { reset, setExecutionState, setEmulatorInstance, syncEmulatorFrame, toggleShowFlags, delay, speedMultiplier } =
-    useEmulatorStore();
+  const currentRegisters = useSelector((state: RootState) => state.emulator.registers);
+  const delay = useSelector((state: RootState) => state.emulator.delay);
+  const speedMultiplier = useSelector((state: RootState) => state.emulator.speedMultiplier);
   const activeFile = useSelector((state: RootState) => selectActiveFile(state));
   const emulatorRef = useRef<IdeRuntimeSession | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -90,6 +109,18 @@ export const useEmulatorEvents = () => {
   const delayRef = useRef(delay);
   const speedMultiplierRef = useRef(speedMultiplier);
   const engineModeRef = useRef(engineMode);
+  const handleRunRef = useRef<() => void>(() => undefined);
+  const handleResumeRef = useRef<() => void>(() => undefined);
+  const handleStepRef = useRef<() => void>(() => undefined);
+  const handleUndoRef = useRef<() => void>(() => undefined);
+  const handleResetRef = useRef<() => void>(() => undefined);
+  const previousRunIntentRef = useRef(runtimeIntents.run);
+  const previousResumeIntentRef = useRef(runtimeIntents.resume);
+  const previousStepIntentRef = useRef(runtimeIntents.step);
+  const previousUndoIntentRef = useRef(runtimeIntents.undo);
+  const previousResetIntentRef = useRef(runtimeIntents.reset);
+  const lastRegisterSyncAtRef = useRef<number>(0);
+  const currentRegistersRef = useRef(currentRegisters);
 
   useEffect(() => {
     window.editorCode = activeFile.content;
@@ -108,14 +139,31 @@ export const useEmulatorEvents = () => {
   }, [engineMode]);
 
   useEffect(() => {
+    currentRegistersRef.current = currentRegisters;
+  }, [currentRegisters]);
+
+  useEffect(() => {
     const syncStoreFromEmulator = (
       emulator: IdeRuntimeSession,
       options: {
         executionState?: Partial<ExecutionState>;
         runtimeMetrics?: Partial<RuntimeMetrics>;
+        forceRegisterSync?: boolean;
       } = {}
     ): void => {
-      syncRuntimeFrameToIde(emulator, syncEmulatorFrame, options);
+      const now = getCurrentTimestamp();
+      const shouldSyncRegisters =
+        options.forceRegisterSync === true || now - lastRegisterSyncAtRef.current >= REGISTER_SYNC_INTERVAL_MS;
+
+      if (shouldSyncRegisters) {
+        lastRegisterSyncAtRef.current = now;
+      }
+
+      syncRuntimeFrameToIde(emulator, (frame) => dispatch(syncEmulatorFrameAction(frame)), {
+        executionState: options.executionState,
+        runtimeMetrics: options.runtimeMetrics,
+        registersOverride: shouldSyncRegisters ? undefined : currentRegistersRef.current,
+      });
     };
 
     const clearScheduledExecution = (): void => {
@@ -169,6 +217,7 @@ export const useEmulatorEvents = () => {
           lastFrameDurationMs: frameResult.frameDurationMs,
           lastStopReason: frameResult.stopReason,
         },
+        forceRegisterSync: waitingForInput || halted || hasException,
       });
 
       if (frameResult.shouldContinue) {
@@ -209,7 +258,7 @@ export const useEmulatorEvents = () => {
 
       const emulator = nextEngineMode === 'interpreter-redux' ? createReducerEngine(code) : new Emulator(code);
       emulatorRef.current = emulator;
-      setEmulatorInstance(emulator);
+      dispatch(setEmulatorInstanceAction(emulator));
       window.emulatorInstance = emulator;
 
       if (emulator.getException()) {
@@ -224,6 +273,7 @@ export const useEmulatorEvents = () => {
             lastFrameDurationMs: 0,
             lastStopReason: 'exception',
           },
+          forceRegisterSync: true,
         });
         return null;
       }
@@ -239,6 +289,7 @@ export const useEmulatorEvents = () => {
           lastFrameDurationMs: 0,
           lastStopReason: 'initialized',
         },
+        forceRegisterSync: true,
       });
 
       return emulator;
@@ -248,14 +299,14 @@ export const useEmulatorEvents = () => {
       selectActiveFile(ideStore.getState()).content || ideStore.getState().emulator.editorCode || '';
 
     const handleRun = (): void => {
-      const code = getCurrentEditorCode();
-      if (!code.trim()) {
-        setExecutionState({
-          lastInstruction: 'Error: No code to execute',
-          exception: 'No code provided',
-        });
-        return;
-      }
+        const code = getCurrentEditorCode();
+        if (!code.trim()) {
+          dispatch(setExecutionStateAction({
+            lastInstruction: 'Error: No code to execute',
+            exception: 'No code provided',
+          }));
+          return;
+        }
 
       const emulator = initializeEmulator(code);
       if (!emulator) {
@@ -271,11 +322,11 @@ export const useEmulatorEvents = () => {
         return;
       }
 
-      setExecutionState({
+      dispatch(setExecutionStateAction({
         started: true,
         ended: false,
         stopped: false,
-      });
+      }));
       scheduleExecutionFrame();
     };
 
@@ -285,10 +336,10 @@ export const useEmulatorEvents = () => {
       if (!emulatorRef.current) {
         const code = getCurrentEditorCode();
         if (!code.trim()) {
-          setExecutionState({
+          dispatch(setExecutionStateAction({
             lastInstruction: 'Error: No code to step through',
             exception: 'No code provided',
-          });
+          }));
           return;
         }
 
@@ -321,10 +372,11 @@ export const useEmulatorEvents = () => {
             ? 'waiting_for_input'
             : halted
               ? 'halted'
-              : hasException
+            : hasException
                 ? 'exception'
                 : 'manual_step',
         },
+        forceRegisterSync: true,
       });
     };
 
@@ -347,42 +399,78 @@ export const useEmulatorEvents = () => {
           lastFrameDurationMs: 0,
           lastStopReason: 'undo',
         },
+        forceRegisterSync: true,
       });
     };
 
     const handleReset = (): void => {
       clearScheduledExecution();
+      lastRegisterSyncAtRef.current = 0;
       const { columns, rows } = ideStore.getState().emulator.terminal;
       terminalSurfaceStore.reset(columns, rows);
-      reset();
+      dispatch(resetEmulatorState());
       emulatorRef.current = null;
-      setEmulatorInstance(null);
+      dispatch(setEmulatorInstanceAction(null));
       window.emulatorInstance = null;
     };
 
-    const handleShowFlags = (): void => {
-      toggleShowFlags();
-    };
-
-    window.addEventListener('emulator:run', handleRun);
-    window.addEventListener('emulator:resume', handleResume);
-    window.addEventListener('emulator:step', handleStep);
-    window.addEventListener('emulator:undo', handleUndo);
-    window.addEventListener('emulator:reset', handleReset);
-    window.addEventListener('emulator:showflags', handleShowFlags);
+    handleRunRef.current = handleRun;
+    handleResumeRef.current = handleResume;
+    handleStepRef.current = handleStep;
+    handleUndoRef.current = handleUndo;
+    handleResetRef.current = handleReset;
 
     return () => {
-      window.removeEventListener('emulator:run', handleRun);
-      window.removeEventListener('emulator:resume', handleResume);
-      window.removeEventListener('emulator:step', handleStep);
-      window.removeEventListener('emulator:undo', handleUndo);
-      window.removeEventListener('emulator:reset', handleReset);
-      window.removeEventListener('emulator:showflags', handleShowFlags);
       clearScheduledExecution();
       terminalSurfaceStore.reset();
       emulatorRef.current = null;
-      setEmulatorInstance(null);
+      dispatch(setEmulatorInstanceAction(null));
       window.emulatorInstance = null;
     };
-  }, [reset, setExecutionState, setEmulatorInstance, syncEmulatorFrame, toggleShowFlags]);
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (runtimeIntents.reset === previousResetIntentRef.current) {
+      return;
+    }
+
+    previousResetIntentRef.current = runtimeIntents.reset;
+    handleResetRef.current();
+  }, [runtimeIntents.reset]);
+
+  useEffect(() => {
+    if (runtimeIntents.run === previousRunIntentRef.current) {
+      return;
+    }
+
+    previousRunIntentRef.current = runtimeIntents.run;
+    handleRunRef.current();
+  }, [runtimeIntents.run]);
+
+  useEffect(() => {
+    if (runtimeIntents.resume === previousResumeIntentRef.current) {
+      return;
+    }
+
+    previousResumeIntentRef.current = runtimeIntents.resume;
+    handleResumeRef.current();
+  }, [runtimeIntents.resume]);
+
+  useEffect(() => {
+    if (runtimeIntents.step === previousStepIntentRef.current) {
+      return;
+    }
+
+    previousStepIntentRef.current = runtimeIntents.step;
+    handleStepRef.current();
+  }, [runtimeIntents.step]);
+
+  useEffect(() => {
+    if (runtimeIntents.undo === previousUndoIntentRef.current) {
+      return;
+    }
+
+    previousUndoIntentRef.current = runtimeIntents.undo;
+    handleUndoRef.current();
+  }, [runtimeIntents.undo]);
 };

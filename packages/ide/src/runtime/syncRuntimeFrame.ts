@@ -16,6 +16,13 @@ function buildFlags(emulator: IdeRuntimeSession): ConditionFlags {
 
 function buildRegisters(emulator: IdeRuntimeSession, flags: ConditionFlags): Registers {
   const values = emulator.getRegisters();
+  const a7 = values[7];
+  const ccr = typeof emulator.getCCR === 'function'
+    ? emulator.getCCR()
+    : (flags.x << 4) | (flags.n << 3) | (flags.z << 2) | (flags.v << 1) | flags.c;
+  const sr = typeof emulator.getSR === 'function' ? emulator.getSR() : ccr & 0x1f;
+  const usp = typeof emulator.getUSP === 'function' ? emulator.getUSP() : a7 >>> 0;
+  const ssp = typeof emulator.getSSP === 'function' ? emulator.getSSP() : a7 >>> 0;
 
   return {
     a0: values[0],
@@ -25,7 +32,7 @@ function buildRegisters(emulator: IdeRuntimeSession, flags: ConditionFlags): Reg
     a4: values[4],
     a5: values[5],
     a6: values[6],
-    a7: values[7],
+    a7,
     d0: values[8],
     d1: values[9],
     d2: values[10],
@@ -35,13 +42,17 @@ function buildRegisters(emulator: IdeRuntimeSession, flags: ConditionFlags): Reg
     d6: values[14],
     d7: values[15],
     pc: emulator.getPC(),
-    ccr: (flags.x << 4) | (flags.n << 3) | (flags.z << 2) | (flags.v << 1) | flags.c,
+    ccr,
+    sr,
+    usp,
+    ssp,
   };
 }
 
 export interface RuntimeFrameSyncOptions {
   executionState?: Partial<ExecutionState>;
   runtimeMetrics?: Partial<RuntimeMetrics>;
+  registersOverride?: Registers;
 }
 
 export interface RuntimeFrameSyncPayload {
@@ -66,7 +77,7 @@ export function syncRuntimeFrameToIde(
   memorySurfaceStore.replaceFromRuntime(emulator, memory);
 
   syncEmulatorFrame({
-    registers: buildRegisters(emulator, flags),
+    registers: options.registersOverride ?? buildRegisters(emulator, flags),
     memory,
     flags,
     terminal,

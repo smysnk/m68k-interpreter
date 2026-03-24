@@ -114,7 +114,7 @@ async function runGameplayScenarios(browser: Browser): Promise<BrowserBenchmarkS
 
     const introStartedAt = performance.now();
     await runButton.click();
-    const introText = await waitForTerminalMarker(page, ['Movement Keys', 'Programmed By Josh Henn'], 60_000);
+    const introText = await waitForTerminalMarker(page, ['Movement Keys', 'Programmed By Joshua Bellamy'], 60_000);
     await page.getByText(/waiting for input/i).waitFor({ state: 'visible', timeout: 30_000 });
     const introElapsedMs = performance.now() - introStartedAt;
     const introGeometry = await readTerminalGeometry(page);

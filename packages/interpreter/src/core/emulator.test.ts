@@ -140,6 +140,9 @@ EXIT
     expect(memory[result1Address + 2]).toBe(0x77);
     expect(memory[result1Address + 3]).toBe(0x88);
     expect(registers[7]).toBe(0x00100000);
+    expect(emulator.getUSP()).toBe(0x00100000);
+    expect(emulator.getSSP()).toBe(0x00100000);
+    expect(emulator.getSR()).toBe(emulator.getCCR() & 0x1f);
   });
 
   it('supports indexed memory operands plus MULU and DIVU board math', () => {
@@ -340,7 +343,7 @@ EXIT
       (instance) => {
         const renderedText = instance.getTerminalText();
         return (
-          renderedText.includes('Difficulty') && renderedText.includes('Programmed By Josh Henn')
+          renderedText.includes('Difficulty') && renderedText.includes('Programmed By Joshua Bellamy')
         );
       },
       40000
@@ -352,7 +355,7 @@ EXIT
     expect(emulator.getErrors()).toEqual([]);
     expect(terminalMeta.output.includes('\u001b[2J')).toBe(true);
     expect(renderedText.includes('Difficulty')).toBe(true);
-    expect(renderedText.includes('Programmed By Josh Henn')).toBe(true);
+    expect(renderedText.includes('Programmed By Joshua Bellamy')).toBe(true);
     },
     15000
   );

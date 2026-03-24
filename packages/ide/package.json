@@ -28,18 +28,19 @@
     "@uiw/codemirror-themes": "^4.25.8",
     "@uiw/react-codemirror": "^4.25.8",
     "@vercel/analytics": "^2.0.1",
+    "next": "^15.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-github-btn": "^1.4.0",
     "react-redux": "^9.2.0",
     "react-resizable-panels": "^2.1.7",
-    "react-retro-display-tty-ansi": "npm:^0.1.15",
+    "react-retro-display-tty-ansi": "0.1.19",
     "styled-components": "^6.3.11"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -p tsconfig.json --noEmit && vite build",
-    "preview": "vite preview",
+    "dev": "next dev",
+    "build": "tsc -p tsconfig.json --noEmit && next build",
+    "build:pages": "tsc -p tsconfig.json --noEmit && NEXT_OUTPUT_MODE=export next build && touch out/.nojekyll",
+    "preview": "next start",
     "test": "vitest run --config vitest.config.ts",
     "type-check": "tsc -p tsconfig.json --noEmit"
   },
@@ -52,7 +53,6 @@
     "@types/react-dom": "^18.2.18",
     "@vitejs/plugin-react": "^4.2.1",
     "jsdom": "^28.1.0",
-    "terser": "^5.46.0",
     "typescript": "^5.3.3",
     "vite": "^7.3.1",
     "vitest": "^4.0.0"

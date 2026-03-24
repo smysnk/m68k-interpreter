@@ -4,42 +4,20 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faChevronRight, faFileCode, faFolderTree } from '@fortawesome/free-solid-svg-icons';
 import {
   NIBBLES_FILE_ID,
-  selectActiveFileId,
-  selectFiles,
+  requestReset,
+  selectFileExplorerModel,
   setActiveFile,
   setEditorCode,
   setEngineMode,
   setWorkspaceTab,
   type AppDispatch,
-  type RootState,
 } from '@/store';
 
-interface FileExplorerSidebarProps {
-  bottomOffset: number;
-  topOffset: number;
-}
-
-const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({ bottomOffset, topOffset }) => {
+const FileExplorerSidebar: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const files = useSelector(selectFiles);
-  const activeFileId = useSelector(selectActiveFileId);
-  const engineMode = useSelector((state: RootState) => state.settings.engineMode);
+  const { files, activeFileId, engineMode, chromeOffsets, groupedFiles } = useSelector(selectFileExplorerModel);
   const [isOpen, setIsOpen] = React.useState(false);
   const closeTimeoutRef = React.useRef<number | null>(null);
-
-  const groupedFiles = React.useMemo(
-    () => [
-      {
-        label: 'Workspace',
-        items: files.filter((file) => file.kind === 'workspace'),
-      },
-      {
-        label: 'Examples',
-        items: files.filter((file) => file.kind === 'example'),
-      },
-    ].filter((group) => group.items.length > 0),
-    [files]
-  );
 
   const clearCloseTimeout = React.useCallback(() => {
     if (closeTimeoutRef.current !== null) {
@@ -83,7 +61,7 @@ const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({ bottomOffset,
     }
 
     window.editorCode = file.content;
-    window.dispatchEvent(new CustomEvent('emulator:reset'));
+    dispatch(requestReset());
   };
 
   return (
@@ -91,8 +69,8 @@ const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({ bottomOffset,
       className={`file-explorer-sidebar ${isOpen ? 'open' : ''}`}
       data-testid="file-explorer-sidebar-shell"
       style={{
-        top: `${topOffset + 12}px`,
-        bottom: `${bottomOffset + 12}px`,
+        top: `${chromeOffsets.top + 12}px`,
+        bottom: `${chromeOffsets.bottom + 12}px`,
       }}
     >
       <button

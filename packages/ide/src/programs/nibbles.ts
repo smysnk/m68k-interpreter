@@ -1,3 +1,3 @@
-import nibblesSource from '@/fixtures/nibbles.asm?raw';
+import nibblesSource from '@/fixtures/nibbles.asm';
 
 export { nibblesSource };

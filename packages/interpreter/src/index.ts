@@ -51,6 +51,7 @@ export {
   resizeTerminalFrameBuffer,
   writeTerminalFrameBufferCell,
 } from './devices/terminalBuffer';
+export { decodeTerminalByte } from './devices/terminalCharset';
 export { loadProgramSource } from './programLoader';
 export type {
   MemorySnapshot,

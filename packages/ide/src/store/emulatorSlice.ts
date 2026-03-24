@@ -15,6 +15,15 @@ export interface RuntimeMetrics {
   lastStopReason: string;
 }
 
+export interface RuntimeIntentState {
+  run: number;
+  resume: number;
+  step: number;
+  undo: number;
+  reset: number;
+  focusTerminal: number;
+}
+
 export interface TerminalRuntimeState {
   columns: number;
   rows: number;
@@ -36,6 +45,7 @@ export interface EmulatorState {
   delay: number;
   speedMultiplier: number;
   runtimeMetrics: RuntimeMetrics;
+  runtimeIntents: RuntimeIntentState;
   history: Array<{
     registers: Registers;
     flags: ConditionFlags;
@@ -62,6 +72,9 @@ export const initialRegisters: Registers = {
   a7: 0,
   pc: 0x01000,
   ccr: 0,
+  sr: 0,
+  usp: 0,
+  ssp: 0,
 };
 
 export const initialFlags: ConditionFlags = {
@@ -86,6 +99,15 @@ export const initialRuntimeMetrics: RuntimeMetrics = {
   lastFrameInstructions: 0,
   lastFrameDurationMs: 0,
   lastStopReason: 'idle',
+};
+
+export const initialRuntimeIntents: RuntimeIntentState = {
+  run: 0,
+  resume: 0,
+  step: 0,
+  undo: 0,
+  reset: 0,
+  focusTerminal: 0,
 };
 
 export function createEmptyMemoryState(): MemoryMeta {
@@ -141,6 +163,7 @@ const initialState: EmulatorState = {
   delay: 0,
   speedMultiplier: 1,
   runtimeMetrics: initialRuntimeMetrics,
+  runtimeIntents: initialRuntimeIntents,
   history: [],
 };
 
@@ -206,6 +229,24 @@ const emulatorSlice = createSlice({
     setRuntimeMetrics(state, action: PayloadAction<Partial<RuntimeMetrics>>) {
       state.runtimeMetrics = { ...state.runtimeMetrics, ...action.payload };
     },
+    requestRun(state) {
+      state.runtimeIntents.run += 1;
+    },
+    requestResume(state) {
+      state.runtimeIntents.resume += 1;
+    },
+    requestStep(state) {
+      state.runtimeIntents.step += 1;
+    },
+    requestUndo(state) {
+      state.runtimeIntents.undo += 1;
+    },
+    requestReset(state) {
+      state.runtimeIntents.reset += 1;
+    },
+    requestFocusTerminal(state) {
+      state.runtimeIntents.focusTerminal += 1;
+    },
     pushHistory(state) {
       state.history.push({
         registers: { ...state.registers },
@@ -234,6 +275,7 @@ const emulatorSlice = createSlice({
       state.delay = preservedDelay;
       state.speedMultiplier = preservedSpeedMultiplier;
       state.runtimeMetrics = { ...initialRuntimeMetrics };
+      state.runtimeIntents = { ...state.runtimeIntents };
       state.history = [];
     },
   },
@@ -252,6 +294,12 @@ export const {
   setDelay,
   setSpeedMultiplier,
   setRuntimeMetrics,
+  requestRun,
+  requestResume,
+  requestStep,
+  requestUndo,
+  requestReset,
+  requestFocusTerminal,
   pushHistory,
   popHistory,
   resetEmulatorState,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  NIBBLES_FILE_ID,
   createDefaultFilesState,
   getActiveFile,
   normalizeFilesState,
@@ -33,6 +34,25 @@ describe('filesSlice', () => {
 
     expect(normalized.items.some((item) => item.id === 'example:nibbles.asm')).toBe(true);
     expect(getActiveFile(normalized).id).toBe('example:nibbles.asm');
+  });
+
+  it('refreshes bundled example file content when persisted local storage is stale', () => {
+    const normalized = normalizeFilesState({
+      activeFileId: NIBBLES_FILE_ID,
+      items: [
+        {
+          id: NIBBLES_FILE_ID,
+          name: 'nibbles.asm',
+          path: 'examples/nibbles.asm',
+          kind: 'example',
+          content: 'stale local example content',
+        },
+      ],
+    });
+
+    expect(getActiveFile(normalized).id).toBe(NIBBLES_FILE_ID);
+    expect(getActiveFile(normalized).content).not.toBe('stale local example content');
+    expect(getActiveFile(normalized).content).toContain('Programmed By Joshua Bellamy');
   });
 
   it('updates the active file content and can reset to defaults', () => {

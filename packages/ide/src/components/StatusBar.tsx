@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faChevronDown } from '@fortawesome/free-solid-svg-icons';
 import { selectStatusBarModel } from '@/store/statusBarSelectors';
-import { setEngineMode, type AppDispatch, type EngineMode, type RootState } from '@/store';
+import { requestReset, setEngineMode, type AppDispatch, type EngineMode, type RootState } from '@/store';
 
 const ENGINE_OPTIONS: Array<{ value: EngineMode; label: string }> = [
   { value: 'interpreter', label: 'Interpreter' },
@@ -60,7 +60,7 @@ const StatusBar: React.FC = () => {
     }
 
     dispatch(setEngineMode(nextEngineMode));
-    window.dispatchEvent(new CustomEvent('emulator:reset'));
+    dispatch(requestReset());
   };
 
   return (
@@ -104,17 +104,9 @@ const StatusBar: React.FC = () => {
           ) : null}
         </div>
       </div>
-
-      <div className="status-bar-section status-bar-section-center">
-        <span className="status-item">Inspector: {model.inspectorLabel}</span>
-        <span className="status-item">Help: {model.helpLabel}</span>
-        <span className="status-item">Terminal: {model.terminalGeometryLabel}</span>
-        <span className="status-item">Speed: {model.speedLabel}</span>
-        <span className="status-item">Delay: {model.delayLabel}</span>
-      </div>
+      <div className="status-bar-section status-bar-section-center" />
 
       <div className="status-bar-section status-bar-section-right">
-        <span className="status-item">View: {model.viewLabel}</span>
         <span className="status-item">{model.locationLabel}</span>
         <span className="status-item">Frame: {model.frameLabel}</span>
         <span className="status-item">Stop: {model.stopLabel}</span>

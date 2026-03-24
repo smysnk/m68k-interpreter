@@ -9,6 +9,8 @@ on:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
 
 jobs:
   ci:
@@ -190,6 +192,25 @@ jobs:
             .test-results/test-station-benchmarks
             .test-results/playwright
           retention-days: 14
+
+      - name: Set up GitHub Pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.test_station.outputs.exit_code == '0' && steps.benchmark_report.outputs.exit_code == '0'
+        uses: actions/configure-pages@v5
+
+      - name: Build GitHub Pages site
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.test_station.outputs.exit_code == '0' && steps.benchmark_report.outputs.exit_code == '0'
+        run: yarn build:pages
+
+      - name: Upload GitHub Pages artifact
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.test_station.outputs.exit_code == '0' && steps.benchmark_report.outputs.exit_code == '0'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: packages/ide/out
+
+      - name: Deploy GitHub Pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.test_station.outputs.exit_code == '0' && steps.benchmark_report.outputs.exit_code == '0'
+        id: deployment
+        uses: actions/deploy-pages@v4
 
       - name: Fail if CI detected regressions
         if: always()

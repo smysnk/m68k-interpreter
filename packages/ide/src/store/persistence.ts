@@ -6,7 +6,10 @@ export const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v1';
 
 export interface PersistedIdeState {
   files?: FilesState;
-  settings?: Pick<SettingsState, 'editorTheme' | 'followSystemTheme' | 'lineNumbers' | 'engineMode'>;
+  settings?: Pick<
+    SettingsState,
+    'editorTheme' | 'followSystemTheme' | 'lineNumbers' | 'engineMode' | 'registerEditRadix'
+  >;
   uiShell?: Pick<
     UiShellState,
     'workspaceTab' | 'inspectorView' | 'contextView' | 'contextOpen' | 'layout'

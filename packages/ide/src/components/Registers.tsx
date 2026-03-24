@@ -1,147 +1,127 @@
 import React from 'react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faFileDownload } from '@fortawesome/free-solid-svg-icons';
+import { useSelector } from 'react-redux';
 import { useEmulatorStore } from '@/stores/emulatorStore';
+import RegisterCard from './registers/RegisterCard';
+import {
+  type RegisterGroupId,
+  type RegisterDescriptor,
+} from './registers/registerDescriptors';
+import { selectRegisterFlagsHeadingModel, selectRegisterGroupsModel } from '@/store';
 
 const Registers: React.FC = () => {
   const { registers, setRegisterInEmulator } = useEmulatorStore();
+  const { currentFlags, ccrHex } = useSelector(selectRegisterFlagsHeadingModel);
+  const registerGroups = useSelector(selectRegisterGroupsModel);
+  const [flagsCollapsed, setFlagsCollapsed] = React.useState(true);
+  const [collapsedGroups, setCollapsedGroups] = React.useState<Record<RegisterGroupId, boolean>>({
+    data: true,
+    address: true,
+    control: true,
+  });
 
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    registerName: string,
-  ): void => {
-    const value = parseInt(e.target.value, 10);
-    if (!isNaN(value)) {
-      setRegisterInEmulator(registerName as never, value);
-    }
-  };
+  const handleRegisterCommit = React.useCallback(
+    (descriptor: RegisterDescriptor, value: number) => {
+      if (!descriptor.editable) {
+        return;
+      }
 
-  const handleDownload = (): void => {
-    const registerData = Object.entries(registers)
-      .map(([name, value]) => `${name}=${value.toString(16).padStart(8, '0')}`)
-      .join('\n');
+      setRegisterInEmulator(descriptor.key as never, value);
+    },
+    [setRegisterInEmulator]
+  );
 
-    const element = document.createElement('a');
-    element.setAttribute('href', `data:text/plain;charset=utf-8,${encodeURIComponent(registerData)}`);
-    element.setAttribute('download', 'registers.txt');
-    element.style.display = 'none';
-
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-  };
-
-  const dataRegisters = ['d0', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7'];
-  const addressRegisters = ['a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7'];
+  const handleToggleGroup = React.useCallback((groupId: RegisterGroupId) => {
+    setCollapsedGroups((current) => ({
+      ...current,
+      [groupId]: !current[groupId],
+    }));
+  }, []);
 
   return (
     <div className="registers-container pane-surface">
-      <div className="pane-header">
-        <div className="pane-title-group">
-          <p className="pane-eyebrow">Machine State</p>
-          <h3 className="pane-title">Registers</h3>
-          <p className="pane-caption">Live data, address, and control registers.</p>
-        </div>
-        <button
-          aria-label="Download registers"
-          className="btn-toolbar btn-toolbar-icon btn-pane-action"
-          onClick={handleDownload}
-          title="Download registers"
-          type="button"
-        >
-          <FontAwesomeIcon icon={faFileDownload} size="sm" />
-        </button>
-      </div>
+      <div className="registers-content registers-content-condensed">
+        <section className="registers-group registers-group-flags" data-register-group="flags">
+          <button
+            aria-controls="register-group-panel-flags"
+            aria-expanded={!flagsCollapsed}
+            className="registers-group-toggle"
+            data-register-group="flags"
+            onClick={() => setFlagsCollapsed((current) => !current)}
+            type="button"
+          >
+            <span className="registers-group-heading">
+              <span aria-hidden="true" className="registers-group-indicator" />
+              <span className="registers-group-title">Flags</span>
+            </span>
+            <span className="registers-group-count">{currentFlags.length + 1}</span>
+          </button>
+          <div
+            className="registers-group-panel"
+            id="register-group-panel-flags"
+            hidden={flagsCollapsed}
+          >
+            <div className="registers-flags-panel" aria-label="Current condition flags">
+              {currentFlags.map((flag) => (
+                <div
+                  className={`registers-flag-chip ${flag.active ? 'set' : 'clear'}`}
+                  key={flag.key}
+                >
+                  <span className="registers-flag-name">{flag.label}</span>
+                  <span className="registers-flag-value">{flag.active ? '1' : '0'}</span>
+                </div>
+              ))}
+              <div className="registers-flag-chip registers-flag-chip-ccr">
+                <span className="registers-flag-name">CCR</span>
+                <span className="registers-flag-value">{ccrHex}</span>
+              </div>
+            </div>
+          </div>
+        </section>
 
-      <div className="registers-content">
-        <div className="registers-row">
-          <table className="registers-table">
-            <thead>
-              <tr>
-                <th colSpan={3}>Data Registers (D0-D7)</th>
-              </tr>
-              <tr>
-                <th>Register</th>
-                <th>Decimal</th>
-                <th>Hex</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dataRegisters.map((regName) => {
-                const value = registers[regName as keyof typeof registers] ?? 0;
-                return (
-                  <tr key={regName}>
-                    <td className="reg-name">{regName}</td>
-                    <td>
-                      <input
-                        type="number"
-                        value={value}
-                        onChange={(e) => handleInputChange(e, regName)}
-                      />
-                    </td>
-                    <td>{`0x${value.toString(16).padStart(8, '0')}`}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        {registerGroups.map((group) => {
+          const groupDescriptors = group.descriptors;
+          const isCollapsed = collapsedGroups[group.id];
 
-          <table className="registers-table">
-            <thead>
-              <tr>
-                <th colSpan={3}>Address Registers (A0-A7)</th>
-              </tr>
-              <tr>
-                <th>Register</th>
-                <th>Decimal</th>
-                <th>Hex</th>
-              </tr>
-            </thead>
-            <tbody>
-              {addressRegisters.map((regName) => {
-                const value = registers[regName as keyof typeof registers] ?? 0;
-                return (
-                  <tr key={regName}>
-                    <td className="reg-name">{regName}</td>
-                    <td>
-                      <input
-                        type="number"
-                        value={value}
-                        onChange={(e) => handleInputChange(e, regName)}
-                      />
-                    </td>
-                    <td>{`0x${value.toString(16).padStart(8, '0')}`}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <table className="registers-table">
-          <thead>
-            <tr>
-              <th colSpan={3}>Control Registers</th>
-            </tr>
-            <tr>
-              <th>Register</th>
-              <th>Decimal</th>
-              <th>Hex</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="reg-name">PC</td>
-              <td>{registers.pc}</td>
-              <td>{`0x${registers.pc.toString(16).padStart(8, '0')}`}</td>
-            </tr>
-            <tr>
-              <td className="reg-name">CCR</td>
-              <td>{registers.ccr}</td>
-              <td>{`0x${registers.ccr.toString(16).padStart(2, '0')}`}</td>
-            </tr>
-          </tbody>
-        </table>
+          return (
+            <section
+              aria-labelledby={`register-group-${group.id}`}
+              className={`registers-group ${isCollapsed ? 'collapsed' : 'expanded'}`}
+              data-register-group={group.id}
+              key={group.id}
+            >
+              <button
+                aria-controls={`register-group-panel-${group.id}`}
+                aria-expanded={!isCollapsed}
+                className="registers-group-toggle"
+                data-register-group={group.id}
+                id={`register-group-${group.id}`}
+                onClick={() => handleToggleGroup(group.id)}
+                type="button"
+              >
+                <span className="registers-group-heading">
+                  <span aria-hidden="true" className="registers-group-indicator" />
+                  <span className="registers-group-title">{group.title}</span>
+                </span>
+                <span className="registers-group-count">{groupDescriptors.length}</span>
+              </button>
+              <div
+                className="registers-group-panel"
+                id={`register-group-panel-${group.id}`}
+                hidden={isCollapsed}
+              >
+                {groupDescriptors.map((descriptor) => (
+                  <RegisterCard
+                    defaultCompact
+                    descriptor={descriptor}
+                    key={descriptor.key}
+                    onCommit={handleRegisterCommit}
+                    value={group.values[descriptor.key] ?? registers[descriptor.key] ?? 0}
+                  />
+                ))}
+              </div>
+            </section>
+          );
+        })}
       </div>
     </div>
   );

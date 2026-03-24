@@ -98,4 +98,16 @@ describe('terminalBuffer', () => {
     expect(readTerminalFrameBufferText(frameBuffer)).toBe('NO  \n  K ');
     expect(readTerminalFrameBufferCell(frameBuffer, 1, 2).inverse).toBe(true);
   });
+
+  it('decodes CP437 screen bytes when reading terminal text back out', () => {
+    const frameBuffer = createTerminalFrameBuffer(4, 1);
+
+    writeTerminalFrameBufferCell(frameBuffer, 0, 0, { charByte: 0xda });
+    writeTerminalFrameBufferCell(frameBuffer, 0, 1, { charByte: 0xc4 });
+    writeTerminalFrameBufferCell(frameBuffer, 0, 2, { charByte: 0xc4 });
+    writeTerminalFrameBufferCell(frameBuffer, 0, 3, { charByte: 0xbf });
+
+    expect(readTerminalFrameBufferLine(frameBuffer, 0)).toBe('┌──┐');
+    expect(readTerminalFrameBufferCell(frameBuffer, 0, 0).char).toBe('┌');
+  });
 });

@@ -17,7 +17,6 @@ describe('statusBarSelectors', () => {
     expect(model.runtime.label).toBe('Ready');
     expect(model.engineLabel).toBe('Interpreter');
     expect(model.programLabel).toBe('nibbles.asm');
-    expect(model.terminalGeometryLabel).toBe('80x25');
     expect(model.locationLabel).toBe('Cursor 1:1');
     expect(model.stopLabel).toBe('idle');
   });
@@ -33,7 +32,6 @@ describe('statusBarSelectors', () => {
     const model = selectStatusBarModel(store.getState());
 
     expect(model.programLabel).toBe('scratch.asm');
-    expect(model.viewLabel).toBe('Code');
     expect(model.locationLabel).toBe('Ln 18, Col 9');
   });
 

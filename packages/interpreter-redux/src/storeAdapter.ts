@@ -177,6 +177,18 @@ class ReduxStoreInterpreterAdapter implements StoreBackedReducerInterpreterAdapt
     return this.runtimeStore.getState().cpu.ccr;
   }
 
+  getSR(): number {
+    return this.runtimeStore.getState().cpu.ccr & 0x1f;
+  }
+
+  getUSP(): number {
+    return this.runtimeStore.getState().cpu.registers[7] >>> 0;
+  }
+
+  getSSP(): number {
+    return this.runtimeStore.getState().cpu.registers[7] >>> 0;
+  }
+
   getTerminalSnapshot(): TerminalSnapshot {
     return this.runtimeStore.getTerminalSnapshot();
   }

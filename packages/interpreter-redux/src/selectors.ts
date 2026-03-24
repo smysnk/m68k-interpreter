@@ -21,6 +21,9 @@ export interface InterpreterReduxRegisters {
   a7: number;
   pc: number;
   ccr: number;
+  sr: number;
+  usp: number;
+  ssp: number;
 }
 
 export interface InterpreterReduxFlags {
@@ -55,6 +58,9 @@ export function selectRegisters(state: InterpreterReducerState): InterpreterRedu
     a7: registers[7] ?? 0,
     pc: state.cpu.pc,
     ccr: state.cpu.ccr,
+    sr: state.cpu.ccr & 0x1f,
+    usp: registers[7] ?? 0,
+    ssp: registers[7] ?? 0,
   };
 }
 

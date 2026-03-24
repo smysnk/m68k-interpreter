@@ -1,15 +1,17 @@
+[![M68K Interpreter Demo](https://raw.githubusercontent.com/smysnk/m68k-interpreter/main/docs/assets/m68k-interpreter-nibbles-demo.webp)](https://github.com/smysnk/m68k-interpreter/releases/download/readme-assets/m68k-interpreter-nibbles-demo.mp4)
+
+This demo is running my old [m68k-nibbles](https://github.com/smysnk/m68k-nibbles) game, which I originally wrote for a college assembly class back in 2007. I always wished someone would eventually build a 68000 browser emulator so I could bring it back to life, so I was excited when I found [gianlucarea's m68k-interpreter project](https://github.com/gianlucarea/m68k-interpreter). I took a little liberty with this fork to adapt the interface, auto-load the game, and add a screen terminal emulator so the project could feel closer to the original experience.
+
 # m68k-interpreter
 
 [![tests](https://img.shields.io/endpoint?url=https%3A%2F%2Ftest-station.smysnk.com%2Fapi%2Fbadges%2Ftests.json%3FprojectKey%3Dm68k-interpreter)](https://test-station.smysnk.com/projects/m68k-interpreter)
 [![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Ftest-station.smysnk.com%2Fapi%2Fbadges%2Fcoverage.json%3FprojectKey%3Dm68k-interpreter)](https://test-station.smysnk.com/projects/m68k-interpreter)
 [![health](https://img.shields.io/endpoint?url=https%3A%2F%2Ftest-station.smysnk.com%2Fapi%2Fbadges%2Fhealth.json%3FprojectKey%3Dm68k-interpreter)](https://test-station.smysnk.com/projects/m68k-interpreter)
 
-Report: [Hosted project history](https://test-station.smysnk.com/projects/m68k-interpreter)
-
 A Motorola 68000 assembly emulator that runs entirely in the browser.  
 Write, step through, and debug m68k assembly — no installation needed.
 
-**[→ Live demo](https://gianlucarea.dev/m68k-interpreter/)**
+**[→ Live demo](https://smysnk.github.io/m68k-interpreter/)**
 
 ---
 
@@ -49,6 +51,16 @@ The current terminal build is aimed at the Easy68K subset needed by `nibbles.asm
 - `Interpreter Redux` is available as an experimental alternate engine for reducer-runtime parity work and store integration
 - `Load Nibbles` intentionally switches the IDE back to `Interpreter` so the main demo path stays playable
 
+## IDE architecture
+
+- The shell follows a view/controller Redux pattern
+- Top-level interface components are store-connected and prop-free
+- Selectors own derived UI models
+- Controller hooks own browser/runtime side effects
+- Terminal and memory byte buffers stay outside Redux in external surface stores
+
+See [docs/VIEW_CONTROLLER_REDUX_CONVENTIONS.md](docs/VIEW_CONTROLLER_REDUX_CONVENTIONS.md) for the current architecture rules.
+
 ---
 <!-- 
 ## Examples
@@ -70,7 +82,7 @@ Each file is commented line by line — useful if you are following a computer a
 
 ## Built with
 
-React 18 · Redux Toolkit · TypeScript · Vite 7 · Vitest
+React 18 · Redux Toolkit · TypeScript · Next.js 15 · Vitest
 
 ---
 
@@ -90,6 +102,10 @@ yarn build           # production build
 yarn test            # run tests
 yarn type-check      # workspace type-check
 ```
+
+Boot-time IDE env vars:
+- `NEXT_PUBLIC_IDE_PRELOAD_FILE=nibbles.asm` selects which known file should be loaded on startup. You can use the file id, name, or path, for example `example:nibbles.asm`, `nibbles.asm`, or `examples/nibbles.asm`.
+- `NEXT_PUBLIC_IDE_AUTOPLAY=true` runs the loaded program automatically on boot.
 
 ---
 

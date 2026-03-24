@@ -2,6 +2,7 @@ import {
   TERMINAL_BUFFER_COLOR_DEFAULT,
   TERMINAL_BUFFER_FLAG_BOLD,
   TERMINAL_BUFFER_FLAG_INVERSE,
+  decodeTerminalByte,
   type TerminalFrameBuffer,
 } from '@m68k/interpreter';
 
@@ -71,7 +72,7 @@ export function buildTerminalAnsiRowPatch(
         previousStyleKey = nextStyleKey;
       }
 
-      patch += String.fromCharCode(frameBuffer.charBytes[offset]);
+      patch += decodeTerminalByte(frameBuffer.charBytes[offset]);
     }
 
     patch += `${ESCAPE_PREFIX}0m`;

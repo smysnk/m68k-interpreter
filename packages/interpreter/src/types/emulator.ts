@@ -27,6 +27,9 @@ export interface Registers {
   a7: number; // Stack pointer
   pc: number; // Program counter
   ccr: number; // Condition code register
+  sr: number; // Status register view
+  usp: number; // User stack pointer view
+  ssp: number; // Supervisor stack pointer view
 }
 
 export interface ConditionFlags {
@@ -91,6 +94,10 @@ export interface Emulator {
   flags: ConditionFlags;
   pc: number;
   getRegisters(): Registers;
+  getCCR(): number;
+  getSR(): number;
+  getUSP(): number;
+  getSSP(): number;
   getMemory(): MemoryCell;
   getMemoryMeta(): MemoryMeta;
   readMemoryRange(address: number, length: number): Uint8Array;

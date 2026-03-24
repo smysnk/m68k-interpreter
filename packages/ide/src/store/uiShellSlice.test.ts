@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  closeAppMenu,
   resetSettingsState,
+  setActiveSubmenu,
+  setChromeOffsets,
   setWorkspaceTab,
+  toggleAppMenu,
   toggleContextView,
   toggleInspectorView,
 } from '@/store';
@@ -15,8 +19,11 @@ describe('uiShellSlice', () => {
     expect(state.inspectorView).toBe('registers');
     expect(state.contextOpen).toBe(false);
     expect(state.contextView).toBe('none');
+    expect(state.appMenuOpen).toBe(false);
+    expect(state.activeSubmenu).toBeNull();
     expect(state.editorCursorLine).toBe(1);
     expect(state.editorCursorColumn).toBe(1);
+    expect(state.chromeOffsets).toEqual({ top: 58, bottom: 38 });
     expect(state.layout.rootHorizontalWithContext).toEqual([50, 32, 18]);
   });
 
@@ -24,11 +31,26 @@ describe('uiShellSlice', () => {
     let state = uiShellReducer(undefined, setWorkspaceTab('code'));
     state = uiShellReducer(state, toggleInspectorView());
     state = uiShellReducer(state, toggleContextView('help'));
+    state = uiShellReducer(state, toggleAppMenu());
+    state = uiShellReducer(state, setActiveSubmenu('style'));
+    state = uiShellReducer(state, setChromeOffsets({ top: 64, bottom: 40 }));
 
     expect(state.workspaceTab).toBe('code');
     expect(state.inspectorView).toBe('memory');
     expect(state.contextOpen).toBe(true);
     expect(state.contextView).toBe('help');
+    expect(state.appMenuOpen).toBe(true);
+    expect(state.activeSubmenu).toBe('style');
+    expect(state.chromeOffsets).toEqual({ top: 64, bottom: 40 });
+  });
+
+  it('clears submenu state when the app menu closes', () => {
+    let state = uiShellReducer(undefined, toggleAppMenu());
+    state = uiShellReducer(state, setActiveSubmenu('style'));
+    state = uiShellReducer(state, closeAppMenu());
+
+    expect(state.appMenuOpen).toBe(false);
+    expect(state.activeSubmenu).toBeNull();
   });
 
   it('resets shell state when settings are reset', () => {
@@ -37,8 +59,14 @@ describe('uiShellSlice', () => {
       inspectorView: 'memory',
       contextOpen: true,
       contextView: 'help',
+      appMenuOpen: true,
+      activeSubmenu: 'style',
       editorCursorLine: 9,
       editorCursorColumn: 14,
+      chromeOffsets: {
+        top: 70,
+        bottom: 44,
+      },
       layout: {
         rootHorizontal: [55, 45],
         rootHorizontalWithContext: [45, 35, 20],
@@ -52,7 +80,10 @@ describe('uiShellSlice', () => {
     expect(state.inspectorView).toBe('registers');
     expect(state.contextOpen).toBe(false);
     expect(state.contextView).toBe('none');
+    expect(state.appMenuOpen).toBe(false);
+    expect(state.activeSubmenu).toBeNull();
     expect(state.editorCursorLine).toBe(1);
     expect(state.editorCursorColumn).toBe(1);
+    expect(state.chromeOffsets).toEqual({ top: 58, bottom: 38 });
   });
 });

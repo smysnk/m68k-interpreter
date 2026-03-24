@@ -3,8 +3,10 @@ import {
   createInterpreterReduxIoMiddleware,
   interpreterReducer as interpreterReduxReducer,
 } from '@m68k/interpreter-redux';
+import { getIdeBootConfig, resolvePreloadedFileId } from '@/config/ideBootConfig';
 import emulatorReducer from '@/store/emulatorSlice';
 import filesReducer, {
+  NIBBLES_FILE_ID,
   getActiveFile,
   normalizeFilesState,
   setActiveFileContent,
@@ -213,8 +215,31 @@ const rootReducer = (
 export function createIdeStore() {
   const persisted = readPersistedIdeState();
   const initialState = combinedReducer(undefined, { type: '@@INIT' });
-  const files = normalizeFilesState(persisted?.files);
+  const bootConfig = getIdeBootConfig();
+  const normalizedFiles = normalizeFilesState(persisted?.files);
+  const preloadedFileId =
+    resolvePreloadedFileId(normalizedFiles, bootConfig.preloadFile) ?? normalizedFiles.activeFileId;
+  const files =
+    preloadedFileId === normalizedFiles.activeFileId
+      ? normalizedFiles
+      : {
+          ...normalizedFiles,
+          activeFileId: preloadedFileId,
+        };
   const activeFile = getActiveFile(files);
+  const hydratedSettings = persisted?.settings
+    ? {
+        ...initialSettingsState,
+        ...persisted.settings,
+      }
+    : initialState.settings;
+  const settings =
+    files.activeFileId === NIBBLES_FILE_ID && hydratedSettings.engineMode === 'interpreter-redux'
+      ? {
+          ...hydratedSettings,
+          engineMode: 'interpreter' as const,
+        }
+      : hydratedSettings;
   const preloadedState = {
     ...initialState,
     emulator: {
@@ -222,12 +247,7 @@ export function createIdeStore() {
       editorCode: activeFile.content,
     },
     files,
-    settings: persisted?.settings
-      ? {
-          ...initialSettingsState,
-          ...persisted.settings,
-        }
-      : initialState.settings,
+    settings,
     uiShell: persisted?.uiShell
       ? {
           ...initialUiShellState,
@@ -271,6 +291,7 @@ export function createIdeStore() {
         followSystemTheme: state.settings.followSystemTheme,
         lineNumbers: state.settings.lineNumbers,
         engineMode: state.settings.engineMode,
+        registerEditRadix: state.settings.registerEditRadix,
       },
       uiShell: {
         workspaceTab: state.uiShell.workspaceTab,
@@ -305,3 +326,8 @@ export * from '@/store/emulatorSlice';
 export * from '@/store/filesSlice';
 export * from '@/store/settingsSlice';
 export * from '@/store/uiShellSlice';
+export * from '@/store/appShellSelectors';
+export * from '@/store/fileExplorerSelectors';
+export * from '@/store/flagsSelectors';
+export * from '@/store/navbarSelectors';
+export * from '@/store/registerSelectors';

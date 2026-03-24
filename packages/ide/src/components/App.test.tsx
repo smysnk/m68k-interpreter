@@ -104,6 +104,7 @@ describe('App', () => {
     useEmulatorStore.getState().setEmulatorInstance({
       emulationStep: vi.fn(),
       getCFlag: vi.fn(() => 0),
+      getCCR: vi.fn(() => 0),
       getErrors: vi.fn(() => []),
       getException: vi.fn(() => undefined),
       getLastInstruction: vi.fn(() => 'Ready'),
@@ -118,6 +119,8 @@ describe('App', () => {
       getPC: vi.fn(() => 0),
       getQueuedInputLength: vi.fn(() => 0),
       getRegisters: vi.fn(() => new Int32Array(16)),
+      getSR: vi.fn(() => 0),
+      getSSP: vi.fn(() => 0),
       readMemoryRange: vi.fn((_: number, length: number) => new Uint8Array(length)),
       getSymbolAddress: vi.fn(() => undefined),
       getSymbols: vi.fn(() => ({})),
@@ -134,6 +137,7 @@ describe('App', () => {
         lines: [],
         cells: [],
       })),
+      getUSP: vi.fn(() => 0),
       getVFlag: vi.fn(() => 0),
       getXFlag: vi.fn(() => 0),
       getZFlag: vi.fn(() => 0),
@@ -154,32 +158,21 @@ describe('App', () => {
     expect(window.emulatorInstance).toBeNull();
   });
 
-  it('toggles the compatibility notes panel', () => {
+  it('switches the right pane between registers and memory tabs', () => {
     render(<App />);
 
-    expect(screen.queryByLabelText('Compatibility notes')).not.toBeInTheDocument();
+    const registersTab = screen.getByRole('tab', { name: /registers/i });
+    const memoryTab = screen.getByRole('tab', { name: /memory/i });
 
-    openAppMenu();
-    fireEvent.click(screen.getByRole('menuitem', { name: /compatibility notes/i }));
-    expect(screen.getByLabelText('Compatibility notes')).toBeVisible();
+    expect(registersTab).toHaveAttribute('aria-selected', 'true');
+    expect(memoryTab).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByText('Flags')).toBeInTheDocument();
 
-    openAppMenu();
-    fireEvent.click(screen.getByRole('menuitem', { name: /compatibility notes/i }));
-    expect(screen.queryByLabelText('Compatibility notes')).not.toBeInTheDocument();
-  });
+    fireEvent.click(memoryTab);
 
-  it('adds the context resize handle when the help pane is open', () => {
-    const { container } = render(<App />);
-
-    expect(container.querySelectorAll('[data-testid="resize-handle-root"]').length).toBe(1);
-    expect(container.querySelectorAll('[data-testid="resize-handle-context"]').length).toBe(0);
-
-    openAppMenu();
-    fireEvent.click(screen.getByRole('menuitem', { name: /compatibility notes/i }));
-
-    expect(screen.getByLabelText('Compatibility notes')).toBeVisible();
-    expect(container.querySelectorAll('[data-testid="resize-handle-context"]').length).toBe(1);
-    expect(screen.getByTestId('context-panel')).toBeInTheDocument();
+    expect(registersTab).toHaveAttribute('aria-selected', 'false');
+    expect(memoryTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('Start memory address')).toBeInTheDocument();
   });
 
   it('hydrates theme and shell preferences from persisted storage', () => {
@@ -231,7 +224,8 @@ describe('App', () => {
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-theme', 'dark');
     expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByLabelText('Compatibility notes')).toBeVisible();
-    expect(store.getState().emulator.editorCode).toBe('MOVE.L #7,D0');
+    expect(store.getState().files.activeFileId).toBe('example:nibbles.asm');
+    expect(store.getState().emulator.editorCode).toBe(nibblesSource);
   });
 
   it('propagates the overall app theme into the terminal surface', () => {

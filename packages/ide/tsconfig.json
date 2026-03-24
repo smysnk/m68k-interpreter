@@ -6,20 +6,32 @@
       "DOM",
       "DOM.Iterable"
     ],
-    "jsx": "react-jsx",
+    "jsx": "preserve",
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "baseUrl": ".",
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "paths": {
       "@/*": [
         "src/*"
       ]
-    }
+    },
+    "allowJs": true,
+    "incremental": true
   },
   "include": [
+    "next-env.d.ts",
+    ".next/types/**/*.ts",
+    "pages",
     "src",
-    "vite.config.ts",
-    "vitest.config.ts"
+    "next.config.mjs"
+  ],
+  "exclude": [
+    "node_modules"
   ]
 }

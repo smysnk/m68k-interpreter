@@ -26,8 +26,10 @@ test.describe('browser e2e nibbles', () => {
     await page.goto('/');
 
     const terminalTab = page.getByRole('tab', { name: /terminal/i });
+    const codeTab = page.getByRole('tab', { name: /code/i });
     const terminalScreen = page.getByTestId('terminal-screen');
     const fileExplorerTab = page.getByRole('button', { name: /open file explorer/i });
+    const nibblesFileButton = page.getByRole('button', { name: /nibbles\.asm/i });
     const runButton = page.getByRole('button', { name: /run program/i });
     const speedInput = page.getByLabel('Speed (x)');
 
@@ -39,9 +41,12 @@ test.describe('browser e2e nibbles', () => {
     expect(terminalBounds?.height ?? 0).toBeGreaterThan(200);
 
     await fileExplorerTab.hover();
-    await page.getByRole('button', { name: /nibbles\.asm/i }).click();
+    await nibblesFileButton.click();
+    await expect(codeTab).toHaveAttribute('aria-selected', 'true');
+    await expect(nibblesFileButton).toHaveAttribute('aria-pressed', 'true');
     await speedInput.fill('8');
     await runButton.click();
+    await expect(terminalTab).toHaveAttribute('aria-selected', 'true');
 
     const introStartedAt = Date.now();
 
@@ -51,12 +56,11 @@ test.describe('browser e2e nibbles', () => {
           const terminalText = await readTerminalText(page);
 
           return {
-            hasMovementKeys: terminalText.includes('Movement Keys'),
-            hasProgrammedBy: terminalText.includes('Programmed By Josh Henn'),
-            hasEasy: terminalText.includes('Easy') || terminalText.includes('EASY'),
-            hasMedium: terminalText.includes('Medium') || terminalText.includes('MEDIUM'),
-            hasHard: terminalText.includes('Hard') || terminalText.includes('HARD'),
-            hasInsane: terminalText.includes('Insane') || terminalText.includes('INSANE'),
+            hasDifficulty: /difficulty/i.test(terminalText),
+            hasMovementKeys: /movement\s+keys/i.test(terminalText),
+            hasProgrammedBy: /programmed\s+by\s+josh\s+henn/i.test(terminalText),
+            hasEasy: /\beasy\b/i.test(terminalText),
+            hasInsane: /\binsane\b/i.test(terminalText),
           };
         },
         {
@@ -65,22 +69,29 @@ test.describe('browser e2e nibbles', () => {
         }
       )
       .toEqual({
+        hasDifficulty: true,
         hasMovementKeys: true,
         hasProgrammedBy: true,
         hasEasy: true,
-        hasMedium: true,
-        hasHard: true,
         hasInsane: true,
       });
 
     const introText = await readTerminalText(page);
-    expect(introText).toContain('Programmed By Josh Henn');
+    expect(introText).toContain('Programmed By Joshua Bellamy');
+    expect(introText).toContain('▓▓▓');
+    expect(introText).toContain('│');
+    expect(introText).toContain('┌');
+    expect(introText).toContain('┐');
+    expect(introText).toContain('└');
+    expect(introText).toContain('┘');
+    expect(introText).not.toContain('ý');
     await expect(page.getByLabel('IDE status bar')).toContainText(/waiting for input/i, {
       timeout: 15_000,
     });
 
     console.info(`Nibbles intro screen reached in ${Date.now() - introStartedAt}ms`);
 
+    await terminalScreen.click();
     await page.keyboard.press('s');
     await page.keyboard.press('Enter');
 
@@ -95,6 +106,13 @@ test.describe('browser e2e nibbles', () => {
     expect(gameText).toContain('SCORE:');
     expect(gameText).toMatch(/LIV\s*ES:/);
     expect(gameText).toContain('LEVEL:');
+    expect(gameText).toContain('┌');
+    expect(gameText).toContain('┐');
+    expect(gameText).toContain('└');
+    expect(gameText).toContain('┘');
+    expect(gameText).toContain('─');
+    expect(gameText).toContain('│');
+    expect(gameText).not.toContain('ý');
 
     await terminalScreen.screenshot({
       path: testInfo.outputPath('nibbles-game-screen.png'),

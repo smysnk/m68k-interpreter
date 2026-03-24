@@ -12,6 +12,7 @@ type IdeCompatibleSession = Pick<
   | 'clearInputQueue'
   | 'emulationStep'
   | 'getCFlag'
+  | 'getCCR'
   | 'getErrors'
   | 'getException'
   | 'getLastInstruction'
@@ -20,11 +21,14 @@ type IdeCompatibleSession = Pick<
   | 'getPC'
   | 'getQueuedInputLength'
   | 'getRegisters'
+  | 'getSR'
+  | 'getSSP'
   | 'getSymbolAddress'
   | 'getSymbols'
   | 'getTerminalLines'
   | 'getTerminalText'
   | 'getTerminalSnapshot'
+  | 'getUSP'
   | 'getVFlag'
   | 'getXFlag'
   | 'getZFlag'
@@ -116,6 +120,10 @@ START
     expect(ideCompatibleSession.getSymbolAddress('VALUE')).toBe(
       ideCompatibleSession.getSymbols().VALUE
     );
+    expect(ideCompatibleSession.getCCR()).toBe(0x04);
+    expect(ideCompatibleSession.getSR()).toBe(0x04);
+    expect(ideCompatibleSession.getUSP()).toBe(ideCompatibleSession.getRegisters()[7] >>> 0);
+    expect(ideCompatibleSession.getSSP()).toBe(ideCompatibleSession.getRegisters()[7] >>> 0);
   });
 
   it('preserves terminal geometry across load/reset and clears runtime queues', () => {

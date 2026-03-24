@@ -1,16 +1,18 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   RetroLcd,
   createRetroLcdController,
   type RetroLcdController,
 } from 'react-retro-display-tty-ansi';
 import { useTheme } from 'styled-components';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   buildTerminalAnsiFullRedraw,
   buildTerminalAnsiRowPatch,
 } from '@/runtime/terminalAnsiPatch';
 import { useTerminalSurface } from '@/runtime/useTerminalSurface';
 import { useEmulatorStore } from '@/stores/emulatorStore';
+import { requestResume, type AppDispatch, type RootState } from '@/store';
 
 type KeyboardLikeEvent = {
   key: string;
@@ -98,6 +100,7 @@ function queueAssemblerInput(
   emulatorInstance: ReturnType<typeof useEmulatorStore>['emulatorInstance'],
   executionState: ReturnType<typeof useEmulatorStore>['executionState'],
   event: KeyboardLikeEvent,
+  requestResumeExecution: () => void,
   preventDefault?: () => void
 ): boolean {
   if (!emulatorInstance) {
@@ -113,21 +116,25 @@ function queueAssemblerInput(
   emulatorInstance.queueInput(input);
 
   if (executionState.started && !executionState.ended) {
-    window.dispatchEvent(new CustomEvent('emulator:resume'));
+    requestResumeExecution();
   }
 
   return true;
 }
 
 const Terminal: React.FC = () => {
+  const dispatch = useDispatch<AppDispatch>();
   const terminalRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<RetroLcdController | null>(null);
   const previousGeometryVersionRef = useRef<number | null>(null);
   const previousVersionRef = useRef<number | null>(null);
   const previousCursorPositionRef = useRef<string>('');
+  const [focused, setFocused] = useState(false);
   const { emulatorInstance, executionState } = useEmulatorStore();
   const { frameBuffer, meta, dirtyRows } = useTerminalSurface();
+  const focusTerminalIntent = useSelector((state: RootState) => state.emulator.runtimeIntents.focusTerminal);
   const theme = useTheme();
+  const focusTerminalIntentRef = useRef(focusTerminalIntent);
 
   if (controllerRef.current === null) {
     controllerRef.current = createRetroLcdController({
@@ -176,7 +183,13 @@ const Terminal: React.FC = () => {
   }, [dirtyRows, frameBuffer, meta.columns, meta.cursorColumn, meta.cursorRow, meta.geometryVersion, meta.rows, meta.version]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
-    queueAssemblerInput(emulatorInstance, executionState, event, () => event.preventDefault());
+    queueAssemblerInput(
+      emulatorInstance,
+      executionState,
+      event,
+      () => dispatch(requestResume()),
+      () => event.preventDefault()
+    );
   };
 
   const focusTerminal = (): void => {
@@ -185,10 +198,6 @@ const Terminal: React.FC = () => {
   };
 
   useEffect(() => {
-    const handleFocusTerminal = (): void => {
-      focusTerminal();
-    };
-
     const handleWindowKeyDown = (event: KeyboardEvent): void => {
       if (!isPageEligibleForAssemblerInput()) {
         return;
@@ -206,25 +215,49 @@ const Terminal: React.FC = () => {
         return;
       }
 
-      queueAssemblerInput(emulatorInstance, executionState, event, () => event.preventDefault());
+      queueAssemblerInput(
+        emulatorInstance,
+        executionState,
+        event,
+        () => dispatch(requestResume()),
+        () => event.preventDefault()
+      );
     };
 
-    window.addEventListener('emulator:focus-terminal', handleFocusTerminal);
     window.addEventListener('keydown', handleWindowKeyDown);
 
     return () => {
-      window.removeEventListener('emulator:focus-terminal', handleFocusTerminal);
       window.removeEventListener('keydown', handleWindowKeyDown);
     };
-  }, [emulatorInstance, executionState]);
+  }, [dispatch, emulatorInstance, executionState]);
+
+  useEffect(() => {
+    if (focusTerminalIntent === focusTerminalIntentRef.current) {
+      return;
+    }
+
+    focusTerminalIntentRef.current = focusTerminalIntent;
+    focusTerminal();
+  }, [focusTerminalIntent]);
 
   return (
     <section className="terminal-container" data-terminal-theme={theme.surfaceMode}>
       <div
         ref={terminalRef}
         className="terminal-screen"
+        data-terminal-focused={focused ? 'true' : 'false'}
         data-testid="terminal-screen"
         onClick={focusTerminal}
+        onFocusCapture={() => {
+          setFocused(true);
+        }}
+        onBlurCapture={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            return;
+          }
+
+          setFocused(false);
+        }}
         onKeyDown={handleKeyDown}
         role="application"
         aria-label="M68K terminal"

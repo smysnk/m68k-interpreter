@@ -1,3 +1,5 @@
+import { decodeTerminalByte } from './terminalCharset';
+
 export const DEFAULT_TERMINAL_BUFFER_COLUMNS = 80;
 export const DEFAULT_TERMINAL_BUFFER_ROWS = 25;
 export const TERMINAL_BUFFER_SPACE_BYTE = 0x20;
@@ -255,7 +257,7 @@ export function readTerminalFrameBufferCell(
 
   return {
     charByte,
-    char: String.fromCharCode(charByte),
+    char: decodeTerminalByte(charByte),
     foreground:
       frameBuffer.foregroundBytes[offset] === TERMINAL_BUFFER_COLOR_DEFAULT
         ? null
@@ -279,7 +281,7 @@ export function readTerminalFrameBufferLine(
 
   const start = row * frameBuffer.columns;
   const end = start + frameBuffer.columns;
-  return Array.from(frameBuffer.charBytes.subarray(start, end), (value) => String.fromCharCode(value)).join('');
+  return Array.from(frameBuffer.charBytes.subarray(start, end), (value) => decodeTerminalByte(value)).join('');
 }
 
 export function readTerminalFrameBufferText(frameBuffer: TerminalFrameBuffer): string {

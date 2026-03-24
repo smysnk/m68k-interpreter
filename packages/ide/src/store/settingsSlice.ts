@@ -8,12 +8,14 @@ import {
   type IdeSurfaceMode,
 } from '@/theme/editorThemeRegistry';
 
+export type RegisterEditRadix = 'hex' | 'dec' | 'bin';
 export interface SettingsState {
   themes: EditorThemeId[];
   editorTheme: EditorThemeId;
   engineMode: EngineMode;
   followSystemTheme: boolean;
   lineNumbers: boolean;
+  registerEditRadix: RegisterEditRadix;
 }
 
 export type EngineMode = 'interpreter' | 'interpreter-redux';
@@ -24,7 +26,10 @@ export const initialSettingsState: SettingsState = {
   engineMode: 'interpreter',
   followSystemTheme: true,
   lineNumbers: true,
+  registerEditRadix: 'hex',
 };
+
+const registerEditRadices: RegisterEditRadix[] = ['hex', 'dec', 'bin'];
 
 function getOppositeTheme(currentTheme: EditorThemeId): EditorThemeId {
   return currentTheme === EditorThemeEnum.M68K_DARK
@@ -62,6 +67,12 @@ const settingsSlice = createSlice({
     setLineNumbers(state, action: PayloadAction<boolean>) {
       state.lineNumbers = action.payload;
     },
+    setRegisterEditRadix(state, action: PayloadAction<RegisterEditRadix>) {
+      if (!registerEditRadices.includes(action.payload)) {
+        return;
+      }
+      state.registerEditRadix = action.payload;
+    },
     resetSettingsState() {
       return { ...initialSettingsState };
     },
@@ -75,6 +86,7 @@ export const {
   syncSystemTheme,
   setFollowSystemTheme,
   setLineNumbers,
+  setRegisterEditRadix,
   resetSettingsState,
 } = settingsSlice.actions;
 

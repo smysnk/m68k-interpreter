@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import StatusBar from './StatusBar';
 import { useEmulatorStore } from '@/stores/emulatorStore';
@@ -25,7 +25,11 @@ describe('StatusBar', () => {
     expect(screen.getByLabelText('IDE status bar')).toBeInTheDocument();
     expect(screen.getByText('Ready')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /interpreter engine/i })).toHaveTextContent('Interpreter');
-    expect(screen.getByText(/Terminal: 80x25/)).toBeInTheDocument();
+    expect(screen.queryByText(/Inspector:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Help:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Terminal:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Speed:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Delay:/)).not.toBeInTheDocument();
     expect(screen.getByText(/Cursor 1:1/)).toBeInTheDocument();
     expect(screen.getByText(/Stop: idle/)).toBeInTheDocument();
   });
@@ -36,7 +40,6 @@ describe('StatusBar', () => {
 
     renderWithIdeProviders(<StatusBar />);
 
-    expect(screen.getByText(/View: Code/)).toBeInTheDocument();
     expect(screen.getByText(/Ln 12, Col 7/)).toBeInTheDocument();
   });
 
@@ -47,10 +50,8 @@ describe('StatusBar', () => {
   });
 
   it('opens the engine menu upward and updates redux when a new engine is selected', () => {
-    const resetListener = vi.fn();
-    window.addEventListener('emulator:reset', resetListener);
-
     renderWithIdeProviders(<StatusBar />);
+    const startingResetCount = ideStore.getState().emulator.runtimeIntents.reset;
 
     fireEvent.click(screen.getByRole('button', { name: /interpreter engine/i }));
 
@@ -61,26 +62,21 @@ describe('StatusBar', () => {
     fireEvent.click(screen.getByRole('option', { name: /interpreter redux/i }));
 
     expect(ideStore.getState().settings.engineMode).toBe('interpreter-redux');
+    expect(ideStore.getState().emulator.runtimeIntents.reset).toBe(startingResetCount + 1);
     expect(screen.queryByRole('listbox', { name: /interpreter engine options/i })).not.toBeInTheDocument();
-    expect(resetListener).toHaveBeenCalledTimes(1);
-
-    window.removeEventListener('emulator:reset', resetListener);
   });
 
   it('can switch back to the regular interpreter engine', () => {
-    const resetListener = vi.fn();
-    window.addEventListener('emulator:reset', resetListener);
     ideStore.dispatch(setEngineMode('interpreter-redux'));
 
     renderWithIdeProviders(<StatusBar />);
+    const startingResetCount = ideStore.getState().emulator.runtimeIntents.reset;
 
     fireEvent.click(screen.getByRole('button', { name: /interpreter engine/i }));
     fireEvent.click(screen.getByRole('option', { name: /^Interpreter$/i }));
 
     expect(ideStore.getState().settings.engineMode).toBe('interpreter');
     expect(screen.getByRole('button', { name: /interpreter engine/i })).toHaveTextContent('Interpreter');
-    expect(resetListener).toHaveBeenCalledTimes(1);
-
-    window.removeEventListener('emulator:reset', resetListener);
+    expect(ideStore.getState().emulator.runtimeIntents.reset).toBe(startingResetCount + 1);
   });
 });

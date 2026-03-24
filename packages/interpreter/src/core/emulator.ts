@@ -2012,6 +2012,22 @@ export class Emulator {
     return this.registers;
   }
 
+  getCCR(): number {
+    return this.ccr;
+  }
+
+  getSR(): number {
+    return this.ccr & 0x1f;
+  }
+
+  getUSP(): number {
+    return this.registers[STACK_POINTER_REGISTER] >>> 0;
+  }
+
+  getSSP(): number {
+    return this.registers[STACK_POINTER_REGISTER] >>> 0;
+  }
+
   getMemory(): Record<number, number> {
     return this.memory.getMemory();
   }

@@ -1,57 +1,56 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useDispatch, useSelector } from 'react-redux';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faBars,
   faCheck,
   faChevronRight,
   faDesktop,
+  faGaugeHigh,
   faMoon,
+  faPlay,
+  faRedo,
+  faStop,
   faSun,
+  faUndo,
 } from '@fortawesome/free-solid-svg-icons';
-import GitHubButton from 'react-github-btn';
-import type { EngineMode } from '@/store';
+import {
+  closeAppMenu,
+  requestFocusTerminal,
+  requestReset,
+  requestRun,
+  requestStep,
+  requestUndo,
+  setEditorTheme,
+  setFollowSystemTheme,
+  setLineNumbers,
+  setSpeedMultiplier,
+  setActiveSubmenu,
+  setWorkspaceTab,
+  toggleAppMenu,
+  type AppDispatch,
+  type RootState,
+} from '@/store';
+import {
+  selectNavbarMenuState,
+  selectNavbarPresentationModel,
+  selectNavbarThemeLabel,
+} from '@/store/navbarSelectors';
 import { EditorThemeEnum, type EditorThemeId } from '@/theme/editorThemeRegistry';
 
-type WorkspaceTab = 'terminal' | 'code';
-type InspectorPane = 'registers' | 'memory' | 'flags';
-
-interface NavbarProps {
-  activeInspectorPane: InspectorPane;
-  activeWorkspaceTab: WorkspaceTab;
-  editorTheme: EditorThemeId;
-  engineMode: EngineMode;
-  followSystemTheme: boolean;
-  lineNumbers: boolean;
-  onSetEditorTheme: (theme: EditorThemeId) => void;
-  onSetFollowSystemTheme: (value: boolean) => void;
-  onSetLineNumbers: (value: boolean) => void;
-  onShowFlags: () => void;
-  onShowMemory: () => void;
-  onShowRegisters: () => void;
-  onWorkspaceTabChange: (tab: WorkspaceTab) => void;
-  onToggleHelp: () => void;
-  showHelp: boolean;
-}
-
-const Navbar: React.FC<NavbarProps> = ({
-  activeInspectorPane,
-  activeWorkspaceTab,
-  editorTheme,
-  followSystemTheme,
-  lineNumbers,
-  onSetEditorTheme,
-  onSetFollowSystemTheme,
-  onSetLineNumbers,
-  onShowFlags,
-  onShowMemory,
-  onShowRegisters,
-  onWorkspaceTabChange,
-  onToggleHelp,
-  showHelp,
-}) => {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [submenu, setSubmenu] = useState<'style' | null>(null);
+const Navbar: React.FC = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  const { menuOpen, activeSubmenu } = useSelector((state: RootState) => selectNavbarMenuState(state));
+  const themeLabel = useSelector((state: RootState) => selectNavbarThemeLabel(state));
+  const {
+    activeWorkspaceTab,
+    darkThemeActive,
+    followSystemActive,
+    lightThemeActive,
+    lineNumbers,
+    speedMultiplier,
+  } = useSelector((state: RootState) => selectNavbarPresentationModel(state));
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const menuLayerRef = useRef<HTMLDivElement | null>(null);
@@ -61,14 +60,6 @@ const Navbar: React.FC<NavbarProps> = ({
     maxWidth: 280,
     submenuDirection: 'left' as 'left' | 'right',
   });
-  const themeLabel = useMemo(() => {
-    if (followSystemTheme) {
-      return 'Follow System';
-    }
-
-    return editorTheme === EditorThemeEnum.M68K_DARK ? 'Dark' : 'Light';
-  }, [editorTheme, followSystemTheme]);
-
   useEffect(() => {
     if (!menuOpen) {
       return;
@@ -93,15 +84,13 @@ const Navbar: React.FC<NavbarProps> = ({
     const handlePointerDown = (event: MouseEvent): void => {
       const target = event.target as Node;
       if (!menuRef.current?.contains(target) && !menuLayerRef.current?.contains(target)) {
-        setMenuOpen(false);
-        setSubmenu(null);
+        dispatch(closeAppMenu());
       }
     };
 
     const handleEscape = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
-        setMenuOpen(false);
-        setSubmenu(null);
+        dispatch(closeAppMenu());
       }
     };
 
@@ -117,56 +106,47 @@ const Navbar: React.FC<NavbarProps> = ({
       window.removeEventListener('resize', updateMenuPosition);
       window.removeEventListener('scroll', updateMenuPosition, true);
     };
-  }, [menuOpen]);
+  }, [dispatch, menuOpen]);
 
   const closeMenu = (): void => {
-    setMenuOpen(false);
-    setSubmenu(null);
+    dispatch(closeAppMenu());
   };
 
   const handleThemeSelection = (nextTheme: 'system' | EditorThemeId): void => {
     if (nextTheme === 'system') {
-      onSetFollowSystemTheme(true);
+      dispatch(setFollowSystemTheme(true));
     } else {
-      onSetEditorTheme(nextTheme);
+      dispatch(setEditorTheme(nextTheme));
     }
 
     closeMenu();
   };
 
-  const handleShowFlags = (): void => {
-    onShowFlags();
-    closeMenu();
-  };
-
-  const handleShowMemory = (): void => {
-    onShowMemory();
-    closeMenu();
-  };
-
-  const handleShowRegisters = (): void => {
-    onShowRegisters();
-    closeMenu();
-  };
-
-  const handleToggleHelp = (): void => {
-    onToggleHelp();
-    closeMenu();
-  };
-
   const handleToggleLineNumbers = (): void => {
-    onSetLineNumbers(!lineNumbers);
+    dispatch(setLineNumbers(!lineNumbers));
     closeMenu();
   };
 
   const handleToggleMenu = (): void => {
-    setMenuOpen((current) => {
-      const next = !current;
-      if (!next) {
-        setSubmenu(null);
-      }
-      return next;
-    });
+    dispatch(toggleAppMenu());
+  };
+
+  const handleRun = (): void => {
+    dispatch(requestRun());
+    dispatch(requestFocusTerminal());
+  };
+
+  const handleStep = (): void => {
+    dispatch(requestStep());
+    dispatch(requestFocusTerminal());
+  };
+
+  const handleUndo = (): void => {
+    dispatch(requestUndo());
+  };
+
+  const handleReset = (): void => {
+    dispatch(requestReset());
   };
 
   return (
@@ -202,7 +182,7 @@ const Navbar: React.FC<NavbarProps> = ({
               aria-selected={activeWorkspaceTab === 'terminal'}
               className={`navbar-view-tab ${activeWorkspaceTab === 'terminal' ? 'active' : ''}`}
               id="workspace-tab-terminal"
-              onClick={() => onWorkspaceTabChange('terminal')}
+              onClick={() => dispatch(setWorkspaceTab('terminal'))}
               role="tab"
               type="button"
             >
@@ -213,7 +193,7 @@ const Navbar: React.FC<NavbarProps> = ({
               aria-selected={activeWorkspaceTab === 'code'}
               className={`navbar-view-tab ${activeWorkspaceTab === 'code' ? 'active' : ''}`}
               id="workspace-tab-code"
-              onClick={() => onWorkspaceTabChange('code')}
+              onClick={() => dispatch(setWorkspaceTab('code'))}
               role="tab"
               type="button"
             >
@@ -224,18 +204,68 @@ const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       <div className="navbar-right">
-        <div className="navbar-github">
-          <GitHubButton
-            href="https://github.com/gianlucarea/m68k-interpreter"
-            data-color-scheme="no-preference: light; light: light; dark: dark;"
-            data-icon="octicon-star"
-            data-size="large"
-            data-show-count="true"
-            aria-label="Star gianlucarea/m68k-interpreter on GitHub"
-          >
-            Star
-          </GitHubButton>
+        <div className="navbar-runtime-controls" aria-label="Execution controls">
+          <div className="navbar-execution-buttons">
+            <button
+              aria-label="Run program"
+              className="btn-toolbar btn-toolbar-icon btn-toolbar-accent"
+              onClick={handleRun}
+              title="Run program"
+              type="button"
+            >
+              <FontAwesomeIcon icon={faPlay} size="sm" />
+            </button>
+            <button
+              aria-label="Reset"
+              className="btn-toolbar btn-toolbar-icon"
+              onClick={handleReset}
+              title="Reset"
+              type="button"
+            >
+              <FontAwesomeIcon icon={faStop} size="sm" />
+            </button>
+            <button
+              aria-label="Step"
+              className="btn-toolbar btn-toolbar-icon"
+              onClick={handleStep}
+              title="Step"
+              type="button"
+            >
+              <FontAwesomeIcon icon={faRedo} size="sm" />
+            </button>
+            <button
+              aria-label="Undo"
+              className="btn-toolbar btn-toolbar-icon"
+              onClick={handleUndo}
+              title="Undo"
+              type="button"
+            >
+              <FontAwesomeIcon icon={faUndo} size="sm" />
+            </button>
+          </div>
+
+          <label className="navbar-runtime-field" htmlFor="navbar-speed-input">
+            <span className="navbar-runtime-field-label">Speed</span>
+            <div className="navbar-runtime-input-wrap">
+              <FontAwesomeIcon aria-hidden="true" icon={faGaugeHigh} size="sm" />
+              <input
+                id="navbar-speed-input"
+                aria-label="Speed (x)"
+                className="navbar-runtime-input"
+                max="8"
+                min="0.25"
+                onChange={(event) =>
+                  dispatch(setSpeedMultiplier(Math.max(0.25, Number.parseFloat(event.target.value) || 1)))
+                }
+                step="0.25"
+                title="Multiplier for per-frame execution budget"
+                type="number"
+                value={speedMultiplier}
+              />
+            </div>
+          </label>
         </div>
+
       </div>
       {menuOpen
         ? createPortal(
@@ -253,12 +283,12 @@ const Navbar: React.FC<NavbarProps> = ({
               }}
             >
               <button
-                aria-expanded={submenu === 'style'}
+                aria-expanded={activeSubmenu === 'style'}
                 aria-haspopup="menu"
-                className={`navbar-menu-item ${submenu === 'style' ? 'active' : ''}`}
-                onClick={() => setSubmenu('style')}
-                onFocus={() => setSubmenu('style')}
-                onMouseEnter={() => setSubmenu('style')}
+                className={`navbar-menu-item ${activeSubmenu === 'style' ? 'active' : ''}`}
+                onClick={() => dispatch(setActiveSubmenu('style'))}
+                onFocus={() => dispatch(setActiveSubmenu('style'))}
+                onMouseEnter={() => dispatch(setActiveSubmenu('style'))}
                 role="menuitem"
                 type="button"
               >
@@ -268,66 +298,6 @@ const Navbar: React.FC<NavbarProps> = ({
                 </span>
                 <span className="navbar-menu-meta">
                   <FontAwesomeIcon icon={faChevronRight} size="sm" />
-                </span>
-              </button>
-
-              <button
-                className={`navbar-menu-item ${activeInspectorPane === 'registers' ? 'active' : ''}`}
-                onClick={handleShowRegisters}
-                role="menuitem"
-                type="button"
-              >
-                <span className="navbar-menu-copy">
-                  <span className="navbar-menu-title">Registers</span>
-                  <span className="navbar-menu-subtitle">Show the register inspector</span>
-                </span>
-                <span className="navbar-menu-meta">
-                  {activeInspectorPane === 'registers' ? <FontAwesomeIcon icon={faCheck} size="sm" /> : null}
-                </span>
-              </button>
-
-              <button
-                className={`navbar-menu-item ${activeInspectorPane === 'memory' ? 'active' : ''}`}
-                onClick={handleShowMemory}
-                role="menuitem"
-                type="button"
-              >
-                <span className="navbar-menu-copy">
-                  <span className="navbar-menu-title">Memory</span>
-                  <span className="navbar-menu-subtitle">Inspect the active memory window</span>
-                </span>
-                <span className="navbar-menu-meta">
-                  {activeInspectorPane === 'memory' ? <FontAwesomeIcon icon={faCheck} size="sm" /> : null}
-                </span>
-              </button>
-
-              <button
-                className={`navbar-menu-item ${activeInspectorPane === 'flags' ? 'active' : ''}`}
-                onClick={handleShowFlags}
-                role="menuitem"
-                type="button"
-              >
-                <span className="navbar-menu-copy">
-                  <span className="navbar-menu-title">Flags</span>
-                  <span className="navbar-menu-subtitle">Show the processor flags view</span>
-                </span>
-                <span className="navbar-menu-meta">
-                  {activeInspectorPane === 'flags' ? <FontAwesomeIcon icon={faCheck} size="sm" /> : null}
-                </span>
-              </button>
-
-              <button
-                className={`navbar-menu-item ${showHelp ? 'active' : ''}`}
-                onClick={handleToggleHelp}
-                role="menuitem"
-                type="button"
-              >
-                <span className="navbar-menu-copy">
-                  <span className="navbar-menu-title">Compatibility Notes</span>
-                  <span className="navbar-menu-subtitle">Open Easy68K subset guidance</span>
-                </span>
-                <span className="navbar-menu-meta">
-                  {showHelp ? <FontAwesomeIcon icon={faCheck} size="sm" /> : null}
                 </span>
               </button>
 
@@ -346,7 +316,7 @@ const Navbar: React.FC<NavbarProps> = ({
                 </span>
               </button>
 
-              {submenu === 'style' ? (
+              {activeSubmenu === 'style' ? (
                 <div
                   className={`navbar-submenu navbar-submenu-${menuPosition.submenuDirection}`}
                   data-testid="navbar-style-submenu"
@@ -354,7 +324,7 @@ const Navbar: React.FC<NavbarProps> = ({
                   aria-label="Style options"
                 >
                   <button
-                    className={`navbar-menu-item ${followSystemTheme ? 'active' : ''}`}
+                    className={`navbar-menu-item ${followSystemActive ? 'active' : ''}`}
                     onClick={() => handleThemeSelection('system')}
                     role="menuitem"
                     type="button"
@@ -364,13 +334,11 @@ const Navbar: React.FC<NavbarProps> = ({
                       <span className="navbar-menu-subtitle">Match the OS light and dark mode</span>
                     </span>
                     <span className="navbar-menu-meta">
-                      {followSystemTheme ? <FontAwesomeIcon icon={faCheck} size="sm" /> : <FontAwesomeIcon icon={faDesktop} size="sm" />}
+                      {followSystemActive ? <FontAwesomeIcon icon={faCheck} size="sm" /> : <FontAwesomeIcon icon={faDesktop} size="sm" />}
                     </span>
                   </button>
                   <button
-                    className={`navbar-menu-item ${
-                      !followSystemTheme && editorTheme === EditorThemeEnum.M68K_LIGHT ? 'active' : ''
-                    }`}
+                    className={`navbar-menu-item ${lightThemeActive ? 'active' : ''}`}
                     onClick={() => handleThemeSelection(EditorThemeEnum.M68K_LIGHT)}
                     role="menuitem"
                     type="button"
@@ -380,7 +348,7 @@ const Navbar: React.FC<NavbarProps> = ({
                       <span className="navbar-menu-subtitle">Bright shell with high-contrast terminals</span>
                     </span>
                     <span className="navbar-menu-meta">
-                      {!followSystemTheme && editorTheme === EditorThemeEnum.M68K_LIGHT ? (
+                      {lightThemeActive ? (
                         <FontAwesomeIcon icon={faCheck} size="sm" />
                       ) : (
                         <FontAwesomeIcon icon={faSun} size="sm" />
@@ -388,9 +356,7 @@ const Navbar: React.FC<NavbarProps> = ({
                     </span>
                   </button>
                   <button
-                    className={`navbar-menu-item ${
-                      !followSystemTheme && editorTheme === EditorThemeEnum.M68K_DARK ? 'active' : ''
-                    }`}
+                    className={`navbar-menu-item ${darkThemeActive ? 'active' : ''}`}
                     onClick={() => handleThemeSelection(EditorThemeEnum.M68K_DARK)}
                     role="menuitem"
                     type="button"
@@ -400,7 +366,7 @@ const Navbar: React.FC<NavbarProps> = ({
                       <span className="navbar-menu-subtitle">Low-glare shell for terminal-heavy sessions</span>
                     </span>
                     <span className="navbar-menu-meta">
-                      {!followSystemTheme && editorTheme === EditorThemeEnum.M68K_DARK ? (
+                      {darkThemeActive ? (
                         <FontAwesomeIcon icon={faCheck} size="sm" />
                       ) : (
                         <FontAwesomeIcon icon={faMoon} size="sm" />

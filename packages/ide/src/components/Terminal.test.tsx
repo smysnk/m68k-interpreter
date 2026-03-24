@@ -1,10 +1,10 @@
 import { createTerminalFrameBuffer, type Emulator } from '@m68k/interpreter';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import Terminal from './Terminal';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { useEmulatorStore } from '@/stores/emulatorStore';
-import { ideStore, resetSettingsState, setEditorTheme } from '@/store';
+import { ideStore, requestFocusTerminal, resetSettingsState, setEditorTheme } from '@/store';
 import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
 
@@ -56,6 +56,7 @@ describe('Terminal', () => {
     expect(screen.queryByRole('button', { name: /focus terminal/i })).not.toBeInTheDocument();
     expect(retroDisplay).not.toBeNull();
     expect(retroDisplay).toHaveAttribute('data-grid-mode', 'static');
+    expect(screen.getByTestId('terminal-screen')).toHaveAttribute('data-terminal-focused', 'false');
   });
 
   it('renders from the terminal buffer even when no append output stream is present', async () => {
@@ -161,17 +162,24 @@ describe('Terminal', () => {
     expect(screen.queryByRole('button', { name: /toggle terminal light mode/i })).not.toBeInTheDocument();
   });
 
-  it('focuses the retro display viewport when the focus event is dispatched', () => {
+  it('focuses the retro display viewport and enables the terminal glow state when the focus event is dispatched', async () => {
     ideStore.dispatch(setEditorTheme(EditorThemeEnum.M68K_DARK));
 
     renderWithIdeProviders(<Terminal />);
 
     const viewport = document.querySelector('.retro-lcd__viewport') as HTMLDivElement | null;
+    const terminalScreen = screen.getByTestId('terminal-screen');
     expect(viewport).not.toBeNull();
     expect(viewport).not.toHaveFocus();
+    expect(terminalScreen).toHaveAttribute('data-terminal-focused', 'false');
 
-    window.dispatchEvent(new CustomEvent('emulator:focus-terminal'));
+    await act(async () => {
+      ideStore.dispatch(requestFocusTerminal());
+    });
 
-    expect(viewport).toHaveFocus();
+    await waitFor(() => {
+      expect(viewport).toHaveFocus();
+      expect(terminalScreen).toHaveAttribute('data-terminal-focused', 'true');
+    });
   });
 });

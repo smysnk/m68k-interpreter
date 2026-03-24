@@ -35,7 +35,7 @@ export const NIBBLES_INTRO_BENCHMARK_SCENARIO: BenchmarkScenario = {
   mode: 'load-and-run',
   maxSteps: 200000,
   stopCondition: 'waiting-for-input',
-  terminalMarkers: ['Difficulty', 'Programmed By Josh Henn'],
+  terminalMarkers: ['Difficulty', 'Programmed By Joshua Bellamy'],
 };
 
 function buildColdLoadProgram(entryCount = 96): string {

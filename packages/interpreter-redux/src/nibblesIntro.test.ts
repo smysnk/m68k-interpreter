@@ -31,7 +31,7 @@ describe('interpreter-redux nibbles intro', () => {
       expect(session.getErrors()).toEqual([]);
       expect(session.isWaitingForInput()).toBe(true);
       expect(lastRenderedText).toContain('Difficulty');
-      expect(lastRenderedText).toContain('Programmed By Josh Henn');
+      expect(lastRenderedText).toContain('Programmed By Joshua Bellamy');
     },
     120000
   );

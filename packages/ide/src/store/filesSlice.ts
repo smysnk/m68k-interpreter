@@ -72,7 +72,21 @@ export function normalizeFilesState(value?: Partial<FilesState>): FilesState {
     : [];
 
   const persistedById = new Map(persistedItems.map((item) => [item.id, item]));
-  const mergedDefaults = defaults.items.map((item) => persistedById.get(item.id) ?? item);
+  const mergedDefaults = defaults.items.map((item) => {
+    const persistedItem = persistedById.get(item.id);
+
+    if (!persistedItem) {
+      return item;
+    }
+
+    // Bundled example files should stay aligned with the shipped source so
+    // fixture/asset updates are reflected even when older local storage exists.
+    if (item.kind === 'example') {
+      return item;
+    }
+
+    return persistedItem;
+  });
   const extraItems = persistedItems.filter((item) => !defaults.items.some((defaultItem) => defaultItem.id === item.id));
   const items = dedupeFiles([...mergedDefaults, ...extraItems]);
   const activeFileId =

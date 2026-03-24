@@ -16,6 +16,7 @@ type EmulatorCompatibleContract = Pick<
   | 'clearInputQueue'
   | 'emulationStep'
   | 'getCFlag'
+  | 'getCCR'
   | 'getErrors'
   | 'getException'
   | 'getLastInstruction'
@@ -25,12 +26,15 @@ type EmulatorCompatibleContract = Pick<
   | 'getPC'
   | 'getQueuedInputLength'
   | 'getRegisters'
+  | 'getSR'
+  | 'getSSP'
   | 'readMemoryRange'
   | 'getSymbolAddress'
   | 'getSymbols'
   | 'getTerminalLines'
   | 'getTerminalText'
   | 'getTerminalSnapshot'
+  | 'getUSP'
   | 'getVFlag'
   | 'getXFlag'
   | 'getZFlag'
@@ -163,6 +167,18 @@ export class ReducerInterpreterSession implements ReducerInterpreterAdapter {
 
   getCCR(): number {
     return this.runtimeStore.getState().cpu.ccr;
+  }
+
+  getSR(): number {
+    return this.runtimeStore.getState().cpu.ccr & 0x1f;
+  }
+
+  getUSP(): number {
+    return this.runtimeStore.getState().cpu.registers[7] >>> 0;
+  }
+
+  getSSP(): number {
+    return this.runtimeStore.getState().cpu.registers[7] >>> 0;
   }
 
   getTerminalSnapshot(): TerminalSnapshot {

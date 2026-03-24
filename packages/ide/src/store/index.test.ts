@@ -14,6 +14,7 @@ import {
   setEngineMode,
   setEditorCode,
   setEmulatorInstance,
+  setRegisterEditRadix,
   setRootHorizontalLayout,
   setRootHorizontalWithContextLayout,
   toggleContextView,
@@ -25,12 +26,15 @@ describe('ideStore', () => {
     const store = createIdeStore();
 
     expect(store.getState().settings.engineMode).toBe('interpreter');
+    expect(store.getState().settings.registerEditRadix).toBe('hex');
     expect(store.getState().interpreterRedux.cpu.registers).toHaveLength(16);
     expect(store.getState().uiShell.workspaceTab).toBe('terminal');
 
     store.dispatch(setEngineMode('interpreter-redux'));
+    store.dispatch(setRegisterEditRadix('bin'));
 
     expect(store.getState().settings.engineMode).toBe('interpreter-redux');
+    expect(store.getState().settings.registerEditRadix).toBe('bin');
   });
 
   it('resets the mounted interpreter-redux slice when the emulator UI resets', () => {
