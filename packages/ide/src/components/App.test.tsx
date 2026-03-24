@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App, { AppShell } from './App';
 import { nibblesSource } from '@/programs/nibbles';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
@@ -50,20 +50,24 @@ describe('App', () => {
     window.emulatorInstance = null;
   });
 
-  it('loads the selected sidebar file into the editor', () => {
+  it('loads the selected sidebar file into the editor', async () => {
     render(<App />);
 
-    fireEvent.mouseEnter(screen.getByRole('button', { name: /open file explorer/i }));
-    fireEvent.click(screen.getByRole('button', { name: /scratch\.asm/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /scratch\.asm/i }));
 
-    expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
-    expect(useEmulatorStore.getState().editorCode).toContain('Write your M68K assembly code here');
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
+      expect(useEmulatorStore.getState().editorCode).toContain('Write your M68K assembly code here');
+    });
 
-    fireEvent.mouseEnter(screen.getByRole('button', { name: /open file explorer/i }));
-    fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /nibbles\.asm/i }));
 
-    expect(useEmulatorStore.getState().editorCode).toBe(nibblesSource);
-    expect(window.editorCode).toContain('END NIBBLES');
+    await waitFor(() => {
+      expect(useEmulatorStore.getState().editorCode).toBe(nibblesSource);
+      expect(window.editorCode).toContain('END NIBBLES');
+    });
   });
 
   it('defaults the workspace to the terminal tab and lets the user switch to code', () => {
