@@ -41,7 +41,7 @@
     "build": "tsc -p tsconfig.json --noEmit && next build",
     "build:pages": "tsc -p tsconfig.json --noEmit && NEXT_OUTPUT_MODE=export next build && touch out/.nojekyll",
     "preview": "next start",
-    "test": "vitest run --config vitest.config.ts",
+    "test": "node ./scripts/ensure-react-jsx-tsconfig.mjs && vitest run --config vitest.config.ts",
     "type-check": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

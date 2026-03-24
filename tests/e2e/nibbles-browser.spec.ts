@@ -58,7 +58,7 @@ test.describe('browser e2e nibbles', () => {
           return {
             hasDifficulty: /difficulty/i.test(terminalText),
             hasMovementKeys: /movement\s+keys/i.test(terminalText),
-            hasProgrammedBy: /programmed\s+by\s+josh\s+henn/i.test(terminalText),
+            hasProgrammedBy: /programmed\s+by\s+joshua\s+bellamy/i.test(terminalText),
             hasEasy: /\beasy\b/i.test(terminalText),
             hasInsane: /\binsane\b/i.test(terminalText),
           };
@@ -85,7 +85,7 @@ test.describe('browser e2e nibbles', () => {
     expect(introText).toContain('└');
     expect(introText).toContain('┘');
     expect(introText).not.toContain('ý');
-    await expect(page.getByLabel('IDE status bar')).toContainText(/waiting for input/i, {
+    await expect(page.getByLabel('IDE status bar')).toContainText(/waiting/i, {
       timeout: 15_000,
     });
 

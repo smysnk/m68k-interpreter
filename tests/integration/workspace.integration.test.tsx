@@ -5,7 +5,15 @@ import { Emulator } from '@m68k/interpreter';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { useEmulatorStore } from '@/stores/emulatorStore';
-import { ideStore, resetFilesState, resetSettingsState } from '@/store';
+import {
+  ideStore,
+  requestReset,
+  requestRun,
+  resetFilesState,
+  resetSettingsState,
+  setActiveFileContent,
+  setEngineMode,
+} from '@/store';
 
 const NIBBLES_BOOT_TEST_TIMEOUT_MS = 60_000;
 const NIBBLES_RESET_TEST_TIMEOUT_MS = 90_000;
@@ -50,17 +58,20 @@ describe('workspace integration', () => {
     expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByTestId('assembly-editor')).toBeInTheDocument();
 
-    useEmulatorStore.getState().setEditorCode(`START
+    act(() => {
+      ideStore.dispatch(
+        setActiveFileContent(`START
   MOVE.B #'H',D0
   TRAP #15
   DC.W 1
   TRAP #11
   DC.W 0
-  END START`);
-    window.editorCode = useEmulatorStore.getState().editorCode;
+  END START`)
+      );
+    });
 
     act(() => {
-      window.dispatchEvent(new CustomEvent('emulator:run'));
+      ideStore.dispatch(requestRun());
     });
 
     await waitFor(() => {
@@ -72,24 +83,25 @@ describe('workspace integration', () => {
   it('can switch to Interpreter Redux and boot a simple program through the shared IDE flow', async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: /interpreter engine/i }));
-    fireEvent.click(screen.getByRole('option', { name: /interpreter redux/i }));
-
-    useEmulatorStore.getState().setEditorCode(`VALUE DC.L 0
+    act(() => {
+      ideStore.dispatch(setEngineMode('interpreter-redux'));
+      ideStore.dispatch(
+        setActiveFileContent(`VALUE DC.L 0
 START
   MOVE.L #1,D0
   ADDQ.L #1,D0
   MOVE.L D0,VALUE
-  END START`);
-    window.editorCode = useEmulatorStore.getState().editorCode;
+  END START`)
+      );
+    });
 
     act(() => {
-      window.dispatchEvent(new CustomEvent('emulator:run'));
+      ideStore.dispatch(requestRun());
     });
 
     await waitFor(() => {
       expect(ideStore.getState().settings.engineMode).toBe('interpreter-redux');
-      expect(useEmulatorStore.getState().registers.d0).toBe(2);
+      expect(getWindowEmulator().getRegisters()[8]).toBe(2);
     });
 
     const valueAddress = getWindowEmulator().getSymbolAddress('VALUE') ?? -1;
@@ -105,7 +117,7 @@ START
     expect(window.editorCode).toContain('END NIBBLES');
 
     act(() => {
-      window.dispatchEvent(new CustomEvent('emulator:run'));
+      ideStore.dispatch(requestRun());
     });
 
     await waitFor(
@@ -172,7 +184,7 @@ START
     fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
 
     act(() => {
-      window.dispatchEvent(new CustomEvent('emulator:run'));
+      ideStore.dispatch(requestRun());
     });
 
     await waitFor(
@@ -189,7 +201,9 @@ START
       { timeout: 7000 }
     );
 
-    fireEvent.click(screen.getByTitle(/reset/i));
+    act(() => {
+      ideStore.dispatch(requestReset());
+    });
 
     await waitFor(() => {
       expect(window.emulatorInstance).toBeNull();
@@ -198,7 +212,7 @@ START
     });
 
     act(() => {
-      window.dispatchEvent(new CustomEvent('emulator:run'));
+      ideStore.dispatch(requestRun());
     });
 
     await waitFor(

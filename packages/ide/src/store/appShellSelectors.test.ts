@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createIdeStore, setContextView, setInspectorView, toggleShowFlags, setWorkspaceTab } from '@/store';
+import { createIdeStore, setContextView, setInspectorView, setWorkspaceTab } from '@/store';
 import {
   selectAppShellModel,
   selectInspectorPanelModel,
@@ -66,19 +66,9 @@ describe('appShellSelectors', () => {
     store.dispatch(setInspectorView('memory'));
     expect(selectInspectorPanelModel(store.getState())).toMatchObject({
       activeInspectorPane: 'memory',
-      showFlags: false,
       showRegisters: false,
       showMemory: true,
       activePanelComponent: 'memory',
-    });
-
-    store.dispatch(toggleShowFlags());
-    expect(selectInspectorPanelModel(store.getState())).toMatchObject({
-      activeInspectorPane: 'flags',
-      showFlags: true,
-      showRegisters: false,
-      showMemory: false,
-      activePanelComponent: 'flags',
     });
   });
 });

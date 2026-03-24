@@ -105,12 +105,6 @@ const StatusBar: React.FC = () => {
         </div>
       </div>
       <div className="status-bar-section status-bar-section-center" />
-
-      <div className="status-bar-section status-bar-section-right">
-        <span className="status-item">{model.locationLabel}</span>
-        <span className="status-item">Frame: {model.frameLabel}</span>
-        <span className="status-item">Stop: {model.stopLabel}</span>
-      </div>
     </footer>
   );
 };

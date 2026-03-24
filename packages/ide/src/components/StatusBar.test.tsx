@@ -7,8 +7,6 @@ import {
   resetFilesState,
   resetSettingsState,
   setEngineMode,
-  setEditorCursorPosition,
-  setWorkspaceTab,
 } from '@/store';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
 
@@ -30,17 +28,9 @@ describe('StatusBar', () => {
     expect(screen.queryByText(/Terminal:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Speed:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Delay:/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Cursor 1:1/)).toBeInTheDocument();
-    expect(screen.getByText(/Stop: idle/)).toBeInTheDocument();
-  });
-
-  it('shows editor line and column when the code view is active', () => {
-    ideStore.dispatch(setWorkspaceTab('code'));
-    ideStore.dispatch(setEditorCursorPosition({ line: 12, column: 7 }));
-
-    renderWithIdeProviders(<StatusBar />);
-
-    expect(screen.getByText(/Ln 12, Col 7/)).toBeInTheDocument();
+    expect(screen.queryByText(/Cursor/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Frame:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Stop:/)).not.toBeInTheDocument();
   });
 
   it('keeps the status bar focused on runtime info rather than program labels', () => {

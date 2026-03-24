@@ -87,7 +87,7 @@ export default {
       adapter: "vitest",
       package: "ide",
       cwd: rootDir,
-      command: ["yarn", "vitest", "run", "--config", "packages/ide/vitest.config.ts"],
+      command: ["yarn", "workspace", "@m68k/ide", "test"],
       module: "experience",
       theme: "ide",
       coverage: {

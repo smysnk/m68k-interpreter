@@ -172,7 +172,7 @@ describe('App', () => {
 
     expect(registersTab).toHaveAttribute('aria-selected', 'false');
     expect(memoryTab).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByLabelText('Start memory address')).toBeInTheDocument();
+    expect(screen.getByLabelText('Start Address')).toBeInTheDocument();
   });
 
   it('hydrates theme and shell preferences from persisted storage', () => {

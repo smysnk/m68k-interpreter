@@ -329,9 +329,11 @@ pre {
 .main-content {
   flex: 1;
   padding: var(--spacing-md);
+  padding-bottom: calc(var(--spacing-md) + var(--app-chrome-bottom-offset, 0px));
   overflow: hidden;
   background: transparent;
   min-height: 0;
+  scroll-padding-bottom: calc(var(--spacing-md) + var(--app-chrome-bottom-offset, 0px));
 }
 
 .status-bar {

@@ -17,6 +17,7 @@ import {
   setRootHorizontalWithContextLayout,
   selectRootPanelLayoutModel,
   type AppDispatch,
+  type RootState,
 } from '@/store';
 
 function AppShell(): React.ReactElement {
@@ -24,6 +25,7 @@ function AppShell(): React.ReactElement {
   const theme = useTheme();
   const { navbarShellRef, statusBarShellRef } = useAppShellController();
   const panelLayout = useSelector(selectRootPanelLayoutModel);
+  const bottomChromeOffset = useSelector((state: RootState) => state.uiShell.chromeOffsets.bottom);
 
   useEmulatorEvents();
 
@@ -39,7 +41,16 @@ function AppShell(): React.ReactElement {
   };
 
   return (
-    <div className="app-container" data-testid="app-container" data-theme={theme.surfaceMode}>
+    <div
+      className="app-container"
+      data-testid="app-container"
+      data-theme={theme.surfaceMode}
+      style={
+        {
+          '--app-chrome-bottom-offset': `${bottomChromeOffset}px`,
+        } as React.CSSProperties
+      }
+    >
       <div className="app-chrome-top" ref={navbarShellRef}>
         <Navbar />
       </div>

@@ -4,3 +4,4 @@ node_modules
 .backup
 public/assets
 public/index.html
+packages/ide/next-env.d.ts

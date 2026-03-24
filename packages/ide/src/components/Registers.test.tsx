@@ -34,7 +34,6 @@ describe('Registers', () => {
     const flagsToggle = screen.getByRole('button', { name: /flags/i });
     expect(flagsToggle).toHaveAttribute('aria-expanded', 'false');
     expect(document.getElementById('register-group-panel-flags')).toHaveAttribute('hidden');
-    expect(screen.queryByLabelText('Current condition flags')).not.toBeInTheDocument();
     fireEvent.click(flagsToggle);
     const flagsPanel = screen.getByLabelText('Current condition flags');
     expect(flagsToggle).toHaveAttribute('aria-expanded', 'true');

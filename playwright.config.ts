@@ -23,6 +23,10 @@ export default defineConfig({
   },
   webServer: {
     command: 'yarn preview:e2e',
+    env: {
+      ...process.env,
+      NEXT_PUBLIC_IDE_AUTOPLAY: 'false',
+    },
     url: baseURL,
     timeout: 180_000,
     reuseExistingServer: !process.env.CI,
