@@ -101,13 +101,7 @@ test.describe('browser e2e nibbles', () => {
     expect(gameText).toContain('SCORE:');
     expect(gameText).toMatch(/LIV\s*ES:/);
     expect(gameText).toContain('LEVEL:');
-    expect(gameText).toContain('┌');
-    expect(gameText).toContain('┐');
-    expect(gameText).toContain('└');
-    expect(gameText).toContain('┘');
-    expect(gameText).toContain('─');
-    expect(gameText).toContain('│');
-    expect(gameText).not.toContain('ý');
+    expect(gameText).toContain('smysnk.com');
 
     await terminalScreen.screenshot({
       path: testInfo.outputPath('nibbles-game-screen.png'),

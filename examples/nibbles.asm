@@ -93,7 +93,7 @@ loadlevel
 
         MOVE.B LEVEL, D4     ; Display Level
         ADDI.B #1,D4
-        MOVE.B #45,D1
+        MOVE.B #46,D1
         MOVE.B #24,D2
         BSR    _GOTOXY
         MOVE.L #STR_COL_YELLOW,A1 ; Set color
@@ -101,7 +101,7 @@ loadlevel
         BSR    _DISPNUM10
 
         MOVE.B LIVES, D4     ; Display Lives
-        MOVE.B #29,D1
+        MOVE.B #30,D1
         MOVE.B #24,D2
         BSR    _GOTOXY
         MOVE.L #STR_COL_YELLOW,A1 ; Set color
@@ -570,7 +570,7 @@ clearnextmem
 _DISPSCORE       
         MOVEM.L D0-D4/A1,-(SP)
 
-        MOVE    #13,D1    ; x Goto word "Score:" on the screen
+        MOVE    #14,D1    ; x Goto score value on the screen
         MOVE    #24,D2    ; y
         BSR     _GOTOXY
         MOVE.L #STR_COL_YELLOW,A1 
