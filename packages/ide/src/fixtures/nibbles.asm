@@ -720,8 +720,8 @@ _SELECT_DIFF
         MOVEM.L D0-D3,-(SP)
         ; Select Difficulty
 draw_select
-        MOVE.B   #8,D1    
-        MOVE.B   #14,D2
+        MOVE.B   #9,D1    
+        MOVE.B   #15,D2
         CMP.B     #0,DIFFICULTY  ; 
         BEQ     draw_easy_select        
         CMP.B     #1,DIFFICULTY  ; 
@@ -981,15 +981,15 @@ TIMER     DS.L  1
 
 SNK_SCR   DS.W  SNK_SCR_SIZE  ; x*y = 78*22
 
-STR_EASY   DC.B    '[37;40m [32;40mEASY[37;40m',0
-STR_MEDIUM DC.B    '[32;40mMEDIUM[37;40m',0
-STR_HARD   DC.B    '[37;40m [32;40mHARD[37;40m',0
-STR_INSANE DC.B    '[32;40mINSANE[37;40m',0
+STR_EASY   DC.B    '[32;40mEASY  [37;40m',0
+STR_MEDIUM DC.B    '[32;40mMEDIUM [37;40m',0
+STR_HARD   DC.B    '[32;40mHARD   [37;40m',0
+STR_INSANE DC.B    '[32;40mINSANE [37;40m',0
 
-STR_SEASY   DC.B   '[37;40m [30;42mEASY[37;40m',0
-STR_SMEDIUM DC.B   '[30;42mMEDIUM[37;40m',0
-STR_SHARD   DC.B   '[37;40m [30;42mHARD[37;40m',0
-STR_SINSANE DC.B   '[30;42mINSANE[37;40m',0
+STR_SEASY   DC.B   '[30;42mEASY   [37;40m',0
+STR_SMEDIUM DC.B   '[30;42mMEDIUM [37;40m',0
+STR_SHARD   DC.B   '[30;42mHARD   [37;40m',0
+STR_SINSANE DC.B   '[30;42mINSANE [37;40m',0
 
 STR_GG_YES  DC.B   '[34;40mPLAY AGAIN[37;40m',0
 STR_GG_SYES DC.B   '[30;44mPLAY AGAIN[37;40m',0

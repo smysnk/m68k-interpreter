@@ -5,9 +5,11 @@ import { chromium } from '@playwright/test';
 
 const baseUrl = process.env.DEMO_BASE_URL || 'http://127.0.0.1:4173';
 const outputDir = path.resolve(process.cwd(), '.tmp/readme-demo');
-const finalVideoPath = path.resolve(process.cwd(), 'docs/assets/m68k-interpreter-nibbles-demo.webm');
+const finalWebmPath = path.resolve(process.cwd(), 'docs/assets/m68k-interpreter-nibbles-demo.webm');
+const finalMp4Path = path.resolve(process.cwd(), 'docs/assets/m68k-interpreter-nibbles-demo.mp4');
 const persistenceKey = 'm68k.ide.preferences.v1';
 const trimmedVideoPath = path.resolve(outputDir, 'trimmed-readme-demo.webm');
+const finalPassVideoPath = path.resolve(outputDir, 'final-readme-demo.webm');
 const leadingTrimSeconds = process.env.DEMO_TRIM_START_SECONDS || '0.8';
 
 async function wait(ms) {
@@ -33,7 +35,7 @@ async function readTerminalText(page) {
 
 fs.rmSync(outputDir, { recursive: true, force: true });
 fs.mkdirSync(outputDir, { recursive: true });
-fs.mkdirSync(path.dirname(finalVideoPath), { recursive: true });
+fs.mkdirSync(path.dirname(finalWebmPath), { recursive: true });
 
 const browser = await chromium.launch({
   headless: true,
@@ -191,7 +193,21 @@ execFileSync(
     '-i',
     capturedVideo,
     '-c:v',
-    'libvpx',
+    'libvpx-vp9',
+    '-crf',
+    '18',
+    '-b:v',
+    '0',
+    '-deadline',
+    'good',
+    '-cpu-used',
+    '2',
+    '-row-mt',
+    '1',
+    '-tile-columns',
+    '2',
+    '-g',
+    '240',
     '-an',
     trimmedVideoPath,
   ],
@@ -200,5 +216,59 @@ execFileSync(
   }
 );
 
-fs.copyFileSync(trimmedVideoPath, finalVideoPath);
-console.log(`Saved demo video to ${finalVideoPath}`);
+execFileSync(
+  'ffmpeg',
+  [
+    '-y',
+    '-i',
+    trimmedVideoPath,
+    '-c:v',
+    'libvpx-vp9',
+    '-crf',
+    '16',
+    '-b:v',
+    '0',
+    '-deadline',
+    'best',
+    '-cpu-used',
+    '1',
+    '-row-mt',
+    '1',
+    '-tile-columns',
+    '2',
+    '-g',
+    '240',
+    '-an',
+    finalPassVideoPath,
+  ],
+  {
+    stdio: 'ignore',
+  }
+);
+
+execFileSync(
+  'ffmpeg',
+  [
+    '-y',
+    '-i',
+    finalPassVideoPath,
+    '-c:v',
+    'libx264',
+    '-preset',
+    'slow',
+    '-crf',
+    '16',
+    '-pix_fmt',
+    'yuv420p',
+    '-movflags',
+    '+faststart',
+    '-an',
+    finalMp4Path,
+  ],
+  {
+    stdio: 'ignore',
+  }
+);
+
+fs.copyFileSync(finalPassVideoPath, finalWebmPath);
+console.log(`Saved demo videos to ${finalWebmPath} and ${finalMp4Path}`);

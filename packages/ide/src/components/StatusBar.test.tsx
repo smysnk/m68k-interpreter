@@ -31,6 +31,11 @@ describe('StatusBar', () => {
     expect(screen.queryByText(/Cursor/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Frame:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Stop:/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'smysnk.com' })).toHaveAttribute('href', 'https://smysnk.com');
+    expect(screen.getByRole('link', { name: /buy me a coffee/i })).toHaveAttribute(
+      'href',
+      'https://buymeacoffee.com/josh1g'
+    );
   });
 
   it('keeps the status bar focused on runtime info rather than program labels', () => {

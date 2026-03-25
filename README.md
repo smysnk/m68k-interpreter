@@ -1,4 +1,4 @@
-[![M68K Interpreter Demo](https://raw.githubusercontent.com/smysnk/m68k-interpreter/main/docs/assets/m68k-interpreter-nibbles-demo.webp)](https://github.com/user-attachments/assets/7756b29f-7bb1-446e-9056-1c9d2f145fb5)
+[![M68K Interpreter Demo](https://raw.githubusercontent.com/smysnk/m68k-interpreter/main/docs/assets/m68k-interpreter-nibbles-demo.webp)](https://github.com/user-attachments/assets/b767a8d0-6cf6-48fb-a62b-09c5cbca31a7)
 
 This demo is running my old [m68k-nibbles](https://github.com/smysnk/m68k-nibbles) game, which I originally wrote for a college assembly class back in 2007. I always wished someone would eventually build a 68000 browser emulator so I could bring it back to life, so I was excited when I found [gianlucarea's m68k-interpreter project](https://github.com/gianlucarea/m68k-interpreter). I took a little liberty with this fork to adapt the interface, auto-load the game, and add a screen terminal emulator so the project could feel closer to the original experience.
 
