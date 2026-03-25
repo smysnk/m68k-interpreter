@@ -1,6 +1,6 @@
 import { createSelector, createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import { initialEditorCode } from '@/store/emulatorSlice';
-import { nibblesSource } from '@/programs/nibbles';
+import { bundledExampleFiles } from '@/programs/examples';
 import type { RootState } from '@/store';
 
 export type IdeFileKind = 'workspace' | 'example';
@@ -32,13 +32,7 @@ export function createDefaultFilesState(): FilesState {
         kind: 'workspace',
         content: initialEditorCode,
       },
-      {
-        id: NIBBLES_FILE_ID,
-        name: 'nibbles.asm',
-        path: 'examples/nibbles.asm',
-        kind: 'example',
-        content: nibblesSource,
-      },
+      ...bundledExampleFiles,
     ],
   };
 }

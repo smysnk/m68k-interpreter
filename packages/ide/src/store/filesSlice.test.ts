@@ -8,6 +8,7 @@ import {
   setActiveFile,
   setActiveFileContent,
 } from '@/store/filesSlice';
+import { bundledExampleFiles } from '@/programs/examples';
 import filesReducer from '@/store/filesSlice';
 
 describe('filesSlice', () => {
@@ -15,7 +16,10 @@ describe('filesSlice', () => {
     const state = createDefaultFilesState();
 
     expect(getActiveFile(state).name).toBe('nibbles.asm');
-    expect(state.items).toHaveLength(2);
+    expect(state.items).toHaveLength(1 + bundledExampleFiles.length);
+    expect(state.items.filter((item) => item.kind === 'example').map((item) => item.name)).toEqual(
+      bundledExampleFiles.map((item) => item.name)
+    );
   });
 
   it('normalizes persisted file state and restores defaults when items are missing', () => {

@@ -21,6 +21,17 @@ describe('viewSelectors', () => {
     expect(model.activeFileId).toBe('workspace:scratch.asm');
     expect(model.engineMode).toBe('interpreter-redux');
     expect(model.groupedFiles.map((group) => group.label)).toEqual(['Workspace', 'Examples']);
+    expect(model.groupedFiles[1]?.items.map((item) => item.name)).toEqual([
+      'nibbles.asm',
+      'hello-terminal.asm',
+      'echo-input.asm',
+      'polling-input.asm',
+      'arithmetic-registers.asm',
+      'sum-1-to-10.asm',
+      'memory-copy.asm',
+      'subroutine-stack.asm',
+      'flags-compare.asm',
+    ]);
   });
 
   it('builds the flags panel model', () => {
