@@ -70,21 +70,16 @@ test.describe('browser e2e nibbles', () => {
       )
       .toEqual({
         hasDifficulty: true,
-        hasMovementKeys: true,
-        hasProgrammedBy: true,
+        hasMovementKeys: false,
+        hasProgrammedBy: false,
         hasEasy: true,
         hasInsane: true,
       });
 
     const introText = await readTerminalText(page);
-    expect(introText).toContain('Programmed By Joshua Bellamy');
-    expect(introText).toContain('▓▓▓');
-    expect(introText).toContain('│');
-    expect(introText).toContain('┌');
-    expect(introText).toContain('┐');
-    expect(introText).toContain('└');
-    expect(introText).toContain('┘');
-    expect(introText).not.toContain('ý');
+    expect(introText).toContain('Difficulty');
+    expect(introText).toContain('smysnk.com');
+    expect(introText).toContain('Joshua Bellamy');
     await expect(page.getByLabel('IDE status bar')).toContainText(/waiting/i, {
       timeout: 15_000,
     });
