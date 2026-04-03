@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { chromium, devices } from '@playwright/test';
@@ -13,17 +14,21 @@ import {
 } from './testStationMetrics';
 
 const SUITE_LABEL = 'Nibbles Browser Gameplay Benchmark';
-const BASE_URL = 'http://127.0.0.1:4173';
+const HOST = '127.0.0.1';
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 async function main(): Promise<void> {
   const startedAt = performance.now();
 
   try {
+    const port = await reservePort();
+    const baseUrl = `http://${HOST}:${port}`;
     const server = spawn('yarn', ['preview:e2e'], {
       cwd: repoRoot,
       env: {
         ...process.env,
+        WEB_HOST: HOST,
+        WEB_PORT: String(port),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: process.platform === 'win32',
@@ -33,14 +38,14 @@ async function main(): Promise<void> {
     server.stderr.on('data', (chunk) => stderrChunks.push(String(chunk)));
 
     try {
-      await waitForServer(BASE_URL, 180_000);
+      await waitForServer(baseUrl, 180_000);
 
       const browser = await chromium.launch({
         headless: true,
       });
 
       try {
-        const metrics = await runGameplayScenarios(browser);
+        const metrics = await runGameplayScenarios(browser, baseUrl);
 
         console.error(formatSuiteConsoleHeading(SUITE_LABEL));
         for (const metric of metrics) {
@@ -82,7 +87,10 @@ async function main(): Promise<void> {
   }
 }
 
-async function runGameplayScenarios(browser: Browser): Promise<BrowserBenchmarkScenarioMetric[]> {
+async function runGameplayScenarios(
+  browser: Browser,
+  baseUrl: string
+): Promise<BrowserBenchmarkScenarioMetric[]> {
   const context = await browser.newContext({
     ...devices['Desktop Chrome'],
   });
@@ -93,7 +101,7 @@ async function runGameplayScenarios(browser: Browser): Promise<BrowserBenchmarkS
       Number.parseInt(String(process.env.TEST_STATION_BROWSER_BENCHMARK_SPEED || ''), 10) || 8
     );
 
-    await page.goto(`${BASE_URL}/`, {
+    await page.goto(`${baseUrl}/`, {
       waitUntil: 'networkidle',
       timeout: 60_000,
     });
@@ -114,7 +122,7 @@ async function runGameplayScenarios(browser: Browser): Promise<BrowserBenchmarkS
 
     const introStartedAt = performance.now();
     await runButton.click();
-    const introText = await waitForTerminalMarker(page, ['Movement Keys', 'Programmed By Joshua Bellamy'], 60_000);
+    const introText = await waitForTerminalMarker(page, ['Movement Keys', 'Joshua Bellamy', 'smysnk.com'], 60_000);
     await page.getByText(/waiting for input/i).waitFor({ state: 'visible', timeout: 30_000 });
     const introElapsedMs = performance.now() - introStartedAt;
     const introGeometry = await readTerminalGeometry(page);
@@ -260,6 +268,30 @@ async function readTerminalGeometry(page: Page): Promise<{ rows: number; columns
 function delay(timeoutMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, timeoutMs);
+  });
+}
+
+async function reservePort(): Promise<number> {
+  return await new Promise((resolve, reject) => {
+    const server = createServer();
+    server.unref();
+    server.on('error', reject);
+    server.listen(0, HOST, () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        server.close(() => reject(new Error('Failed to reserve an ephemeral benchmark port')));
+        return;
+      }
+
+      const { port } = address;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(port);
+      });
+    });
   });
 }
 

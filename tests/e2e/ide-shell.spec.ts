@@ -75,24 +75,26 @@ test.describe('browser e2e ide shell', () => {
     await terminalScreen.click();
     await expect(terminalScreen).toHaveAttribute('data-terminal-focused', 'true');
 
-    const registerCard = page.locator('.register-card', {
-      has: page.getByText('D0', { exact: true }),
-    }).first();
     const dataRegistersToggle = page.getByRole('button', { name: /data registers/i });
-    const registerLabel = registerCard.locator('.register-card-toggle-label');
-    const registerBadge = registerCard.locator('.register-card-meta-badge');
-    const fullHex = page.getByLabel('D0 full hex value');
-    const lowerHex = page.getByLabel('D0 row 2 hex input');
-    const decimalInput = page.getByLabel('D0 dec input');
-
     await expect(dataRegistersToggle).toHaveAttribute('aria-expanded', 'false');
     await dataRegistersToggle.click();
     await expect(dataRegistersToggle).toHaveAttribute('aria-expanded', 'true');
 
-    const registerCardToggle = registerCard.getByRole('button', { name: /toggle d0 register view/i });
+    const registerCardToggle = page.getByRole('button', { name: /toggle d0 register view/i });
     await expect(registerCardToggle).toHaveAttribute('aria-expanded', 'false');
     await registerCardToggle.click();
     await expect(registerCardToggle).toHaveAttribute('aria-expanded', 'true');
+
+    const registerCard = page
+      .locator('.register-card', {
+        has: registerCardToggle,
+      })
+      .first();
+    const registerLabel = registerCard.locator('.register-card-toggle-label');
+    const registerBadge = registerCard.locator('.register-card-meta-badge');
+    const fullHex = registerCard.getByLabel('D0 full hex value');
+    const lowerHex = registerCard.getByLabel('D0 row 2 hex input');
+    const decimalInput = registerCard.getByLabel('D0 dec input');
 
     await expect(fullHex).toHaveValue('0x00000000');
     await expect(lowerHex).toHaveValue('0x0000');

@@ -4,7 +4,7 @@ import { formatEngineBatteryRows, profileEngineBattery } from './engineHarness';
 
 describe('engine performance harness', () => {
   it(
-    'profiles the shared engine battery and preserves final-state parity',
+    'profiles the shared engine battery for the classic interpreter',
     () => {
       const report = profileEngineBattery(ENGINE_PROFILE_SMOKE_SCENARIOS, {
         warmupRuns: 0,
@@ -15,14 +15,8 @@ describe('engine performance harness', () => {
 
       for (const scenarioReport of report.scenarios) {
         expect(scenarioReport.interpreter.sampleCount).toBe(1);
-        expect(scenarioReport.interpreterRedux.sampleCount).toBe(1);
         expect(scenarioReport.interpreter.elapsedMs.median).toBeGreaterThanOrEqual(0);
-        expect(scenarioReport.interpreterRedux.elapsedMs.median).toBeGreaterThanOrEqual(0);
         expect(scenarioReport.interpreter.steps).toBeGreaterThanOrEqual(0);
-        expect(scenarioReport.interpreterRedux.steps).toBeGreaterThanOrEqual(0);
-        expect(scenarioReport.interpreter.finalSnapshot).toEqual(
-          scenarioReport.interpreterRedux.finalSnapshot
-        );
       }
 
       console.table(formatEngineBatteryRows(report));

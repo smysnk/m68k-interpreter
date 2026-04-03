@@ -8,6 +8,7 @@ import {
   readTerminalFrameBufferLine,
   readTerminalFrameBufferText,
   resetTerminalFrameBuffer,
+  resizeTerminalFrameBuffer,
   type TerminalFrameBuffer,
   writeTerminalFrameBufferCell,
 } from './terminalBuffer';
@@ -58,10 +59,11 @@ function createStyle(): TerminalStyle {
 }
 
 export class TerminalDevice {
-  private readonly columns: number;
-  private readonly rows: number;
+  private columns: number;
+  private rows: number;
   private cursorRow = 0;
   private cursorColumn = 0;
+  private pendingWrap = false;
   private output = '';
   private readonly frameBuffer: TerminalFrameBuffer;
   private style: TerminalStyle = createStyle();
@@ -76,10 +78,38 @@ export class TerminalDevice {
   reset(): void {
     this.cursorRow = 0;
     this.cursorColumn = 0;
+    this.pendingWrap = false;
     this.output = '';
     this.style = createStyle();
     this.escapeBuffer = null;
     resetTerminalFrameBuffer(this.frameBuffer);
+  }
+
+  resize(columns: number, rows: number): void {
+    const previousOutput = this.output;
+
+    resizeTerminalFrameBuffer(this.frameBuffer, columns, rows);
+    this.columns = this.frameBuffer.columns;
+    this.rows = this.frameBuffer.rows;
+
+    if (previousOutput.length === 0) {
+      this.cursorRow = Math.min(this.cursorRow, this.rows - 1);
+      this.cursorColumn = Math.min(this.cursorColumn, this.columns - 1);
+      this.pendingWrap = false;
+      this.escapeBuffer = null;
+      return;
+    }
+
+    this.cursorRow = 0;
+    this.cursorColumn = 0;
+    this.pendingWrap = false;
+    this.output = '';
+    this.style = createStyle();
+    this.escapeBuffer = null;
+
+    for (const char of previousOutput) {
+      this.writeByte(char.charCodeAt(0));
+    }
   }
 
   writeByte(value: number): void {
@@ -97,27 +127,35 @@ export class TerminalDevice {
     }
 
     if (byte === 0x1b) {
+      this.pendingWrap = false;
       this.escapeBuffer = '';
       return;
     }
 
     if (byte === 0x0d) {
+      this.pendingWrap = false;
       this.cursorColumn = 0;
       return;
     }
 
     if (byte === 0x0a) {
+      this.pendingWrap = false;
       this.advanceLine();
       return;
     }
 
     if (byte === 0x08) {
+      this.pendingWrap = false;
       this.cursorColumn = Math.max(0, this.cursorColumn - 1);
       return;
     }
 
     if (byte === 0x00) {
       return;
+    }
+
+    if (this.pendingWrap) {
+      this.wrapCursor();
     }
 
     this.writeCharacter(byte);
@@ -193,14 +231,16 @@ export class TerminalDevice {
       return;
     }
 
+    this.pendingWrap = false;
     const finalChar = sequence.charAt(sequence.length - 1);
     const paramsText = sequence.slice(1, -1);
-    const params = paramsText === ''
-      ? []
-      : paramsText.split(';').map((part) => {
-          const parsed = parseInt(part, 10);
-          return Number.isNaN(parsed) ? 0 : parsed;
-        });
+    const params =
+      paramsText === ''
+        ? []
+        : paramsText.split(';').map((part) => {
+            const parsed = parseInt(part, 10);
+            return Number.isNaN(parsed) ? 0 : parsed;
+          });
 
     switch (finalChar) {
       case 'A':
@@ -248,6 +288,7 @@ export class TerminalDevice {
     resetTerminalFrameBuffer(this.frameBuffer);
     this.cursorRow = 0;
     this.cursorColumn = 0;
+    this.pendingWrap = false;
   }
 
   private applyGraphicsMode(params: number[]): void {
@@ -317,14 +358,18 @@ export class TerminalDevice {
       inverse: this.style.inverse,
     });
 
-    this.cursorColumn += 1;
-    if (this.cursorColumn >= this.columns) {
-      this.wrapCursor();
+    if (this.cursorColumn >= this.columns - 1) {
+      this.cursorColumn = this.columns - 1;
+      this.pendingWrap = true;
+      return;
     }
+
+    this.cursorColumn += 1;
   }
 
   private wrapCursor(): void {
     this.cursorColumn = 0;
+    this.pendingWrap = false;
     this.advanceLine();
   }
 
@@ -346,15 +391,15 @@ export class TerminalDevice {
     this.frameBuffer.backgroundBytes.copyWithin(0, rowWidth);
     this.frameBuffer.flagBytes.copyWithin(0, rowWidth);
 
-    this.frameBuffer.charBytes.subarray(lastRowOffset, lastRowOffset + rowWidth).fill(
-      TERMINAL_BUFFER_SPACE_BYTE
-    );
-    this.frameBuffer.foregroundBytes.subarray(lastRowOffset, lastRowOffset + rowWidth).fill(
-      TERMINAL_BUFFER_COLOR_DEFAULT
-    );
-    this.frameBuffer.backgroundBytes.subarray(lastRowOffset, lastRowOffset + rowWidth).fill(
-      TERMINAL_BUFFER_COLOR_DEFAULT
-    );
+    this.frameBuffer.charBytes
+      .subarray(lastRowOffset, lastRowOffset + rowWidth)
+      .fill(TERMINAL_BUFFER_SPACE_BYTE);
+    this.frameBuffer.foregroundBytes
+      .subarray(lastRowOffset, lastRowOffset + rowWidth)
+      .fill(TERMINAL_BUFFER_COLOR_DEFAULT);
+    this.frameBuffer.backgroundBytes
+      .subarray(lastRowOffset, lastRowOffset + rowWidth)
+      .fill(TERMINAL_BUFFER_COLOR_DEFAULT);
     this.frameBuffer.flagBytes.subarray(lastRowOffset, lastRowOffset + rowWidth).fill(0);
     this.frameBuffer.dirtyRowFlags.fill(1);
     this.frameBuffer.version += 1;

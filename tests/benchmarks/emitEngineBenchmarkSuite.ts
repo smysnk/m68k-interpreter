@@ -9,7 +9,7 @@ import {
   resolveRunnerKey,
 } from './testStationMetrics';
 
-const SUITE_LABEL = 'Engine Benchmark Battery';
+const SUITE_LABEL = 'Classic Interpreter Benchmark Battery';
 
 function readIntegerEnv(name: string, fallback: number): number {
   const rawValue = Number.parseInt(String(process.env[name] || ''), 10);
@@ -30,7 +30,7 @@ async function main(): Promise<void> {
     console.error(formatSuiteConsoleHeading(SUITE_LABEL));
     for (const scenario of report.scenarios) {
       console.error(
-        `${scenario.scenario.id}: interpreter=${scenario.interpreter.elapsedMs.median.toFixed(2)}ms reducer=${scenario.interpreterRedux.elapsedMs.median.toFixed(2)}ms`
+        `${scenario.scenario.id}: interpreter=${scenario.interpreter.elapsedMs.median.toFixed(2)}ms`
       );
     }
 

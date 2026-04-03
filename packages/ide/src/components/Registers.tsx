@@ -1,6 +1,7 @@
 import React from 'react';
 import { useSelector } from 'react-redux';
-import { useEmulatorStore } from '@/stores/emulatorStore';
+import { useEmulatorActions } from '@/stores/emulatorStore';
+import { useIdeRenderTelemetry } from '@/runtime/idePerformanceTelemetry';
 import RegisterCard from './registers/RegisterCard';
 import {
   type RegisterGroupId,
@@ -9,7 +10,8 @@ import {
 import { selectRegisterFlagsHeadingModel, selectRegisterGroupsModel } from '@/store';
 
 const Registers: React.FC = () => {
-  const { registers, setRegisterInEmulator } = useEmulatorStore();
+  useIdeRenderTelemetry('Registers');
+  const { setRegisterInEmulator } = useEmulatorActions();
   const { currentFlags, ccrHex } = useSelector(selectRegisterFlagsHeadingModel);
   const registerGroups = useSelector(selectRegisterGroupsModel);
   const [flagsCollapsed, setFlagsCollapsed] = React.useState(true);
@@ -60,21 +62,23 @@ const Registers: React.FC = () => {
             id="register-group-panel-flags"
             hidden={flagsCollapsed}
           >
-            <div className="registers-flags-panel" aria-label="Current condition flags">
-              {currentFlags.map((flag) => (
-                <div
-                  className={`registers-flag-chip ${flag.active ? 'set' : 'clear'}`}
-                  key={flag.key}
-                >
-                  <span className="registers-flag-name">{flag.label}</span>
-                  <span className="registers-flag-value">{flag.active ? '1' : '0'}</span>
+            {!flagsCollapsed ? (
+              <div className="registers-flags-panel" aria-label="Current condition flags">
+                {currentFlags.map((flag) => (
+                  <div
+                    className={`registers-flag-chip ${flag.active ? 'set' : 'clear'}`}
+                    key={flag.key}
+                  >
+                    <span className="registers-flag-name">{flag.label}</span>
+                    <span className="registers-flag-value">{flag.active ? '1' : '0'}</span>
+                  </div>
+                ))}
+                <div className="registers-flag-chip registers-flag-chip-ccr">
+                  <span className="registers-flag-name">CCR</span>
+                  <span className="registers-flag-value">{ccrHex}</span>
                 </div>
-              ))}
-              <div className="registers-flag-chip registers-flag-chip-ccr">
-                <span className="registers-flag-name">CCR</span>
-                <span className="registers-flag-value">{ccrHex}</span>
               </div>
-            </div>
+            ) : null}
           </div>
         </section>
 
@@ -109,15 +113,17 @@ const Registers: React.FC = () => {
                 id={`register-group-panel-${group.id}`}
                 hidden={isCollapsed}
               >
-                {groupDescriptors.map((descriptor) => (
-                  <RegisterCard
-                    defaultCompact
-                    descriptor={descriptor}
-                    key={descriptor.key}
-                    onCommit={handleRegisterCommit}
-                    value={group.values[descriptor.key] ?? registers[descriptor.key] ?? 0}
-                  />
-                ))}
+                {!isCollapsed
+                  ? groupDescriptors.map((descriptor) => (
+                      <RegisterCard
+                        defaultCompact
+                        descriptor={descriptor}
+                        key={descriptor.key}
+                        onCommit={handleRegisterCommit}
+                        value={group.values[descriptor.key] ?? 0}
+                      />
+                    ))
+                  : null}
               </div>
             </section>
           );

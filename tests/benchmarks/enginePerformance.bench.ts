@@ -14,16 +14,5 @@ describe('engine benchmark comparison', () => {
         warmupIterations: 0,
       }
     );
-
-    bench(
-      `${scenario.id} / interpreter-redux`,
-      () => {
-        runBenchmarkScenario('interpreter-redux', scenario);
-      },
-      {
-        iterations: 1,
-        warmupIterations: 0,
-      }
-    );
   }
 });

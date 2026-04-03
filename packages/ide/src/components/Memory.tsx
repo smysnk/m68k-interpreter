@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFileDownload } from '@fortawesome/free-solid-svg-icons';
+import { useIdeRenderTelemetry } from '@/runtime/idePerformanceTelemetry';
 import { memorySurfaceStore } from '@/runtime/memorySurfaceStore';
 import { useMemorySurface } from '@/runtime/useMemorySurface';
 
@@ -9,6 +10,7 @@ const MEMORY_VIEWPORT_ROWS = 16;
 const MEMORY_VIEWPORT_LENGTH = MEMORY_VIEWPORT_COLUMNS * MEMORY_VIEWPORT_ROWS;
 
 const Memory: React.FC = () => {
+  useIdeRenderTelemetry('Memory');
   const { meta } = useMemorySurface();
   const [startAddress, setStartAddress] = useState<number>(0x1000);
 

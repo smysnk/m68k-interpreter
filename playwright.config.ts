@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 4173;
+const PORT = Number(process.env.PLAYWRIGHT_PORT ?? process.env.WEB_PORT ?? 4173);
 const baseURL = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
@@ -26,10 +26,12 @@ export default defineConfig({
     env: {
       ...process.env,
       NEXT_PUBLIC_IDE_AUTOPLAY: 'false',
+      WEB_HOST: '127.0.0.1',
+      WEB_PORT: String(PORT),
     },
     url: baseURL,
     timeout: 180_000,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
   },
   projects: [
     {

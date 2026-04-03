@@ -1,12 +1,15 @@
 import { CODE_BYTE, CODE_LONG, CODE_WORD } from './core/operations';
 import { Strings } from './core/strings';
+import { decodeLoadedInstructions, type DecodedInstruction } from './instructionDecoder';
 
 export type ProgramSource = string | Uint8Array;
 
 export interface ProgramLoadResult {
   instructions: Array<[string, number, boolean]>;
+  decodedInstructions: DecodedInstruction[];
   sourceLines: string[];
   codeLabels: Record<string, number>;
+  codeLabelLookup: Record<string, number>;
   symbols: Record<string, number>;
   symbolLookup: Record<string, number>;
   memoryImage: Record<number, number>;
@@ -189,8 +192,10 @@ export function loadProgramSource(source: ProgramSource): ProgramLoadResult {
 
   return {
     instructions,
+    decodedInstructions: decodeLoadedInstructions(instructions, symbolLookup),
     sourceLines,
     codeLabels,
+    codeLabelLookup: buildCodeLabelLookup(codeLabels),
     symbols,
     symbolLookup,
     memoryImage,
@@ -200,6 +205,15 @@ export function loadProgramSource(source: ProgramSource): ProgramLoadResult {
     errors,
     exception,
   };
+}
+
+function buildCodeLabelLookup(codeLabels: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(codeLabels).map(([label, instructionIndex]) => [
+      label.trim().toLowerCase(),
+      instructionIndex,
+    ])
+  );
 }
 
 function decodeProgramSource(source: ProgramSource): string {

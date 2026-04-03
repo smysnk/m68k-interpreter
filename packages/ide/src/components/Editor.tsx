@@ -5,12 +5,12 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useTheme } from 'styled-components';
 import { m68kLanguage } from '@/editor/m68kLanguage';
 import { selectActiveFileContent } from '@/store/filesSlice';
-import { useEmulatorStore } from '@/stores/emulatorStore';
+import { useEmulatorActions } from '@/stores/emulatorStore';
 import { setEditorCursorPosition, type AppDispatch, type RootState } from '@/store';
 
 const Editor: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { setEditorCode } = useEmulatorStore();
+  const { setEditorCode } = useEmulatorActions();
   const editorCode = useSelector((state: RootState) => selectActiveFileContent(state));
   const lineNumbers = useSelector((state: RootState) => state.settings.lineNumbers);
   const theme = useTheme();

@@ -30,7 +30,6 @@ Write, step through, and debug m68k assembly — no installation needed.
 - Export register and memory state to file
 - Terminal-mode execution path for `nibbles.asm`
 - Runtime batching and keyboard capture for browser-playable terminal programs
-- Engine dropdown with default `Interpreter` and experimental `Interpreter Redux`
 
 ## Supported instructions
 
@@ -47,9 +46,9 @@ The current terminal build is aimed at the Easy68K subset needed by `nibbles.asm
 
 ## Runtime shape
 
-- `Interpreter` is the default IDE runtime and the supported path for `nibbles.asm`
-- `Interpreter Redux` is available as an experimental alternate engine for reducer-runtime parity work and store integration
-- `Load Nibbles` intentionally switches the IDE back to `Interpreter` so the main demo path stays playable
+- the classic `Interpreter` is the only IDE runtime
+- browser execution runs through a worker-backed runtime session
+- `nibbles.asm` uses that same worker-backed classic interpreter path
 
 ## IDE architecture
 
@@ -65,7 +64,7 @@ See [docs/VIEW_CONTROLLER_REDUX_CONVENTIONS.md](docs/VIEW_CONTROLLER_REDUX_CONVE
 <!-- 
 ## Examples
 
-The [`examples/`](./examples) folder contains annotated programs to get started:
+The [`packages/ide/src/fixtures/`](./packages/ide/src/fixtures) folder contains bundled example programs to get started:
 
 | File | What it demonstrates |
 |---|---|
@@ -104,7 +103,7 @@ yarn type-check      # workspace type-check
 ```
 
 Boot-time IDE env vars:
-- `NEXT_PUBLIC_IDE_PRELOAD_FILE=nibbles.asm` selects which known file should be loaded on startup. You can use the file id, name, or path, for example `example:nibbles.asm`, `nibbles.asm`, or `examples/nibbles.asm`.
+- `NEXT_PUBLIC_IDE_PRELOAD_FILE=nibbles.asm` selects which known file should be loaded on startup. You can use the file id, name, or path, for example `example:nibbles.asm`, `nibbles.asm`, or `fixtures/nibbles.asm`.
 - `NEXT_PUBLIC_IDE_AUTOPLAY=true` runs the loaded program automatically on boot.
 
 ---

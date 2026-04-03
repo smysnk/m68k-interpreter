@@ -51,7 +51,12 @@ export {
   resizeTerminalFrameBuffer,
   writeTerminalFrameBufferCell,
 } from './devices/terminalBuffer';
-export { decodeTerminalByte } from './devices/terminalCharset';
+export { decodeTerminalByte, encodeTerminalByte } from './devices/terminalCharset';
+export {
+  cloneDecodedInstruction,
+  decodeLoadedInstructions,
+  resolveDecodedInstruction,
+} from './instructionDecoder';
 export { loadProgramSource } from './programLoader';
 export type {
   MemorySnapshot,
@@ -70,11 +75,13 @@ export type {
   InstructionSet,
   MemoryCell,
   MemoryMeta,
+  RuntimeSyncVersions,
   Operand,
   Register,
   Registers,
   EmulatorConfig,
 } from './types/emulator';
+export type { EmulatorOptions, UndoCaptureMode } from './core/emulator';
 export type {
   TerminalCell,
   TerminalDeviceConfig,
@@ -88,3 +95,4 @@ export type {
   TerminalFrameBufferCellWrite,
 } from './devices/terminalBuffer';
 export type { ProgramLoadResult, ProgramSource } from './programLoader';
+export type { DecodedInstruction, DecodedOperand } from './instructionDecoder';

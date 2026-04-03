@@ -3,7 +3,7 @@ import type { RootState } from '@/store';
 import type { InspectorView } from '@/store/uiShellSlice';
 
 export type ActiveInspectorPane = InspectorView;
-export type WorkspaceTabPanel = 'terminal' | 'code';
+export type WorkspaceTabPanel = 'terminal' | 'code' | 'registers' | 'memory';
 export type InspectorPanelKind = 'registers' | 'memory';
 
 export const selectShowHelp = (state: RootState) =>
@@ -56,6 +56,8 @@ export const selectWorkspacePanelModel = createSelector(
     activeWorkspaceTab: workspaceTab,
     terminalActive: workspaceTab === 'terminal',
     codeActive: workspaceTab === 'code',
+    registersActive: workspaceTab === 'registers',
+    memoryActive: workspaceTab === 'memory',
   })
 );
 

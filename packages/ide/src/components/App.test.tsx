@@ -3,9 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App, { AppShell } from './App';
 import FileExplorerSidebar from './FileExplorerSidebar';
 import { nibblesSource } from '@/programs/nibbles';
-import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { useEmulatorStore } from '@/stores/emulatorStore';
-import { createIdeStore, ideStore, resetFilesState, resetSettingsState, setActiveFile, setEngineMode } from '@/store';
+import { createIdeStore, ideStore, resetFilesState, resetSettingsState, setActiveFile } from '@/store';
 import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
 import { IDE_PERSISTENCE_KEY } from '@/store/persistence';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
@@ -40,9 +39,20 @@ function mockSystemTheme(theme: 'light' | 'dark'): void {
   });
 }
 
+function setViewportWidth(width: number): void {
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    writable: true,
+    value: width,
+  });
+
+  window.dispatchEvent(new Event('resize'));
+}
+
 describe('App', () => {
   beforeEach(() => {
     mockSystemTheme('light');
+    setViewportWidth(1280);
     window.localStorage.clear();
     useEmulatorStore.getState().reset();
     ideStore.dispatch(resetFilesState());
@@ -71,6 +81,13 @@ describe('App', () => {
       expect(store.getState().emulator.editorCode).toBe(nibblesSource);
       expect(window.editorCode).toContain('END NIBBLES');
     });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /open file explorer/i })).toHaveAttribute(
+        'aria-expanded',
+        'false'
+      );
+    });
   });
 
   it('defaults the workspace to the terminal tab and lets the user switch to code', () => {
@@ -86,14 +103,38 @@ describe('App', () => {
     expect(screen.getByTestId('assembly-editor')).toBeInTheDocument();
   });
 
+  it('activates the compact mobile shell and exposes terminal, code, registers, and memory views', () => {
+    setViewportWidth(600);
+
+    render(<App />);
+
+    expect(screen.getByTestId('app-container')).toHaveAttribute('data-shell-mode', 'mobile');
+    expect(screen.getByTestId('app-container')).toHaveAttribute('data-terminal-view-mode', 'focused');
+    expect(screen.queryByTestId('resize-handle-root')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Interpreter engine')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Open file explorer')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Run program')).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /registers/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /memory/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: /registers/i }));
+
+    expect(screen.getByTestId('app-container')).toHaveAttribute('data-terminal-view-mode', 'standard');
+    expect(screen.getByText('Flags')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+
+    expect(screen.getByLabelText('Start Address')).toBeInTheDocument();
+  });
+
   it('keeps Nibbles selected in the persisted file state', () => {
     render(<App />);
 
     expect(ideStore.getState().files.activeFileId).toBe('example:nibbles.asm');
   });
 
-  it('forces the default Interpreter engine when opening Nibbles from the sidebar', () => {
-    ideStore.dispatch(setEngineMode('interpreter-redux'));
+  it('keeps the code workspace selected when opening Nibbles from the sidebar', () => {
     ideStore.dispatch(setActiveFile('workspace:scratch.asm'));
 
     render(<App />);
@@ -101,68 +142,7 @@ describe('App', () => {
     fireEvent.mouseEnter(screen.getByRole('button', { name: /open file explorer/i }));
     fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
 
-    expect(ideStore.getState().settings.engineMode).toBe('interpreter');
     expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
-  });
-
-  it('stores the selected interpreter engine in Redux and resets the active runtime', () => {
-    render(<App />);
-
-    useEmulatorStore.getState().setEmulatorInstance({
-      emulationStep: vi.fn(),
-      getCFlag: vi.fn(() => 0),
-      getCCR: vi.fn(() => 0),
-      getErrors: vi.fn(() => []),
-      getException: vi.fn(() => undefined),
-      getLastInstruction: vi.fn(() => 'Ready'),
-      getMemory: vi.fn(() => ({})),
-      getMemoryMeta: vi.fn(() => ({
-        usedBytes: 0,
-        minAddress: null,
-        maxAddress: null,
-        version: 1,
-      })),
-      getNFlag: vi.fn(() => 0),
-      getPC: vi.fn(() => 0),
-      getQueuedInputLength: vi.fn(() => 0),
-      getRegisters: vi.fn(() => new Int32Array(16)),
-      getSR: vi.fn(() => 0),
-      getSSP: vi.fn(() => 0),
-      readMemoryRange: vi.fn((_: number, length: number) => new Uint8Array(length)),
-      getSymbolAddress: vi.fn(() => undefined),
-      getSymbols: vi.fn(() => ({})),
-      getTerminalFrameBuffer: vi.fn(() => terminalSurfaceStore.getSnapshot().frameBuffer),
-      getTerminalLines: vi.fn(() => ['']),
-      getTerminalMeta: vi.fn(() => terminalSurfaceStore.getSnapshot().meta),
-      getTerminalText: vi.fn(() => ''),
-      getTerminalSnapshot: vi.fn(() => ({
-        columns: 80,
-        rows: 25,
-        cursorRow: 0,
-        cursorColumn: 0,
-        output: '',
-        lines: [],
-        cells: [],
-      })),
-      getUSP: vi.fn(() => 0),
-      getVFlag: vi.fn(() => 0),
-      getXFlag: vi.fn(() => 0),
-      getZFlag: vi.fn(() => 0),
-      isHalted: vi.fn(() => false),
-      isWaitingForInput: vi.fn(() => false),
-      queueInput: vi.fn(),
-      reset: vi.fn(),
-      undoFromStack: vi.fn(),
-      clearInputQueue: vi.fn(),
-    });
-    window.emulatorInstance = useEmulatorStore.getState().emulatorInstance;
-
-    fireEvent.click(screen.getByRole('button', { name: /interpreter engine/i }));
-    fireEvent.click(screen.getByRole('option', { name: /interpreter redux/i }));
-
-    expect(ideStore.getState().settings.engineMode).toBe('interpreter-redux');
-    expect(useEmulatorStore.getState().emulatorInstance).toBeNull();
-    expect(window.emulatorInstance).toBeNull();
   });
 
   it('switches the right pane between registers and memory tabs', () => {
@@ -173,7 +153,7 @@ describe('App', () => {
 
     expect(registersTab).toHaveAttribute('aria-selected', 'true');
     expect(memoryTab).toHaveAttribute('aria-selected', 'false');
-    expect(screen.getByText('Flags')).toBeInTheDocument();
+    expect(screen.getAllByText('Flags').length).toBeGreaterThan(0);
 
     fireEvent.click(memoryTab);
 
@@ -190,7 +170,6 @@ describe('App', () => {
           editorTheme: EditorThemeEnum.M68K_DARK,
           followSystemTheme: false,
           lineNumbers: true,
-          engineMode: 'interpreter',
         },
         uiShell: {
           workspaceTab: 'code',
@@ -216,7 +195,7 @@ describe('App', () => {
             {
               id: 'example:nibbles.asm',
               name: 'nibbles.asm',
-              path: 'examples/nibbles.asm',
+              path: 'fixtures/nibbles.asm',
               kind: 'example',
               content: nibblesSource,
             },
@@ -245,7 +224,7 @@ describe('App', () => {
     expect(document.querySelector('.terminal-container')).toHaveAttribute('data-terminal-theme', 'dark');
     expect(document.querySelector('.retro-lcd')).toHaveAttribute('data-display-surface-mode', 'dark');
     expect(screen.getByRole('button', { name: /open app menu/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /interpreter engine/i })).toHaveTextContent('Interpreter');
+    expect(screen.queryByText(/Engine:/)).not.toBeInTheDocument();
   });
 
   it('lets the app menu style selector switch the whole IDE theme', () => {

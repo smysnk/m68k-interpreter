@@ -12,7 +12,6 @@ import {
   resetFilesState,
   resetSettingsState,
   setActiveFileContent,
-  setEngineMode,
 } from '@/store';
 
 const NIBBLES_BOOT_TEST_TIMEOUT_MS = 60_000;
@@ -80,35 +79,6 @@ describe('workspace integration', () => {
     });
   });
 
-  it('can switch to Interpreter Redux and boot a simple program through the shared IDE flow', async () => {
-    render(<App />);
-
-    act(() => {
-      ideStore.dispatch(setEngineMode('interpreter-redux'));
-      ideStore.dispatch(
-        setActiveFileContent(`VALUE DC.L 0
-START
-  MOVE.L #1,D0
-  ADDQ.L #1,D0
-  MOVE.L D0,VALUE
-  END START`)
-      );
-    });
-
-    act(() => {
-      ideStore.dispatch(requestRun());
-    });
-
-    await waitFor(() => {
-      expect(ideStore.getState().settings.engineMode).toBe('interpreter-redux');
-      expect(getWindowEmulator().getRegisters()[8]).toBe(2);
-    });
-
-    const valueAddress = getWindowEmulator().getSymbolAddress('VALUE') ?? -1;
-    expect(valueAddress).toBeGreaterThanOrEqual(0);
-    expect(getWindowEmulator().getMemory()[valueAddress + 3]).toBe(2);
-  });
-
   it('loads Nibbles from the file explorer, renders the splash screen, and forwards gameplay input', async () => {
     render(<App />);
 
@@ -123,7 +93,8 @@ START
     await waitFor(
       () => {
         expect(getEmulatorTerminalText()).toContain('Difficulty');
-        expect(getEmulatorTerminalText()).toContain('Programmed By Joshua Bellamy');
+        expect(getEmulatorTerminalText()).toContain('Joshua Bellamy');
+        expect(getEmulatorTerminalText()).toContain('smysnk.com');
         expect(document.querySelector('.terminal-container')).toHaveAttribute('data-terminal-theme', 'light');
         expect(document.querySelector('.retro-lcd')).toHaveAttribute('data-display-surface-mode', 'light');
       },
@@ -218,7 +189,8 @@ START
     await waitFor(
       () => {
         expect(getEmulatorTerminalText()).toContain('Difficulty');
-        expect(getEmulatorTerminalText()).toContain('Programmed By Joshua Bellamy');
+        expect(getEmulatorTerminalText()).toContain('Joshua Bellamy');
+        expect(getEmulatorTerminalText()).toContain('smysnk.com');
       },
       { timeout: 30000 }
     );

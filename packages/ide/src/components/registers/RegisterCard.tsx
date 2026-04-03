@@ -286,4 +286,4 @@ const RegisterCard: React.FC<RegisterCardProps> = ({
   );
 };
 
-export default RegisterCard;
+export default React.memo(RegisterCard);

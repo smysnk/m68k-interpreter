@@ -51,6 +51,15 @@ export interface MemoryMeta {
   version: number;
 }
 
+export interface RuntimeSyncVersions {
+  registers: number;
+  execution: number;
+  diagnostics: number;
+  memory: number;
+  terminal: number;
+  terminalGeometry: number;
+}
+
 export interface ExecutionState {
   started: boolean;
   ended: boolean;
@@ -100,6 +109,7 @@ export interface Emulator {
   getSSP(): number;
   getMemory(): MemoryCell;
   getMemoryMeta(): MemoryMeta;
+  getRuntimeSyncVersions(): RuntimeSyncVersions;
   readMemoryRange(address: number, length: number): Uint8Array;
   getFlags(): ConditionFlags;
   getPC(): number;
@@ -109,4 +119,8 @@ export interface Emulator {
   getLastInstruction(): string;
   getErrors(): string[];
   getException(): string | null;
+  writeMemoryByte(address: number, value: number): void;
+  writeMemoryWord(address: number, value: number): void;
+  writeMemoryLong(address: number, value: number): void;
+  raiseExternalInterrupt(handlerAddress: number): boolean;
 }

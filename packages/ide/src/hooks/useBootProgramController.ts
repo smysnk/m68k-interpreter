@@ -10,6 +10,9 @@ function isJsdomEnvironment(): boolean {
 export function useBootProgramController() {
   const dispatch = useDispatch<AppDispatch>();
   const activeFileId = useSelector((state: RootState) => state.files.activeFileId);
+  const terminalGeometryVersion = useSelector(
+    (state: RootState) => state.emulator.terminal.geometryVersion
+  );
   const hasAutoPlayedRef = useRef(false);
   const { autoPlay } = getIdeBootConfig();
 
@@ -22,10 +25,13 @@ export function useBootProgramController() {
       return;
     }
 
+    if (terminalGeometryVersion <= 1) {
+      return;
+    }
+
     hasAutoPlayedRef.current = true;
     dispatch(setWorkspaceTab('terminal'));
     dispatch(requestFocusTerminal());
     dispatch(requestRun());
-  }, [activeFileId, autoPlay, dispatch]);
+  }, [activeFileId, autoPlay, dispatch, terminalGeometryVersion]);
 }
-

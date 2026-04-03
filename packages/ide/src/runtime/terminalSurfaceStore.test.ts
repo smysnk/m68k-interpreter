@@ -46,6 +46,24 @@ describe('terminalSurfaceStore', () => {
     expect(terminalSurfaceStore.getText()).toBe('AB  \nCD  ');
   });
 
+  it('preserves CP437 glyphs when hydrating from a terminal snapshot', () => {
+    terminalSurfaceStore.replaceFromSnapshot({
+      columns: 2,
+      rows: 1,
+      cursorRow: 0,
+      cursorColumn: 2,
+      output: '█┌',
+      lines: ['█┌'],
+      cells: [[
+        { char: '█', foreground: null, background: null, bold: false, inverse: false },
+        { char: '┌', foreground: null, background: null, bold: false, inverse: false },
+      ]],
+    });
+
+    expect(terminalSurfaceStore.getLines()).toEqual(['█┌']);
+    expect(terminalSurfaceStore.getText()).toBe('█┌');
+  });
+
   it('can switch to a runtime-owned frame buffer and notify subscribers', () => {
     const runtimeFrameBuffer = createTerminalFrameBuffer(3, 1);
     runtimeFrameBuffer.charBytes.set([...'XYZ'].map((char) => char.charCodeAt(0)));

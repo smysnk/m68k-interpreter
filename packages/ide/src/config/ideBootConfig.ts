@@ -47,11 +47,14 @@ export function resolvePreloadedFileId(
   }
 
   const match = files.items.find((item) => {
-    return [item.id, item.name, item.path].some(
-      (candidate) => candidate.trim().toLowerCase() === normalizedTarget
-    );
+    const candidates = [item.id, item.name, item.path];
+
+    if (item.kind === 'example' && item.path.startsWith('fixtures/')) {
+      candidates.push(`examples/${item.name}`);
+    }
+
+    return candidates.some((candidate) => candidate.trim().toLowerCase() === normalizedTarget);
   });
 
   return match?.id;
 }
-

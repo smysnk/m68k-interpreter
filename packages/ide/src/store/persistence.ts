@@ -8,7 +8,7 @@ export interface PersistedIdeState {
   files?: FilesState;
   settings?: Pick<
     SettingsState,
-    'editorTheme' | 'followSystemTheme' | 'lineNumbers' | 'engineMode' | 'registerEditRadix'
+    'editorTheme' | 'followSystemTheme' | 'lineNumbers' | 'registerEditRadix' | 'terminalInputMode'
   >;
   uiShell?: Pick<
     UiShellState,

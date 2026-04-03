@@ -48,7 +48,6 @@ describe('store persistence', () => {
           editorTheme: EditorThemeEnum.M68K_DARK,
           followSystemTheme: false,
           lineNumbers: true,
-          engineMode: 'interpreter',
           registerEditRadix: 'dec',
         },
         uiShell: {

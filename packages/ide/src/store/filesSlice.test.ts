@@ -47,7 +47,7 @@ describe('filesSlice', () => {
         {
           id: NIBBLES_FILE_ID,
           name: 'nibbles.asm',
-          path: 'examples/nibbles.asm',
+          path: 'fixtures/nibbles.asm',
           kind: 'example',
           content: 'stale local example content',
         },

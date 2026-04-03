@@ -18,6 +18,7 @@ export interface RuntimeMetrics {
 export interface RuntimeIntentState {
   run: number;
   resume: number;
+  pulseResume: number;
   step: number;
   undo: number;
   reset: number;
@@ -104,6 +105,7 @@ export const initialRuntimeMetrics: RuntimeMetrics = {
 export const initialRuntimeIntents: RuntimeIntentState = {
   run: 0,
   resume: 0,
+  pulseResume: 0,
   step: 0,
   undo: 0,
   reset: 0,
@@ -122,7 +124,10 @@ export function createEmptyMemoryState(): MemoryMeta {
 export function toTerminalRuntimeState(
   terminal:
     | TerminalRuntimeState
-    | Pick<TerminalMeta, 'columns' | 'rows' | 'cursorRow' | 'cursorColumn' | 'version' | 'geometryVersion'>
+    | Pick<
+        TerminalMeta,
+        'columns' | 'rows' | 'cursorRow' | 'cursorColumn' | 'version' | 'geometryVersion'
+      >
     | Pick<TerminalSnapshot, 'columns' | 'rows' | 'cursorRow' | 'cursorColumn'>
 ): TerminalRuntimeState {
   return {
@@ -167,6 +172,82 @@ const initialState: EmulatorState = {
   history: [],
 };
 
+function registersEqual(left: Registers, right: Registers): boolean {
+  return (
+    left.d0 === right.d0 &&
+    left.d1 === right.d1 &&
+    left.d2 === right.d2 &&
+    left.d3 === right.d3 &&
+    left.d4 === right.d4 &&
+    left.d5 === right.d5 &&
+    left.d6 === right.d6 &&
+    left.d7 === right.d7 &&
+    left.a0 === right.a0 &&
+    left.a1 === right.a1 &&
+    left.a2 === right.a2 &&
+    left.a3 === right.a3 &&
+    left.a4 === right.a4 &&
+    left.a5 === right.a5 &&
+    left.a6 === right.a6 &&
+    left.a7 === right.a7 &&
+    left.pc === right.pc &&
+    left.ccr === right.ccr &&
+    left.sr === right.sr &&
+    left.usp === right.usp &&
+    left.ssp === right.ssp
+  );
+}
+
+function flagsEqual(left: ConditionFlags, right: ConditionFlags): boolean {
+  return (
+    left.z === right.z &&
+    left.v === right.v &&
+    left.n === right.n &&
+    left.c === right.c &&
+    left.x === right.x
+  );
+}
+
+function memoryMetaEqual(left: MemoryMeta, right: MemoryMeta): boolean {
+  return (
+    left.usedBytes === right.usedBytes &&
+    left.minAddress === right.minAddress &&
+    left.maxAddress === right.maxAddress &&
+    left.version === right.version
+  );
+}
+
+function terminalStateEqual(left: TerminalRuntimeState, right: TerminalRuntimeState): boolean {
+  return (
+    left.columns === right.columns &&
+    left.rows === right.rows &&
+    left.cursorRow === right.cursorRow &&
+    left.cursorColumn === right.cursorColumn &&
+    left.version === right.version &&
+    left.geometryVersion === right.geometryVersion
+  );
+}
+
+function executionStateEqual(left: ExecutionState, right: ExecutionState): boolean {
+  return (
+    left.started === right.started &&
+    left.ended === right.ended &&
+    left.stopped === right.stopped &&
+    left.lastInstruction === right.lastInstruction &&
+    left.exception === right.exception &&
+    left.currentLine === right.currentLine &&
+    left.errors === right.errors
+  );
+}
+
+function runtimeMetricsEqual(left: RuntimeMetrics, right: RuntimeMetrics): boolean {
+  return (
+    left.lastFrameInstructions === right.lastFrameInstructions &&
+    left.lastFrameDurationMs === right.lastFrameDurationMs &&
+    left.lastStopReason === right.lastStopReason
+  );
+}
+
 const emulatorSlice = createSlice({
   name: 'emulator',
   initialState,
@@ -198,23 +279,46 @@ const emulatorSlice = createSlice({
     syncEmulatorFrame(
       state,
       action: PayloadAction<{
-        registers: Registers;
-        memory: MemoryMeta;
-        flags: ConditionFlags;
-        terminal: TerminalRuntimeState | TerminalMeta;
+        registers?: Registers;
+        memory?: MemoryMeta;
+        flags?: ConditionFlags;
+        terminal?: TerminalRuntimeState | TerminalMeta;
         executionState?: Partial<ExecutionState>;
         runtimeMetrics?: Partial<RuntimeMetrics>;
       }>
     ) {
-      state.registers = action.payload.registers;
-      state.memory = action.payload.memory;
-      state.flags = action.payload.flags;
-      state.terminal = toTerminalRuntimeState(action.payload.terminal);
+      if (action.payload.registers && !registersEqual(state.registers, action.payload.registers)) {
+        state.registers = action.payload.registers;
+      }
+      if (action.payload.memory && !memoryMetaEqual(state.memory, action.payload.memory)) {
+        state.memory = action.payload.memory;
+      }
+      if (action.payload.flags && !flagsEqual(state.flags, action.payload.flags)) {
+        state.flags = action.payload.flags;
+      }
+      if (action.payload.terminal) {
+        const nextTerminal = toTerminalRuntimeState(action.payload.terminal);
+        if (!terminalStateEqual(state.terminal, nextTerminal)) {
+          state.terminal = nextTerminal;
+        }
+      }
       if (action.payload.executionState) {
-        state.executionState = { ...state.executionState, ...action.payload.executionState };
+        const nextExecutionState = {
+          ...state.executionState,
+          ...action.payload.executionState,
+        };
+        if (!executionStateEqual(state.executionState, nextExecutionState)) {
+          state.executionState = nextExecutionState;
+        }
       }
       if (action.payload.runtimeMetrics) {
-        state.runtimeMetrics = { ...state.runtimeMetrics, ...action.payload.runtimeMetrics };
+        const nextRuntimeMetrics = {
+          ...state.runtimeMetrics,
+          ...action.payload.runtimeMetrics,
+        };
+        if (!runtimeMetricsEqual(state.runtimeMetrics, nextRuntimeMetrics)) {
+          state.runtimeMetrics = nextRuntimeMetrics;
+        }
       }
     },
     toggleShowFlags(state) {
@@ -234,6 +338,9 @@ const emulatorSlice = createSlice({
     },
     requestResume(state) {
       state.runtimeIntents.resume += 1;
+    },
+    requestPulseResume(state) {
+      state.runtimeIntents.pulseResume += 1;
     },
     requestStep(state) {
       state.runtimeIntents.step += 1;
@@ -265,12 +372,14 @@ const emulatorSlice = createSlice({
     resetEmulatorState(state) {
       const preservedDelay = state.delay;
       const preservedSpeedMultiplier = state.speedMultiplier;
+      const preservedTerminalColumns = state.terminal.columns;
+      const preservedTerminalRows = state.terminal.rows;
       state.registers = { ...initialRegisters };
       state.memory = createEmptyMemoryState();
       state.flags = { ...initialFlags };
       state.executionState = { ...initialExecutionState };
       state.emulatorInstance = null;
-      state.terminal = createEmptyTerminalState();
+      state.terminal = createEmptyTerminalState(preservedTerminalColumns, preservedTerminalRows);
       state.showFlags = false;
       state.delay = preservedDelay;
       state.speedMultiplier = preservedSpeedMultiplier;
@@ -296,6 +405,7 @@ export const {
   setRuntimeMetrics,
   requestRun,
   requestResume,
+  requestPulseResume,
   requestStep,
   requestUndo,
   requestReset,

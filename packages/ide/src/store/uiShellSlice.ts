@@ -1,10 +1,10 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import { resetSettingsState } from '@/store/settingsSlice';
 
-export type WorkspaceTab = 'terminal' | 'code';
+export type WorkspaceTab = 'terminal' | 'code' | 'registers' | 'memory';
 export type InspectorView = 'registers' | 'memory' | 'flags';
 export type ContextView = 'help' | 'none';
-export type AppSubmenu = 'style' | null;
+export type AppSubmenu = 'style' | 'terminal-input' | null;
 
 export interface UiShellLayoutState {
   rootHorizontal: [number, number];

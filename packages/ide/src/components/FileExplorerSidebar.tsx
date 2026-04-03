@@ -3,19 +3,17 @@ import { useDispatch, useSelector } from 'react-redux';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faChevronRight, faFileCode, faFolderTree } from '@fortawesome/free-solid-svg-icons';
 import {
-  NIBBLES_FILE_ID,
   requestReset,
   selectFileExplorerModel,
   setActiveFile,
   setEditorCode,
-  setEngineMode,
   setWorkspaceTab,
   type AppDispatch,
 } from '@/store';
 
 const FileExplorerSidebar: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { files, activeFileId, engineMode, chromeOffsets, groupedFiles } = useSelector(selectFileExplorerModel);
+  const { files, activeFileId, chromeOffsets, groupedFiles } = useSelector(selectFileExplorerModel);
   const [isOpen, setIsOpen] = React.useState(false);
   const closeTimeoutRef = React.useRef<number | null>(null);
 
@@ -52,13 +50,11 @@ const FileExplorerSidebar: React.FC = () => {
       return;
     }
 
+    clearCloseTimeout();
+    setIsOpen(false);
     dispatch(setActiveFile(file.id));
     dispatch(setEditorCode(file.content));
     dispatch(setWorkspaceTab('code'));
-
-    if (file.id === NIBBLES_FILE_ID && engineMode === 'interpreter-redux') {
-      dispatch(setEngineMode('interpreter'));
-    }
 
     window.editorCode = file.content;
     dispatch(requestReset());

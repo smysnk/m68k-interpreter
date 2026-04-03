@@ -25,6 +25,7 @@ import {
   setEditorTheme,
   setFollowSystemTheme,
   setLineNumbers,
+  setTerminalInputMode,
   setSpeedMultiplier,
   setActiveSubmenu,
   setWorkspaceTab,
@@ -32,16 +33,20 @@ import {
   type AppDispatch,
   type RootState,
 } from '@/store';
+import type { WorkspaceTab } from '@/store/uiShellSlice';
 import {
   selectNavbarMenuState,
   selectNavbarPresentationModel,
   selectNavbarThemeLabel,
 } from '@/store/navbarSelectors';
+import { useCompactShell } from '@/hooks/useCompactShell';
 import { EditorThemeEnum, type EditorThemeId } from '@/theme/editorThemeRegistry';
 
 const Navbar: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { menuOpen, activeSubmenu } = useSelector((state: RootState) => selectNavbarMenuState(state));
+  const { menuOpen, activeSubmenu } = useSelector((state: RootState) =>
+    selectNavbarMenuState(state)
+  );
   const themeLabel = useSelector((state: RootState) => selectNavbarThemeLabel(state));
   const {
     activeWorkspaceTab,
@@ -50,7 +55,46 @@ const Navbar: React.FC = () => {
     lightThemeActive,
     lineNumbers,
     speedMultiplier,
+    terminalInputMode,
   } = useSelector((state: RootState) => selectNavbarPresentationModel(state));
+  const isCompactShell = useCompactShell();
+  const isFocusedMobileTerminal = isCompactShell && activeWorkspaceTab === 'terminal';
+  const showRuntimeControls = !isCompactShell || activeWorkspaceTab !== 'terminal';
+  const workspaceTabs: Array<{
+    id: WorkspaceTab;
+    controls: string;
+    label: string;
+    ariaLabel: string;
+  }> = [
+    {
+      id: 'terminal' as WorkspaceTab,
+      controls: 'workspace-tabpanel-terminal',
+      label: isCompactShell ? 'Term' : 'Terminal',
+      ariaLabel: 'Terminal',
+    },
+    {
+      id: 'code' as WorkspaceTab,
+      controls: 'workspace-tabpanel-code',
+      label: 'Code',
+      ariaLabel: 'Code',
+    },
+    ...(isCompactShell
+      ? [
+          {
+            id: 'registers' as WorkspaceTab,
+            controls: 'workspace-tabpanel-registers',
+            label: 'Regs',
+            ariaLabel: 'Registers',
+          },
+          {
+            id: 'memory' as WorkspaceTab,
+            controls: 'workspace-tabpanel-memory',
+            label: 'Mem',
+            ariaLabel: 'Memory',
+          },
+        ]
+      : []),
+  ];
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const menuLayerRef = useRef<HTMLDivElement | null>(null);
@@ -76,8 +120,7 @@ const Navbar: React.FC = () => {
         top: rect.bottom + 8,
         left: Math.max(12, rect.left),
         maxWidth: Math.max(220, window.innerWidth - Math.max(12, rect.left) - 12),
-        submenuDirection:
-          rect.left + 280 + 280 + 24 <= window.innerWidth ? 'right' : 'left',
+        submenuDirection: rect.left + 280 + 280 + 24 <= window.innerWidth ? 'right' : 'left',
       });
     };
 
@@ -108,9 +151,22 @@ const Navbar: React.FC = () => {
     };
   }, [dispatch, menuOpen]);
 
+  useEffect(() => {
+    if (isFocusedMobileTerminal && menuOpen) {
+      dispatch(closeAppMenu());
+    }
+  }, [dispatch, isFocusedMobileTerminal, menuOpen]);
+
   const closeMenu = (): void => {
     dispatch(closeAppMenu());
   };
+
+  const terminalInputModeLabel =
+    terminalInputMode === 'auto'
+      ? 'Auto'
+      : terminalInputMode === 'touch-only'
+        ? 'Touch Only'
+        : 'Text Input';
 
   const handleThemeSelection = (nextTheme: 'system' | EditorThemeId): void => {
     if (nextTheme === 'system') {
@@ -124,6 +180,13 @@ const Navbar: React.FC = () => {
 
   const handleToggleLineNumbers = (): void => {
     dispatch(setLineNumbers(!lineNumbers));
+    closeMenu();
+  };
+
+  const handleTerminalInputModeSelection = (
+    nextMode: 'auto' | 'text-input' | 'touch-only'
+  ): void => {
+    dispatch(setTerminalInputMode(nextMode));
     closeMenu();
   };
 
@@ -150,122 +213,121 @@ const Navbar: React.FC = () => {
   };
 
   return (
-    <nav className="navbar">
+    <nav
+      className="navbar"
+      data-mobile-navbar-mode={isFocusedMobileTerminal ? 'terminal-only' : 'standard'}
+    >
       <div className="navbar-left">
-        <div
-          aria-hidden="true"
-          className="navbar-accent-mark"
-          data-testid="navbar-accent-mark"
-        >
-          68
-        </div>
-        <div className="navbar-menu-wrap" ref={menuRef}>
-          <button
-            aria-controls="navbar-app-menu"
-            aria-expanded={menuOpen}
-            aria-haspopup="menu"
-            aria-label="Open app menu"
-            className={`btn-toolbar navbar-menu-button ${menuOpen ? 'active' : ''}`}
-            data-testid="navbar-app-menu-button"
-            onClick={handleToggleMenu}
-            ref={menuButtonRef}
-            type="button"
-          >
-            <FontAwesomeIcon icon={faBars} size="sm" />
-            <span>Menu</span>
-          </button>
-        </div>
+        {!isCompactShell ? (
+          <div aria-hidden="true" className="navbar-accent-mark" data-testid="navbar-accent-mark">
+            68
+          </div>
+        ) : null}
+        {!isFocusedMobileTerminal ? (
+          <div className="navbar-menu-wrap" ref={menuRef}>
+            <button
+              aria-controls="navbar-app-menu"
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              aria-label="Open app menu"
+              className={`btn-toolbar navbar-menu-button ${menuOpen ? 'active' : ''}`}
+              data-testid="navbar-app-menu-button"
+              onClick={handleToggleMenu}
+              ref={menuButtonRef}
+              type="button"
+            >
+              <FontAwesomeIcon icon={faBars} size="sm" />
+              <span>Menu</span>
+            </button>
+          </div>
+        ) : null}
         <div className="navbar-menubar">
           <div className="navbar-view-toggle" role="tablist" aria-label="Workspace views">
-            <button
-              aria-controls="workspace-tabpanel-terminal"
-              aria-selected={activeWorkspaceTab === 'terminal'}
-              className={`navbar-view-tab ${activeWorkspaceTab === 'terminal' ? 'active' : ''}`}
-              id="workspace-tab-terminal"
-              onClick={() => dispatch(setWorkspaceTab('terminal'))}
-              role="tab"
-              type="button"
-            >
-              Terminal
-            </button>
-            <button
-              aria-controls="workspace-tabpanel-code"
-              aria-selected={activeWorkspaceTab === 'code'}
-              className={`navbar-view-tab ${activeWorkspaceTab === 'code' ? 'active' : ''}`}
-              id="workspace-tab-code"
-              onClick={() => dispatch(setWorkspaceTab('code'))}
-              role="tab"
-              type="button"
-            >
-              Code
-            </button>
+            {workspaceTabs.map((tab) => (
+              <button
+                key={tab.id}
+                aria-controls={tab.controls}
+                aria-label={tab.ariaLabel}
+                aria-selected={activeWorkspaceTab === tab.id}
+                className={`navbar-view-tab ${activeWorkspaceTab === tab.id ? 'active' : ''}`}
+                id={`workspace-tab-${tab.id}`}
+                onClick={() => dispatch(setWorkspaceTab(tab.id))}
+                role="tab"
+                type="button"
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
-      <div className="navbar-right">
-        <div className="navbar-runtime-controls" aria-label="Execution controls">
-          <div className="navbar-execution-buttons">
-            <button
-              aria-label="Run program"
-              className="btn-toolbar btn-toolbar-icon btn-toolbar-accent"
-              onClick={handleRun}
-              title="Run program"
-              type="button"
-            >
-              <FontAwesomeIcon icon={faPlay} size="sm" />
-            </button>
-            <button
-              aria-label="Reset"
-              className="btn-toolbar btn-toolbar-icon"
-              onClick={handleReset}
-              title="Reset"
-              type="button"
-            >
-              <FontAwesomeIcon icon={faStop} size="sm" />
-            </button>
-            <button
-              aria-label="Step"
-              className="btn-toolbar btn-toolbar-icon"
-              onClick={handleStep}
-              title="Step"
-              type="button"
-            >
-              <FontAwesomeIcon icon={faRedo} size="sm" />
-            </button>
-            <button
-              aria-label="Undo"
-              className="btn-toolbar btn-toolbar-icon"
-              onClick={handleUndo}
-              title="Undo"
-              type="button"
-            >
-              <FontAwesomeIcon icon={faUndo} size="sm" />
-            </button>
-          </div>
-
-          <label className="navbar-runtime-field" htmlFor="navbar-speed-input">
-            <span className="navbar-runtime-field-label">Speed</span>
-            <div className="navbar-runtime-input-wrap">
-              <FontAwesomeIcon aria-hidden="true" icon={faGaugeHigh} size="sm" />
-              <input
-                id="navbar-speed-input"
-                aria-label="Speed (x)"
-                className="navbar-runtime-input"
-                max="8"
-                min="0.25"
-                onChange={(event) =>
-                  dispatch(setSpeedMultiplier(Math.max(0.25, Number.parseFloat(event.target.value) || 1)))
-                }
-                step="0.25"
-                title="Multiplier for per-frame execution budget"
-                type="number"
-                value={speedMultiplier}
-              />
+      <div className="navbar-right" data-runtime-visible={showRuntimeControls ? 'true' : 'false'}>
+        {showRuntimeControls ? (
+          <div className="navbar-runtime-controls" aria-label="Execution controls">
+            <div className="navbar-execution-buttons">
+              <button
+                aria-label="Run program"
+                className="btn-toolbar btn-toolbar-icon btn-toolbar-accent"
+                onClick={handleRun}
+                title="Run program"
+                type="button"
+              >
+                <FontAwesomeIcon icon={faPlay} size="sm" />
+              </button>
+              <button
+                aria-label="Reset"
+                className="btn-toolbar btn-toolbar-icon"
+                onClick={handleReset}
+                title="Reset"
+                type="button"
+              >
+                <FontAwesomeIcon icon={faStop} size="sm" />
+              </button>
+              <button
+                aria-label="Step"
+                className="btn-toolbar btn-toolbar-icon"
+                onClick={handleStep}
+                title="Step"
+                type="button"
+              >
+                <FontAwesomeIcon icon={faRedo} size="sm" />
+              </button>
+              <button
+                aria-label="Undo"
+                className="btn-toolbar btn-toolbar-icon"
+                onClick={handleUndo}
+                title="Undo"
+                type="button"
+              >
+                <FontAwesomeIcon icon={faUndo} size="sm" />
+              </button>
             </div>
-          </label>
-        </div>
 
+            <label className="navbar-runtime-field" htmlFor="navbar-speed-input">
+              <span className="navbar-runtime-field-label">Speed</span>
+              <div className="navbar-runtime-input-wrap">
+                <FontAwesomeIcon aria-hidden="true" icon={faGaugeHigh} size="sm" />
+                <input
+                  id="navbar-speed-input"
+                  aria-label="Speed (x)"
+                  className="navbar-runtime-input"
+                  max="8"
+                  min="0.25"
+                  onChange={(event) =>
+                    dispatch(
+                      setSpeedMultiplier(Math.max(0.25, Number.parseFloat(event.target.value) || 1))
+                    )
+                  }
+                  step="0.25"
+                  title="Multiplier for per-frame execution budget"
+                  type="number"
+                  value={speedMultiplier}
+                />
+              </div>
+            </label>
+          </div>
+        ) : null}
       </div>
       {menuOpen
         ? createPortal(
@@ -295,6 +357,27 @@ const Navbar: React.FC = () => {
                 <span className="navbar-menu-copy">
                   <span className="navbar-menu-title">Style</span>
                   <span className="navbar-menu-subtitle">{themeLabel} theme and surface mode</span>
+                </span>
+                <span className="navbar-menu-meta">
+                  <FontAwesomeIcon icon={faChevronRight} size="sm" />
+                </span>
+              </button>
+
+              <button
+                aria-expanded={activeSubmenu === 'terminal-input'}
+                aria-haspopup="menu"
+                className={`navbar-menu-item ${activeSubmenu === 'terminal-input' ? 'active' : ''}`}
+                onClick={() => dispatch(setActiveSubmenu('terminal-input'))}
+                onFocus={() => dispatch(setActiveSubmenu('terminal-input'))}
+                onMouseEnter={() => dispatch(setActiveSubmenu('terminal-input'))}
+                role="menuitem"
+                type="button"
+              >
+                <span className="navbar-menu-copy">
+                  <span className="navbar-menu-title">Terminal Input</span>
+                  <span className="navbar-menu-subtitle">
+                    {terminalInputModeLabel} keyboard and touch behavior
+                  </span>
                 </span>
                 <span className="navbar-menu-meta">
                   <FontAwesomeIcon icon={faChevronRight} size="sm" />
@@ -334,7 +417,11 @@ const Navbar: React.FC = () => {
                       <span className="navbar-menu-subtitle">Match the OS light and dark mode</span>
                     </span>
                     <span className="navbar-menu-meta">
-                      {followSystemActive ? <FontAwesomeIcon icon={faCheck} size="sm" /> : <FontAwesomeIcon icon={faDesktop} size="sm" />}
+                      {followSystemActive ? (
+                        <FontAwesomeIcon icon={faCheck} size="sm" />
+                      ) : (
+                        <FontAwesomeIcon icon={faDesktop} size="sm" />
+                      )}
                     </span>
                   </button>
                   <button
@@ -345,7 +432,9 @@ const Navbar: React.FC = () => {
                   >
                     <span className="navbar-menu-copy">
                       <span className="navbar-menu-title">M68K Light</span>
-                      <span className="navbar-menu-subtitle">Bright shell with high-contrast terminals</span>
+                      <span className="navbar-menu-subtitle">
+                        Bright shell with high-contrast terminals
+                      </span>
                     </span>
                     <span className="navbar-menu-meta">
                       {lightThemeActive ? (
@@ -363,7 +452,9 @@ const Navbar: React.FC = () => {
                   >
                     <span className="navbar-menu-copy">
                       <span className="navbar-menu-title">M68K Dark</span>
-                      <span className="navbar-menu-subtitle">Low-glare shell for terminal-heavy sessions</span>
+                      <span className="navbar-menu-subtitle">
+                        Low-glare shell for terminal-heavy sessions
+                      </span>
                     </span>
                     <span className="navbar-menu-meta">
                       {darkThemeActive ? (
@@ -371,6 +462,69 @@ const Navbar: React.FC = () => {
                       ) : (
                         <FontAwesomeIcon icon={faMoon} size="sm" />
                       )}
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+              {activeSubmenu === 'terminal-input' ? (
+                <div
+                  className={`navbar-submenu navbar-submenu-${menuPosition.submenuDirection}`}
+                  data-testid="navbar-terminal-input-submenu"
+                  role="menu"
+                  aria-label="Terminal input options"
+                >
+                  <button
+                    className={`navbar-menu-item ${terminalInputMode === 'auto' ? 'active' : ''}`}
+                    onClick={() => handleTerminalInputModeSelection('auto')}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <span className="navbar-menu-copy">
+                      <span className="navbar-menu-title">Auto</span>
+                      <span className="navbar-menu-subtitle">
+                        Use touch-only for mobile Nibbles and text input elsewhere
+                      </span>
+                    </span>
+                    <span className="navbar-menu-meta">
+                      {terminalInputMode === 'auto' ? (
+                        <FontAwesomeIcon icon={faCheck} size="sm" />
+                      ) : null}
+                    </span>
+                  </button>
+                  <button
+                    className={`navbar-menu-item ${terminalInputMode === 'text-input' ? 'active' : ''}`}
+                    onClick={() => handleTerminalInputModeSelection('text-input')}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <span className="navbar-menu-copy">
+                      <span className="navbar-menu-title">Text Input</span>
+                      <span className="navbar-menu-subtitle">
+                        Keep the terminal focused on keyboard-style program input
+                      </span>
+                    </span>
+                    <span className="navbar-menu-meta">
+                      {terminalInputMode === 'text-input' ? (
+                        <FontAwesomeIcon icon={faCheck} size="sm" />
+                      ) : null}
+                    </span>
+                  </button>
+                  <button
+                    className={`navbar-menu-item ${terminalInputMode === 'touch-only' ? 'active' : ''}`}
+                    onClick={() => handleTerminalInputModeSelection('touch-only')}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <span className="navbar-menu-copy">
+                      <span className="navbar-menu-title">Touch Only</span>
+                      <span className="navbar-menu-subtitle">
+                        Disable text capture and map the terminal surface to cell touches
+                      </span>
+                    </span>
+                    <span className="navbar-menu-meta">
+                      {terminalInputMode === 'touch-only' ? (
+                        <FontAwesomeIcon icon={faCheck} size="sm" />
+                      ) : null}
                     </span>
                   </button>
                 </div>

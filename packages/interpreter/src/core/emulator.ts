@@ -5,10 +5,11 @@
 
 import { loadProgramSource, type ProgramSource } from '../programLoader';
 import {
-  TerminalDevice,
-  type TerminalMeta,
-  type TerminalSnapshot,
-} from '../devices/terminal';
+  resolveDecodedInstruction,
+  type DecodedInstruction,
+  type DecodedOperand,
+} from '../instructionDecoder';
+import { TerminalDevice, type TerminalMeta, type TerminalSnapshot } from '../devices/terminal';
 import type { TerminalFrameBuffer } from '../devices/terminalBuffer';
 import { Memory } from './memory';
 import { Undo } from './undo';
@@ -43,6 +44,7 @@ import {
   rolOP,
   rorOP,
 } from './operations';
+import type { RuntimeSyncVersions } from '../types/emulator';
 
 // Token type constants
 const TOKEN_IMMEDIATE = 0;
@@ -50,41 +52,49 @@ const TOKEN_OFFSET = 1;
 const TOKEN_REG_ADDR = 2;
 const TOKEN_REG_DATA = 3;
 const TOKEN_OFFSET_ADDR = 4;
-const TOKEN_LABEL = 5;
 const TOKEN_REGISTER_LIST = 6;
 
-const SYMBOL_REGEX = /^[_a-zA-Z.$][_a-zA-Z0-9.$]*$/;
 const STACK_POINTER_REGISTER = 7;
 const DEFAULT_STACK_POINTER = 0x00100000;
+const DEFAULT_UNDO_CHECKPOINT_INTERVAL = 64;
 
-interface Operand {
-  value: number;
-  type: number;
-  offset?: number;
-  label?: string;
-  indexRegister?: number;
-  indexSize?: number;
-  preDecrement?: boolean;
-  postIncrement?: boolean;
-  registerList?: number[];
+type Operand = DecodedOperand;
+
+export type UndoCaptureMode = 'full' | 'off' | 'checkpointed';
+
+export interface EmulatorOptions {
+  columns?: number;
+  rows?: number;
+  undoMode?: UndoCaptureMode;
+  undoCheckpointInterval?: number;
+}
+
+function normalizeUndoCheckpointInterval(value: number | undefined): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_UNDO_CHECKPOINT_INTERVAL;
+  }
+
+  return Math.max(1, Math.floor(value ?? DEFAULT_UNDO_CHECKPOINT_INTERVAL));
 }
 
 export class Emulator {
   // Registers: A0-A7 (indices 0-7), D0-D7 (indices 8-15)
   private registers: Int32Array = new Int32Array(16);
-  
+
   private pc: number = 0x0; // Program counter
   private ccr: number = 0x00; // Condition Code Register
   private memory: Memory;
   private undo: Undo;
   private terminal: TerminalDevice;
-  
+
   // Parsed instructions
   private instructions: Array<[string, number, boolean]> = []; // [instruction, line, isDirective]
+  private decodedInstructions: DecodedInstruction[] = [];
+  private resolvedInstructions: Array<DecodedInstruction | undefined> = [];
   private clonedInstructions: string[] = []; // Original instructions for display
-  
+
   // State
-  private labels: Record<string, number> = {};
+  private codeLabelLookup: Record<string, number> = {};
   private symbols: Record<string, number> = {};
   private symbolLookup: Record<string, number> = {};
   private endPointer: [number, number] | undefined;
@@ -97,16 +107,36 @@ export class Emulator {
   private waitingForInput = false;
   private halted = false;
   private pendingInputTask: number | undefined;
+  private pendingExternalInterruptAddress: number | undefined;
+  private undoCaptureMode: UndoCaptureMode;
+  private undoCheckpointInterval: number;
+  private instructionsSinceUndoSnapshot = 0;
+  private registerSyncVersion = 1;
+  private executionSyncVersion = 1;
+  private diagnosticsSyncVersion = 1;
 
-  constructor(program: ProgramSource = '') {
+  constructor(
+    program: ProgramSource = '',
+    options: EmulatorOptions = {}
+  ) {
     this.memory = new Memory();
     this.undo = new Undo();
-    this.terminal = new TerminalDevice();
+    this.terminal = new TerminalDevice({
+      columns: options.columns,
+      rows: options.rows,
+    });
+    this.undoCaptureMode = options.undoMode ?? 'full';
+    this.undoCheckpointInterval = normalizeUndoCheckpointInterval(options.undoCheckpointInterval);
 
     const loadedProgram = loadProgramSource(program);
     this.instructions = loadedProgram.instructions;
+    this.decodedInstructions = loadedProgram.decodedInstructions;
+    this.resolvedInstructions = Array.from(
+      { length: loadedProgram.decodedInstructions.length },
+      () => undefined
+    );
     this.clonedInstructions = loadedProgram.sourceLines;
-    this.labels = loadedProgram.codeLabels;
+    this.codeLabelLookup = loadedProgram.codeLabelLookup;
     this.symbols = loadedProgram.symbols;
     this.symbolLookup = loadedProgram.symbolLookup;
     this.endPointer = loadedProgram.endPointer;
@@ -126,17 +156,7 @@ export class Emulator {
     }
 
     this.lastInstruction = this.instructions.length > 0 ? this.instructions[0][0] : '';
-
-    // Push initial frame to undo stack
-    this.undo.push(
-      this.pc,
-      this.ccr,
-      this.registers,
-      this.memory.createSnapshot(),
-      this.errors,
-      Strings.LAST_INSTRUCTION_DEFAULT_TEXT,
-      this.line
-    );
+    this.resetUndoHistory();
   }
 
   /**
@@ -146,76 +166,158 @@ export class Emulator {
     return 0 <= pc / 4 && pc % 4 === 0;
   }
 
-  /**
-   * Parse operation size from instruction (e.g., ".b", ".w", ".l")
-   */
-  private parseOpSize(instr: string, errorsSuppressed: boolean): number {
-    if (instr.indexOf('.') !== -1) {
-      const size = instr.charAt(instr.indexOf('.') + 1);
-      switch (size.toLowerCase()) {
-        case 'b':
-          return CODE_BYTE;
-        case 'w':
-          return CODE_WORD;
-        case 'l':
-          return CODE_LONG;
-        default:
-          if (!errorsSuppressed) {
-            this.errors.push(Strings.INVALID_OP_SIZE + Strings.AT_LINE + this.line);
-          }
-          return CODE_WORD;
-      }
-    }
-    // Default to WORD if no size specified
-    return CODE_WORD;
+  private snapshotRuntimeSyncState(): {
+    registers: Int32Array;
+    pc: number;
+    ccr: number;
+    lastInstruction: string;
+    line: number;
+    halted: boolean;
+    waitingForInput: boolean;
+    exception: string | undefined;
+    errorsLength: number;
+    lastError: string | undefined;
+  } {
+    return {
+      registers: Int32Array.from(this.registers),
+      pc: this.pc,
+      ccr: this.ccr,
+      lastInstruction: this.lastInstruction,
+      line: this.line,
+      halted: this.halted,
+      waitingForInput: this.waitingForInput,
+      exception: this.exception,
+      errorsLength: this.errors.length,
+      lastError: this.errors.at(-1),
+    };
   }
 
-  /**
-   * Parse register name to index
-   */
-  private parseRegisters(register: string): number | undefined {
-    switch (register.toLowerCase()) {
-      case 'a0':
-        return 0;
-      case 'a1':
-        return 1;
-      case 'a2':
-        return 2;
-      case 'a3':
-        return 3;
-      case 'a4':
-        return 4;
-      case 'a5':
-        return 5;
-      case 'a6':
-        return 6;
-      case 'a7':
-      case 'sp':
-        return 7;
-      case 'd0':
-        return 8;
-      case 'd1':
-        return 9;
-      case 'd2':
-        return 10;
-      case 'd3':
-        return 11;
-      case 'd4':
-        return 12;
-      case 'd5':
-        return 13;
-      case 'd6':
-        return 14;
-      case 'd7':
-        return 15;
-      default:
-        this.errors.push(Strings.INVALID_REGISTER + Strings.AT_LINE + this.line);
-        return undefined;
+  private static registersMatch(left: Int32Array, right: Int32Array): boolean {
+    if (left.length !== right.length) {
+      return false;
     }
+
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private reconcileRuntimeSyncVersions(
+    before: ReturnType<Emulator['snapshotRuntimeSyncState']>
+  ): void {
+    if (
+      before.pc !== this.pc ||
+      before.ccr !== this.ccr ||
+      !Emulator.registersMatch(before.registers, this.registers)
+    ) {
+      this.registerSyncVersion += 1;
+    }
+
+    if (
+      before.lastInstruction !== this.lastInstruction ||
+      before.line !== this.line ||
+      before.halted !== this.halted ||
+      before.waitingForInput !== this.waitingForInput
+    ) {
+      this.executionSyncVersion += 1;
+    }
+
+    if (
+      before.exception !== this.exception ||
+      before.errorsLength !== this.errors.length ||
+      before.lastError !== this.errors.at(-1)
+    ) {
+      this.diagnosticsSyncVersion += 1;
+    }
+  }
+
+  private isValidHandlerAddress(address: number): boolean {
+    return address % 4 === 0 && address / 4 < this.instructions.length;
   }
 
   private resolveSymbolAddress(symbol: string): number | undefined {
     return this.symbolLookup[symbol.trim().toLowerCase()];
+  }
+
+  private resolveExternalInterruptAddress(address: number): number | undefined {
+    const normalizedAddress = address >>> 0;
+
+    if (this.isValidHandlerAddress(normalizedAddress)) {
+      return normalizedAddress;
+    }
+
+    for (const [symbolName, symbolAddress] of Object.entries(this.symbolLookup)) {
+      if ((symbolAddress >>> 0) !== normalizedAddress) {
+        continue;
+      }
+
+      const instructionIndex = this.codeLabelLookup[symbolName];
+      if (instructionIndex !== undefined) {
+        return (instructionIndex * 4) >>> 0;
+      }
+    }
+
+    return undefined;
+  }
+
+  private pushUndoSnapshot(lastInstruction = this.lastInstruction, line = this.line): void {
+    if (this.undo.isAtCapacity()) {
+      return;
+    }
+
+    this.undo.push(
+      this.pc,
+      this.ccr,
+      this.registers,
+      this.memory.createSnapshot(),
+      this.errors,
+      lastInstruction,
+      line
+    );
+    this.instructionsSinceUndoSnapshot = 0;
+  }
+
+  private resetUndoHistory(): void {
+    this.undo.clear();
+    this.instructionsSinceUndoSnapshot = 0;
+
+    if (this.undoCaptureMode === 'off') {
+      return;
+    }
+
+    this.pushUndoSnapshot(Strings.LAST_INSTRUCTION_DEFAULT_TEXT, 0);
+  }
+
+  private maybeCaptureUndoSnapshot(force = false): void {
+    if (this.undoCaptureMode === 'off') {
+      return;
+    }
+
+    if (!force && this.pc === 0) {
+      return;
+    }
+
+    if (
+      !force &&
+      this.undoCaptureMode === 'checkpointed' &&
+      this.instructionsSinceUndoSnapshot < this.undoCheckpointInterval
+    ) {
+      return;
+    }
+
+    this.pushUndoSnapshot();
+  }
+
+  private markUndoProgress(): void {
+    if (this.undoCaptureMode !== 'checkpointed') {
+      return;
+    }
+
+    this.instructionsSinceUndoSnapshot += 1;
   }
 
   private parseNumericValue(token: string): number | undefined {
@@ -268,76 +370,6 @@ export class Emulator {
     return operands;
   }
 
-  private parseRegisterList(token: string): Operand | undefined {
-    if (
-      !/^(?:(?:a[0-7]|d[0-7]|sp)(?:\s*-\s*(?:a[0-7]|d[0-7]|sp))?)(?:\s*\/\s*(?:(?:a[0-7]|d[0-7]|sp)(?:\s*-\s*(?:a[0-7]|d[0-7]|sp))?))*$/i.test(
-        token.trim()
-      )
-    ) {
-      return undefined;
-    }
-
-    const registerList: number[] = [];
-    const segments = token
-      .split('/')
-      .map((segment) => segment.trim())
-      .filter((segment) => segment !== '');
-
-    for (const segment of segments) {
-      if (segment.includes('-')) {
-        const [startToken, endToken] = segment.split('-').map((part) => part.trim());
-        const start = this.parseRegisters(startToken);
-        const end = this.parseRegisters(endToken);
-
-        if (start === undefined || end === undefined) {
-          return undefined;
-        }
-
-        const step = start <= end ? 1 : -1;
-        for (let register = start; register !== end + step; register += step) {
-          registerList.push(register);
-        }
-        continue;
-      }
-
-      const register = this.parseRegisters(segment);
-      if (register === undefined) {
-        return undefined;
-      }
-      registerList.push(register);
-    }
-
-    return {
-      value: 0,
-      type: TOKEN_REGISTER_LIST,
-      registerList,
-    };
-  }
-
-  private parseIndexRegister(token: string): Pick<Operand, 'indexRegister' | 'indexSize'> | undefined {
-    const [registerToken, sizeToken] = token.split('.').map((part) => part.trim());
-    const register = this.parseRegisters(registerToken);
-
-    if (register === undefined) {
-      return undefined;
-    }
-
-    let indexSize = CODE_WORD;
-    if (sizeToken) {
-      if (sizeToken.toLowerCase() === 'l') {
-        indexSize = CODE_LONG;
-      } else if (sizeToken.toLowerCase() !== 'w') {
-        this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
-        return undefined;
-      }
-    }
-
-    return {
-      indexRegister: register,
-      indexSize,
-    };
-  }
-
   private getTransferSize(size: number, registerIndex?: number): number {
     if (size === CODE_BYTE) {
       return registerIndex === STACK_POINTER_REGISTER ? 2 : 1;
@@ -381,8 +413,7 @@ export class Emulator {
 
     const baseRegister = operand.value;
     return (
-      (this.registers[baseRegister] + (operand.offset ?? 0) + this.getIndexedOffset(operand)) >>>
-      0
+      (this.registers[baseRegister] + (operand.offset ?? 0) + this.getIndexedOffset(operand)) >>> 0
     );
   }
 
@@ -500,14 +531,14 @@ export class Emulator {
 
   private branchToLabel(label: string): boolean {
     const normalizedLabel = label.trim().toLowerCase();
-    const labelKey = Object.keys(this.labels).find((key) => key.toLowerCase() === normalizedLabel);
+    const instructionIndex = this.codeLabelLookup[normalizedLabel];
 
-    if (!labelKey || this.labels[labelKey] === undefined) {
+    if (instructionIndex === undefined) {
       this.errors.push(Strings.UNKNOWN_LABEL + normalizedLabel + Strings.AT_LINE + this.line);
       return false;
     }
 
-    this.pc = this.labels[labelKey] * 4;
+    this.pc = instructionIndex * 4;
     return true;
   }
 
@@ -577,6 +608,31 @@ export class Emulator {
     return true;
   }
 
+  private servicePendingExternalInterrupt(): boolean {
+    if (this.pendingExternalInterruptAddress === undefined) {
+      return false;
+    }
+
+    const handlerAddress = this.pendingExternalInterruptAddress >>> 0;
+    this.pendingExternalInterruptAddress = undefined;
+
+    if (!this.isValidHandlerAddress(handlerAddress)) {
+      this.exception = Strings.INVALID_PC_EXCEPTION;
+      return true;
+    }
+
+    this.maybeCaptureUndoSnapshot(true);
+
+    const nextStackPointer = (((this.registers[STACK_POINTER_REGISTER] >>> 0) - 4) >>> 0);
+    this.registers[STACK_POINTER_REGISTER] = nextStackPointer;
+    this.memory.setLong(nextStackPointer, this.pc >>> 0);
+    this.waitingForInput = false;
+    this.pendingInputTask = undefined;
+    this.pc = handlerAddress;
+
+    return true;
+  }
+
   private haltExecution(): void {
     this.halted = true;
   }
@@ -627,176 +683,10 @@ export class Emulator {
     }
 
     this.exception =
-      Strings.UNSUPPORTED_TRAP_VECTOR + `${vector & BYTE_MASK}:${task}` + Strings.AT_LINE + this.line;
-  }
-
-  /**
-   * Parse an operand token into type and value
-   */
-  private parseOperand(token: string): Operand | undefined {
-    const res: Operand = {
-      value: 0,
-      type: 0,
-      offset: undefined,
-    };
-
-    token = token.trim();
-
-    if (token.includes('/') || /^[adsp][0-7]?\s*-\s*[adsp][0-7]?/i.test(token)) {
-      const registerList = this.parseRegisterList(token);
-      if (registerList !== undefined) {
-        return registerList;
-      }
-    }
-
-    if (token.startsWith('-(') && token.endsWith(')')) {
-      const result = this.parseOperand(token.substring(2, token.length - 1));
-      if (result === undefined || result.type !== TOKEN_REG_ADDR) {
-        this.errors.push(Strings.NOT_AN_ADDRESS_REGISTER + Strings.AT_LINE + this.line);
-        return undefined;
-      }
-
-      res.value = result.value;
-      res.type = TOKEN_OFFSET_ADDR;
-      res.offset = 0;
-      res.preDecrement = true;
-      return res;
-    }
-
-    if (token.startsWith('(') && token.endsWith(')+')) {
-      const result = this.parseOperand(token.substring(1, token.length - 2));
-      if (result === undefined || result.type !== TOKEN_REG_ADDR) {
-        this.errors.push(Strings.NOT_AN_ADDRESS_REGISTER + Strings.AT_LINE + this.line);
-        return undefined;
-      }
-
-      res.value = result.value;
-      res.type = TOKEN_OFFSET_ADDR;
-      res.offset = 0;
-      res.postIncrement = true;
-      return res;
-    }
-
-    // Handle address register with offset: (a0), $10(a0), etc.
-    if (token.indexOf('(') !== -1 && token.indexOf(')') !== -1) {
-      if (token.charAt(0) === '(') {
-        const result = this.parseOperand(
-          token.substring(token.indexOf('(') + 1, token.indexOf(')'))
-        );
-        if (result === undefined || result.type !== TOKEN_REG_ADDR) {
-          this.errors.push(Strings.NOT_AN_ADDRESS_REGISTER + Strings.AT_LINE + this.line);
-          return undefined;
-        }
-        res.value = result.value;
-        res.type = TOKEN_OFFSET_ADDR;
-        res.offset = 0;
-        return res;
-      }
-
-      const displacementToken = token.substring(0, token.indexOf('(')).trim();
-      const innerToken = token.substring(token.indexOf('(') + 1, token.indexOf(')'));
-      const [registerToken, indexToken] = innerToken.split(',').map((part) => part.trim());
-      const displacementValue =
-        displacementToken === ''
-          ? 0
-          : (this.parseNumericValue(displacementToken) ??
-            this.resolveSymbolAddress(displacementToken));
-      const result = this.parseOperand(registerToken);
-      if (result === undefined || result.type !== TOKEN_REG_ADDR) {
-        this.errors.push(Strings.NOT_AN_ADDRESS_REGISTER + Strings.AT_LINE + this.line);
-        return undefined;
-      }
-      if (displacementValue === undefined) {
-        this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
-        return undefined;
-      }
-      const indexedOperand = indexToken ? this.parseIndexRegister(indexToken) : undefined;
-      if (indexToken && indexedOperand === undefined) {
-        return undefined;
-      }
-      res.offset = displacementValue;
-      res.value = result.value;
-      res.type = TOKEN_OFFSET_ADDR;
-      res.indexRegister = indexedOperand?.indexRegister;
-      res.indexSize = indexedOperand?.indexSize;
-      return res;
-    }
-
-    // Check for address register
-    if (/^(a[0-7]|sp)$/i.test(token)) {
-      res.value = this.parseRegisters(token) ?? 0;
-      res.type = TOKEN_REG_ADDR;
-      return res;
-    }
-
-    // Check for data register
-    if (/^d[0-7]$/i.test(token)) {
-      res.value = this.parseRegisters(token) ?? 0;
-      res.type = TOKEN_REG_DATA;
-      return res;
-    }
-
-    // Check for immediate value
-    if (token.charAt(0) === '#') {
-      const immediateToken = token.substring(1).trim();
-
-      if (
-        immediateToken.length >= 3 &&
-        immediateToken.startsWith("'") &&
-        immediateToken.endsWith("'")
-      ) {
-        res.value = immediateToken.charCodeAt(1) & 0xff;
-        res.type = TOKEN_IMMEDIATE;
-        return res;
-      }
-
-      if (SYMBOL_REGEX.test(immediateToken)) {
-        const symbolAddress = this.resolveSymbolAddress(immediateToken);
-        if (symbolAddress !== undefined) {
-          res.value = symbolAddress;
-          res.type = TOKEN_IMMEDIATE;
-          return res;
-        }
-      }
-
-      const numericValue =
-        this.parseNumericValue(immediateToken.startsWith('$') || immediateToken.startsWith('%')
-          ? immediateToken
-          : immediateToken);
-
-      if (numericValue !== undefined) {
-        res.value = numericValue;
-        res.type = TOKEN_IMMEDIATE;
-        return res;
-      }
-    }
-
-    // Check for offset/address
-    const directValue = this.parseNumericValue(token);
-    if (directValue !== undefined) {
-      res.value = directValue;
-      res.type = TOKEN_OFFSET;
-      return res;
-    }
-
-    // Check for label
-    if (SYMBOL_REGEX.test(token)) {
-      const symbolAddress = this.resolveSymbolAddress(token);
-      if (symbolAddress !== undefined) {
-        res.value = symbolAddress;
-        res.type = TOKEN_OFFSET;
-        res.label = token;
-        return res;
-      }
-
-      res.value = 0; // Will be resolved later based on label position
-      res.type = TOKEN_LABEL;
-      res.label = token; // Store the label name
-      return res;
-    }
-
-    this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
-    return undefined;
+      Strings.UNSUPPORTED_TRAP_VECTOR +
+      `${vector & BYTE_MASK}:${task}` +
+      Strings.AT_LINE +
+      this.line;
   }
 
   /**
@@ -804,69 +694,77 @@ export class Emulator {
    * Returns true if execution should stop
    */
   emulationStep(): boolean {
-    // Check for previous exceptions
-    if (this.exception) return true;
-    if (this.halted) return true;
+    const runtimeSyncSnapshot = this.snapshotRuntimeSyncState();
 
-    if (this.waitingForInput) {
-      this.servicePendingInputTrap();
-      return false;
+    try {
+      // Check for previous exceptions
+      if (this.exception) return true;
+      if (this.halted) return true;
+
+      if (this.servicePendingExternalInterrupt()) {
+        return this.halted || this.exception !== undefined;
+      }
+
+      if (this.waitingForInput) {
+        this.servicePendingInputTrap();
+        return false;
+      }
+
+      // Check if we've reached end of program
+      if (this.pc / 4 >= this.instructions.length) {
+        this.lastInstruction =
+          this.instructions.length > 0 ? this.instructions[this.instructions.length - 1][0] : '';
+        return true;
+      }
+
+      // Check PC validity
+      if (!this.checkPC(this.pc)) {
+        this.exception = Strings.INVALID_PC_EXCEPTION;
+        return true;
+      }
+
+      this.maybeCaptureUndoSnapshot();
+
+      // Get current instruction
+      const instrIdx = Math.floor(this.pc / 4);
+      const decodedInstruction =
+        this.resolvedInstructions[instrIdx] ??
+        (this.resolvedInstructions[instrIdx] = resolveDecodedInstruction(
+          this.decodedInstructions[instrIdx],
+          this.symbolLookup
+        ));
+      const instr = this.instructions[instrIdx][0];
+      const flag = this.instructions[instrIdx][2];
+      this.line = this.instructions[instrIdx][1];
+      this.lastInstruction = this.clonedInstructions[this.line - 1] || instr;
+      this.pc += 4;
+
+      // Skip directives and labels
+      if (flag === true) {
+        this.markUndoProgress();
+        return false;
+      }
+
+      // Parse and execute instruction
+      this.executeInstruction(decodedInstruction);
+      this.markUndoProgress();
+      return this.halted || this.exception !== undefined;
+    } finally {
+      this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
     }
-
-    // Check if we've reached end of program
-    if (this.pc / 4 >= this.instructions.length) {
-      this.lastInstruction =
-        this.instructions.length > 0
-          ? this.instructions[this.instructions.length - 1][0]
-          : '';
-      return true;
-    }
-
-    // Check PC validity
-    if (!this.checkPC(this.pc)) {
-      this.exception = Strings.INVALID_PC_EXCEPTION;
-      return true;
-    }
-
-    // Push current state to undo stack
-    if (this.pc !== 0 && !this.undo.isAtCapacity())
-      this.undo.push(
-        this.pc,
-        this.ccr,
-        this.registers,
-        this.memory.createSnapshot(),
-        this.errors,
-        this.lastInstruction,
-        this.line
-      );
-
-    // Get current instruction
-    const instrIdx = Math.floor(this.pc / 4);
-    const instr = this.instructions[instrIdx][0];
-    const flag = this.instructions[instrIdx][2];
-    this.line = this.instructions[instrIdx][1];
-    this.lastInstruction = this.clonedInstructions[this.line - 1] || instr;
-    this.pc += 4;
-
-    // Skip directives and labels
-    if (flag === true) {
-      return false;
-    }
-
-    // Parse and execute instruction
-    this.executeInstruction(instr);
-    return this.halted || this.exception !== undefined;
   }
 
   /**
    * Execute a single instruction
    */
-  private executeInstruction(instr: string): boolean {
-    const firstWhitespaceIndex = instr.search(/\s/);
+  private executeInstruction(instr: DecodedInstruction): boolean {
+    for (const error of instr.decodeErrors) {
+      this.errors.push(error + Strings.AT_LINE + this.line);
+    }
 
-    if (firstWhitespaceIndex === -1 && instr.length > 0) {
+    if (!instr.hasOperandSection && instr.bareToken.length > 0) {
       // Single-operand or no-operand instruction
-      switch (instr.toLowerCase()) {
+      switch (instr.bareToken) {
         case 'rts':
           this.rts();
           break;
@@ -875,32 +773,13 @@ export class Emulator {
           return false;
       }
     } else {
-      // Multi-operand instruction
-      let operation: string;
-      let operands: Operand[] = [];
-      let size: number = CODE_WORD;
-
-      if (instr.indexOf('.') !== -1) {
-        operation = instr.substring(0, instr.indexOf('.')).trim();
-      } else {
-        operation = instr.substring(0, firstWhitespaceIndex).trim();
-      }
-
-      const operandStr = instr.substring(firstWhitespaceIndex).trim();
-      const operandTokens = this.splitOperands(operandStr);
-      operands =
-        operation.toLowerCase() === 'movem'
-          ? (operandTokens
-              .map((token) => this.parseRegisterList(token) ?? this.parseOperand(token))
-              .filter((operand) => operand !== undefined) as Operand[])
-          : (operandTokens
-              .map((t) => this.parseOperand(t))
-              .filter((o) => o !== undefined) as Operand[]);
-
-      size = this.parseOpSize(instr, false);
+      const operation = instr.operation;
+      const operandTokens = instr.operandTokens;
+      const operands = instr.operands;
+      const size = instr.size;
 
       // Execute instruction
-      switch (operation.toLowerCase()) {
+      switch (operation) {
         case 'add':
           if (operands.length !== 2) {
             this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
@@ -1476,9 +1355,7 @@ export class Emulator {
     }
 
     const destValue =
-      op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR
-        ? this.registers[op2.value]
-        : 0;
+      op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR ? this.registers[op2.value] : 0;
     const [result, newCCR] = moveOP(srcValue, destValue, this.ccr, size);
     this.writeOperandValue(op2, size, result);
     this.ccr = newCCR;
@@ -1703,10 +1580,12 @@ export class Emulator {
     // EXG: Exchange registers
     if (op1 === undefined || op2 === undefined) return;
 
-    if ((op1.type === TOKEN_REG_DATA && op2.type === TOKEN_REG_DATA) ||
-        (op1.type === TOKEN_REG_ADDR && op2.type === TOKEN_REG_ADDR) ||
-        (op1.type === TOKEN_REG_DATA && op2.type === TOKEN_REG_ADDR) ||
-        (op1.type === TOKEN_REG_ADDR && op2.type === TOKEN_REG_DATA)) {
+    if (
+      (op1.type === TOKEN_REG_DATA && op2.type === TOKEN_REG_DATA) ||
+      (op1.type === TOKEN_REG_ADDR && op2.type === TOKEN_REG_ADDR) ||
+      (op1.type === TOKEN_REG_DATA && op2.type === TOKEN_REG_ADDR) ||
+      (op1.type === TOKEN_REG_ADDR && op2.type === TOKEN_REG_DATA)
+    ) {
       const [newOp2, newOp1] = exgOP(this.registers[op1.value], this.registers[op2.value]);
       this.registers[op1.value] = newOp1;
       this.registers[op2.value] = newOp2;
@@ -1902,7 +1781,7 @@ export class Emulator {
     if (op1.type === TOKEN_IMMEDIATE) {
       shiftCount = op1.value;
     } else if (op1.type === TOKEN_REG_DATA) {
-      shiftCount = this.registers[op1.value] & 0x3F; // Only lower 6 bits used
+      shiftCount = this.registers[op1.value] & 0x3f; // Only lower 6 bits used
     }
 
     if (op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR) {
@@ -1920,7 +1799,7 @@ export class Emulator {
     if (op1.type === TOKEN_IMMEDIATE) {
       shiftCount = op1.value;
     } else if (op1.type === TOKEN_REG_DATA) {
-      shiftCount = this.registers[op1.value] & 0x3F;
+      shiftCount = this.registers[op1.value] & 0x3f;
     }
 
     if (op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR) {
@@ -1938,7 +1817,7 @@ export class Emulator {
     if (op1.type === TOKEN_IMMEDIATE) {
       shiftCount = op1.value;
     } else if (op1.type === TOKEN_REG_DATA) {
-      shiftCount = this.registers[op1.value] & 0x3F;
+      shiftCount = this.registers[op1.value] & 0x3f;
     }
 
     if (op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR) {
@@ -1956,7 +1835,7 @@ export class Emulator {
     if (op1.type === TOKEN_IMMEDIATE) {
       shiftCount = op1.value;
     } else if (op1.type === TOKEN_REG_DATA) {
-      shiftCount = this.registers[op1.value] & 0x3F;
+      shiftCount = this.registers[op1.value] & 0x3f;
     }
 
     if (op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR) {
@@ -1974,7 +1853,7 @@ export class Emulator {
     if (op1.type === TOKEN_IMMEDIATE) {
       shiftCount = op1.value;
     } else if (op1.type === TOKEN_REG_DATA) {
-      shiftCount = this.registers[op1.value] & 0x3F;
+      shiftCount = this.registers[op1.value] & 0x3f;
     }
 
     if (op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR) {
@@ -1992,7 +1871,7 @@ export class Emulator {
     if (op1.type === TOKEN_IMMEDIATE) {
       shiftCount = op1.value;
     } else if (op1.type === TOKEN_REG_DATA) {
-      shiftCount = this.registers[op1.value] & 0x3F;
+      shiftCount = this.registers[op1.value] & 0x3f;
     }
 
     if (op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR) {
@@ -2032,13 +1911,31 @@ export class Emulator {
     return this.memory.getMemory();
   }
 
-  getMemoryMeta(): { usedBytes: number; minAddress: number | null; maxAddress: number | null; version: number } {
+  getMemoryMeta(): {
+    usedBytes: number;
+    minAddress: number | null;
+    maxAddress: number | null;
+    version: number;
+  } {
     const addressRange = this.memory.getAddressRange();
     return {
       usedBytes: this.memory.getUsedBytes(),
       minAddress: addressRange.minAddress,
       maxAddress: addressRange.maxAddress,
       version: this.memory.getMemoryVersion(),
+    };
+  }
+
+  getRuntimeSyncVersions(): RuntimeSyncVersions {
+    const terminalMeta = this.terminal.getTerminalMeta();
+
+    return {
+      registers: this.registerSyncVersion,
+      execution: this.executionSyncVersion,
+      diagnostics: this.diagnosticsSyncVersion,
+      memory: this.memory.getMemoryVersion(),
+      terminal: terminalMeta.version,
+      terminalGeometry: terminalMeta.geometryVersion,
     };
   }
 
@@ -2062,12 +1959,39 @@ export class Emulator {
     return this.terminal.getTerminalMeta();
   }
 
+  resizeTerminal(columns: number, rows: number): void {
+    this.terminal.resize(columns, rows);
+  }
+
   getTerminalLines(): string[] {
     return this.terminal.getLines();
   }
 
   getTerminalText(): string {
     return this.terminal.getText();
+  }
+
+  writeMemoryByte(address: number, value: number): void {
+    this.memory.setByte(address >>> 0, value & BYTE_MASK);
+  }
+
+  writeMemoryWord(address: number, value: number): void {
+    this.memory.setWord(address >>> 0, value & WORD_MASK);
+  }
+
+  writeMemoryLong(address: number, value: number): void {
+    this.memory.setLong(address >>> 0, value >>> 0);
+  }
+
+  raiseExternalInterrupt(handlerAddress: number): boolean {
+    const resolvedHandlerAddress = this.resolveExternalInterruptAddress(handlerAddress);
+
+    if (resolvedHandlerAddress === undefined) {
+      return false;
+    }
+
+    this.pendingExternalInterruptAddress = resolvedHandlerAddress;
+    return true;
   }
 
   queueInput(input: string | number | number[] | Uint8Array): void {
@@ -2144,12 +2068,39 @@ export class Emulator {
     return this.exception;
   }
 
+  getUndoCaptureMode(): UndoCaptureMode {
+    return this.undoCaptureMode;
+  }
+
+  setUndoCaptureMode(mode: UndoCaptureMode, checkpointInterval?: number): void {
+    this.undoCaptureMode = mode;
+    if (checkpointInterval !== undefined) {
+      this.undoCheckpointInterval = normalizeUndoCheckpointInterval(checkpointInterval);
+    }
+    this.instructionsSinceUndoSnapshot = 0;
+
+    if (mode !== 'off' && this.undo.size() === 0) {
+      this.pushUndoSnapshot();
+    }
+  }
+
+  forceUndoCheckpoint(): void {
+    if (this.undoCaptureMode === 'off') {
+      return;
+    }
+
+    this.pushUndoSnapshot();
+  }
+
   /**
    * Perform undo operation
    */
   undoFromStack(): void {
+    const runtimeSyncSnapshot = this.snapshotRuntimeSyncState();
     const frame = this.undo.pop();
-    if (frame === undefined) return;
+    if (frame === undefined) {
+      return;
+    }
 
     this.pc = frame.pc;
     this.ccr = frame.ccr;
@@ -2161,12 +2112,15 @@ export class Emulator {
     this.waitingForInput = false;
     this.halted = false;
     this.pendingInputTask = undefined;
+    this.instructionsSinceUndoSnapshot = 0;
+    this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
   }
 
   /**
    * Reset emulator to initial state
    */
   reset(): void {
+    const runtimeSyncSnapshot = this.snapshotRuntimeSyncState();
     this.pc = 0x0;
     this.ccr = 0x00;
     this.registers.fill(0);
@@ -2178,20 +2132,12 @@ export class Emulator {
     this.waitingForInput = false;
     this.halted = false;
     this.pendingInputTask = undefined;
+    this.pendingExternalInterruptAddress = undefined;
     this.lastInstruction = Strings.LAST_INSTRUCTION_DEFAULT_TEXT;
     this.exception = undefined;
     this.errors = [];
     this.line = 0;
-
-    // Re-push initial frame
-    this.undo.push(
-      this.pc,
-      this.ccr,
-      this.registers,
-      this.memory.createSnapshot(),
-      this.errors,
-      Strings.LAST_INSTRUCTION_DEFAULT_TEXT,
-      this.line
-    );
+    this.resetUndoHistory();
+    this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
   }
 }

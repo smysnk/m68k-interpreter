@@ -27,19 +27,38 @@ DIR_RIGHT EQU   1
 DIR_UP    EQU   2
 DIR_DOWN  EQU   3
 
+LAYOUT_DESKTOP EQU 0
+LAYOUT_MOBILE_LANDSCAPE EQU 1
+LAYOUT_MOBILE_PORTRAIT EQU 2
+LAYOUT_PROFILE_UNKNOWN EQU $FF
+
+GAME_MODE_INTRO EQU 0
+GAME_MODE_PLAY EQU 1
+GAME_MODE_GAMEOVER EQU 2
+
+TOUCH_PHASE_DOWN EQU 1
+TOUCH_PHASE_MOVE EQU 2
+TOUCH_PHASE_UP EQU 3
+
 WALL_LIFE EQU   $FFFE     ; Wall Special Time
 FOOD_LIFE EQU   $FFFF     ; Food Special Time
 FOOD_GROWTH EQU 15      ; How long snake will grow after eating food
 
 SNK_START_LIFE  EQU   5      ; Life of single segment of the snake
-SNK_SPEED_EASY  EQU   $0000E000
-SNK_SPEED_MEDIUM EQU  $0000AFFF
-SNK_SPEED_HARD EQU    $00007FFF
-SNK_SPEED_INSANE EQU  $00004000
+; Browser-tuned movement gates. The original board-oriented delays were
+; much slower under the worker/runtime path and capped visible gameplay cadence.
+SNK_SPEED_EASY  EQU   $00003800
+SNK_SPEED_MEDIUM EQU  $00002C00
+SNK_SPEED_HARD EQU    $00002000
+SNK_SPEED_INSANE EQU  $00001000
 
 SNK_SCR_SIZE EQU 1716   ; x*y = 78*22
 
 ARENA_X EQU     78
+ARENA_ROWS EQU  22
+MAX_ARENA_X EQU 100
+MAX_ARENA_ROWS EQU 60
+MAX_SNK_SCR_SIZE EQU 6000
 ARENA_Y EQU     23
 
 START_X EQU     38
@@ -55,17 +74,16 @@ intro   ;initialize values that will reset at start of each game
         MOVE.B #0,SCORE    ; Reset Score
         MOVE.B #0,FOOD_NUM ; Reset Score
         MOVE.B #5,LIVES    ; Set starting lives 
-
-        MOVEA.L  #STR_SPLASH_SCR,A1 ; draw splash screen
-        BSR _DISPSTR
+        BSR _INIT_LAYOUT
+        MOVE.B #GAME_MODE_INTRO,GAME_MODE
+        BSR _DRAW_INTRO_SCREEN
         BSR _SELECT_DIFF ; Let user select difficulty     
 
         
 loadlevel    
         ;initialize values that will reset at start of each level / life
+        BSR _INIT_LAYOUT
         MOVE.W #SNK_START_LIFE, SNK_LIFE
-        MOVE.B #START_X,POS_X  ; Set starting X
-        MOVE.B #START_Y,POS_Y  ; Set starting Y
         MOVE.L #0,TIMER        ; Init Timer to 0
         MOVE.W #0,RAND_MEM     ; Random Memory Location
         MOVE.B #4,DIRECTION    ; No direction
@@ -74,11 +92,15 @@ loadlevel
         MOVE.L #0,TIMER
         MOVE.B #0,FOOD_AVAIL
         MOVE.B #0,DELAY_DECAY
-
-        MOVEA.L  #STR_ARENA_SCR,A1 ; draw arena
-        BSR _DISPSTR
+        MOVE.B #GAME_MODE_PLAY,GAME_MODE
+        BSR _CONFIGURE_GAMEPLAY_VIEW
+        BSR _LOCK_VIEWPORT_ORIGIN
+        BSR _SET_START_POSITION
+        BSR _DRAW_ARENA_SCREEN
         BSR     _CLEARMEM    ; Clear Arena Memory
 
+        CMP.B  #LAYOUT_DESKTOP,LAYOUT_PROFILE
+        BNE    load_mobile_arena
         CLR.L  D1
         MOVE.B LEVEL, D1        ;
         CMP.B  #22,D1           ; Check if player finished the game
@@ -88,30 +110,16 @@ loadlevel
         ADD.L  #STR_LEVEL1,D1   ;level=STR_LEVEL1+offset
         MOVEA.L D1,A2
         BSR     _LOADMEM     ; Load Level 1
-
-        BSR     _DISPSCORE   ; Display Score
-
-        MOVE.B LEVEL, D4     ; Display Level
-        ADDI.B #1,D4
-        MOVE.B #51,D1
-        MOVE.B #24,D2
-        BSR    _GOTOXY
-        MOVE.L #STR_COL_YELLOW,A1 ; Set color
-        BSR _DISPSTR 
-        BSR    _DISPNUM10
-
-        MOVE.B LIVES, D4     ; Display Lives
-        MOVE.B #35,D1
-        MOVE.B #24,D2
-        BSR    _GOTOXY
-        MOVE.L #STR_COL_YELLOW,A1 ; Set color
-        BSR _DISPSTR 
-        BSR    _DISPNUM10
-        MOVE.B POS_X,D1
-        MOVE.B POS_Y,D2        
-        ADDI.B #1,D1 
-        ADDI.B #1,D2
-        BSR _GOTOXY ; goto worm starting point
+        BRA     loadlevel_render
+load_mobile_arena
+        BSR     _BUILD_MOBILE_BORDER_LEVEL
+        BSR     _DRAW_MOBILE_BORDER_ARENA
+        BRA     loadlevel_hud
+loadlevel_render
+        BSR     _REDRAW_VIEWPORT
+loadlevel_hud
+        BSR     _DRAW_HUD
+        BSR     _DRAWSNK
 
 start
         TRAP	#15 ; check if we have a character waiting for us
@@ -148,37 +156,53 @@ start
 
         BRA    movesnk; if no key was pressed that means anything move on
 
-key_up  
-        CMP.B  #DIR_DOWN, LAST_DIR  ; don't let the snake move in oppose direction,
-        BEQ    movesnk               ; since this = instant death
-
-        MOVE.B #1, MOVING ; indicate we're moving if we haven't already
-        MOVE.B #DIR_UP, DIRECTION ; set movement direction up
+key_up
+        BSR _REQUEST_DIR_UP
         BRA movesnk
 
 key_down
-        CMP.B  #DIR_UP, LAST_DIR  ; don't let the snake move in oppose direction,
-        BEQ    movesnk               ; since this = instant death
-
-        MOVE.B #1, MOVING ; indicate we're moving if we haven't already
-        MOVE.B #DIR_DOWN, DIRECTION ; set movement direction down
+        BSR _REQUEST_DIR_DOWN
         BRA movesnk
 
 key_left
-        CMP.B  #DIR_RIGHT, LAST_DIR  ; don't let the snake move in oppose direction,
-        BEQ    movesnk               ; since this = instant death
-
-        MOVE.B #1, MOVING ; indicate we're moving if we haven't already
-        MOVE.B #DIR_LEFT, DIRECTION ; set movement direction left
+        BSR _REQUEST_DIR_LEFT
         BRA movesnk
 
 key_right 
-        CMP.B  #DIR_LEFT, LAST_DIR  ; don't let the snake move in oppose direction,
-        BEQ    movesnk               ; since this = instant death
-
-        MOVE.B #1, MOVING ; indicate we're moving if we haven't already
-        MOVE.B #DIR_RIGHT, DIRECTION ; set movement direction right
+        BSR _REQUEST_DIR_RIGHT
         BRA movesnk
+
+_REQUEST_DIR_UP
+        CMP.B  #DIR_DOWN, LAST_DIR
+        BEQ    req_dir_done
+        MOVE.B #1, MOVING
+        MOVE.B #DIR_UP, DIRECTION
+req_dir_done
+        RTS
+
+_REQUEST_DIR_DOWN
+        CMP.B  #DIR_UP, LAST_DIR
+        BEQ    req_dir_done_down
+        MOVE.B #1, MOVING
+        MOVE.B #DIR_DOWN, DIRECTION
+req_dir_done_down
+        RTS
+
+_REQUEST_DIR_LEFT
+        CMP.B  #DIR_RIGHT, LAST_DIR
+        BEQ    req_dir_done_left
+        MOVE.B #1, MOVING
+        MOVE.B #DIR_LEFT, DIRECTION
+req_dir_done_left
+        RTS
+
+_REQUEST_DIR_RIGHT
+        CMP.B  #DIR_LEFT, LAST_DIR
+        BEQ    req_dir_done_right
+        MOVE.B #1, MOVING
+        MOVE.B #DIR_RIGHT, DIRECTION
+req_dir_done_right
+        RTS
 
 
 movesnk CMP.B #0, MOVING  ; check if snake is moving
@@ -224,14 +248,19 @@ mv_right
 draw_snk
         CMP.B  #$FF,POS_X  ; check if we have colided with the wall
         BEQ    gameover
-        CMP.B  #78,POS_X
+        CMP.B  BOARD_COLS,POS_X
         BEQ    gameover
         CMP.B  #$FF,POS_Y
         BEQ    gameover
-        CMP.B  #23,POS_Y
+        CMP.B  BOARD_ROWS,POS_Y
         BEQ    gameover
 
         BSR _DECAYSNK    ; decay snake
+        BSR _SYNC_VIEWPORT
+        CMP.B #0,D0
+        BEQ    draw_snk_visible
+        BSR _REDRAW_VIEWPORT
+draw_snk_visible
         BSR _DRAWSNK     ; draw new snake location
 
 
@@ -258,12 +287,14 @@ gameover
         BRA     loadlevel
 
 gameoverscr
+        MOVE.B  #GAME_MODE_GAMEOVER,GAME_MODE
         MOVE #STR_GAME_OVER_SCR,A1 
         BSR _DISPSTR         
         BSR _SELECT_GAMEOVER ; game over menu
         BRA intro  ; loop to start if user selected play again  
         
 gamecompletescr
+        MOVE.B  #GAME_MODE_GAMEOVER,GAME_MODE
         MOVE #STR_GAME_COMPLETE_SCR,A1 
         BSR _DISPSTR         
         TRAP #11        ; end game
@@ -280,7 +311,7 @@ gamecompletescr
 
 _INCRAND
         ADDI.W  #1,RAND_MEM
-        CMP.W   #SNK_SCR_SIZE,RAND_MEM
+        CMP.W   BOARD_SIZE,RAND_MEM
         BNE     incdone
         MOVE.W  #$0,RAND_MEM
 
@@ -293,7 +324,7 @@ incdone
 ***************************************************************
 
 _DRAWFOOD
-        MOVEM.L D0-D2/A0-A1,-(SP)        
+        MOVEM.L D0-D3/A0-A1,-(SP)        
         MOVE.L  #SNK_SCR,A0  ; load base address
         
 findfoodspot
@@ -304,27 +335,19 @@ findfoodspot
         CMP.W   #0,$00(A0,D0.W) ; check to see if this spot is clear
         BNE     findfoodspot    ; if not, find a new spot
         
-
-        DIVU    #ARENA_X,D2     ; y = offset/x_max
+        CLR.L   D3
+        MOVE.B  BOARD_COLS,D3
+        DIVU    D3,D2     ; y = offset/x_max
         MOVE.L  D2,D1           ; x = remainder
         LSR.L   #8,D1
         LSR.L   #8,D1
 
-        ADDI.B  #1,D1
-        ADDI.B  #1,D2
-
-        BSR _GOTOXY         ; goto snake segment
-        MOVE.L #STR_COL_YELLOW,A1 
-        BSR _DISPSTR 
-        
-        MOVE.B  FOOD_NUM,D0
-        ADDI.B  #$30,D0
-        BSR     _SPUTCH
+        BSR _DRAW_FOOD_WORLD
 
 
         BSR _MARKFOOD        ; mark current position in memory
         MOVE.B #1,FOOD_AVAIL ; indicate food is set
-        MOVEM.L	(SP)+,D0-D2/A0-A1
+        MOVEM.L	(SP)+,D0-D3/A0-A1
         RTS
 
 *************************************************************** 
@@ -336,15 +359,7 @@ _DRAWSNK
         MOVEM.L D0-D1/A1,-(SP)
         MOVE.B POS_X,D1 
         MOVE.B POS_Y,D2
-        ADDI.B #1,D1
-        ADDI.B #1,D2
-        BSR _GOTOXY         ; goto snake segment
-
-        MOVE.L #STR_SNK_SEG,A1 
-        BSR _DISPSTR 
-
-        MOVE.L #STR_REV,A1 
-        BSR _DISPSTR        ; go back a char to hide cursor    
+        BSR _DRAW_SNAKE_WORLD
         BSR _MARKSNK        ; mark current position in memory
         MOVEM.L	(SP)+,D0-D1/A1
         RTS
@@ -356,11 +371,7 @@ _DRAWSNK
 
 _CLRSNK
         MOVEM.L D0-D3,-(SP)
-        ADDI.B  #1,D1
-        ADDI.B  #1,D2
-        BSR    _GOTOXY         ; goto snake segment
-        MOVE.B #$20,D0      ; $20 = space
-        BSR _SPUTCH         ; clear snake tile                
+        BSR _CLEAR_WORLD_CELL
         MOVEM.L	(SP)+,D0-D3
         RTS
 
@@ -387,13 +398,15 @@ _MARKFOOD
 ***************************************************************
 
 _MARKSNK 
-        MOVEM.L D0-D2/A0,-(SP)
+        MOVEM.L D0-D3/A0,-(SP)
         MOVE.L #SNK_SCR,A0 ; load base address
         CLR.L     D0
         CLR.L     D1
 
         MOVE.B  POS_Y,D0   
-        MULU    #ARENA_X,D0     ; offset = y*78
+        CLR.L   D3
+        MOVE.B  BOARD_COLS,D3
+        MULU    D3,D0     ; offset = y*cols
 
         MOVE.B  POS_X,D1   
         ADD.W   D1,D0      ; offset = offset + x
@@ -413,7 +426,7 @@ markfood
         ADD.B   #1,FOOD_NUM      ; add one to food number       
         
         MOVE.B  #0,FOOD_AVAIL     ; set no food available
-        BSR     _DISPSCORE   ; update score
+        BSR     _DRAW_HUD   ; update score and HUD values
         
 marksnk
         CMP.B   #0,DELAY_DECAY   ; check to see if snake is growing
@@ -422,11 +435,11 @@ marksnk
         MOVE.W  SNK_LIFE,D1  ; add 1 to snake life
 
         MOVE.W  D1,$00(A0,D0.W) ; mark spot = base+offset <- snake life
-        MOVEM.L (SP)+,D0-D2/A0
+        MOVEM.L (SP)+,D0-D3/A0
         RTS
 
 marknog MOVE.W  SNK_LIFE,$00(A0,D0.W) ; mark spot = base+offset <- snake life
-        MOVEM.L (SP)+,D0-D2/A0
+        MOVEM.L (SP)+,D0-D3/A0
         RTS
    
 *************************************************************** 
@@ -449,14 +462,15 @@ _DECAYSNK
 
 nextseg
         MOVE.L  D2,D0    ; y -> d0
-        MULU    #ARENA_X,D0  ; offset = y*78         
+        CLR.L   D3
+        MOVE.B  BOARD_COLS,D3
+        MULU    D3,D0  ; offset = y*cols
         ADD.W   D1,D0    ; offset = offset + x          
 
         MOVE.W  D0,D5    ; calc mem location
         MULU    #2,D5    ; x2 for word size
 
-
-        CMP.W   #SNK_SCR_SIZE,D0  ; check to see if we're done 
+        CMP.W   BOARD_SIZE,D0  ; check to see if we're done 
         BNE     checkseg
         BRA     decaydelay
 
@@ -479,7 +493,7 @@ decayseg
 
 incseg  
         ADDI.B  #1,D1   ; add 1 to x
-        CMP.B   #ARENA_X,D1  ; check to see if x is greater than max length (78)
+        CMP.B   BOARD_COLS,D1  ; check to see if x is greater than max length
         BEQ     incy
         BRA     nextseg    ; if not start checking next segment
 incy    MOVE.B  #0,D1   ; x = 1
@@ -518,18 +532,7 @@ loadnextmem
         BRA     loadinc 
 loadwallseg
         MOVE.W  #WALL_LIFE,$00(A0,D1.W)  ; move current life of segment x,y into D4
-        MOVE.L  D0,D2
-        DIVU    #ARENA_X,D2     ; y = offset/x_max
-        MOVE.L  D2,D1           ; x = remainder
-        LSR.L   #8,D1
-        LSR.L   #8,D1
-
-        ADDI.B  #1,D1
-        ADDI.B  #1,D2
-
-        BSR _GOTOXY         ; goto snake segment
-        MOVE.L #STR_WALL,A1 
-        BSR _DISPSTR         
+        BRA     loadinc
 
 loadinc
         ADDI.W  #1,D0       
@@ -554,10 +557,492 @@ clearnextmem
         MOVE.W  #$0000,$00(A0,D1.W)  ; move current life of segment x,y into D4
 
         ADDI.W  #1,D0
-        CMP.W   #SNK_SCR_SIZE,D0
+        CMP.W   BOARD_SIZE,D0
         BNE     clearnextmem  
       
         MOVEM.L (SP)+,D0-D1/A0
+        RTS
+
+***************************************************************
+; Function _DRAW_ARENA_SCREEN
+; Purpose  Draw the desktop arena shell or clear the mobile view
+***************************************************************
+
+_DRAW_ARENA_SCREEN
+        CMP.B  #LAYOUT_DESKTOP,LAYOUT_PROFILE
+        BEQ    draw_arena_desktop
+        MOVEA.L #STR_CLS,A1
+        BSR _DISPSTR
+        RTS
+draw_arena_desktop
+        MOVEA.L #STR_ARENA_SCR,A1
+        BSR _DISPSTR
+        RTS
+
+***************************************************************
+; Function _CONFIGURE_GAMEPLAY_VIEW
+; Purpose  Size the visible gameplay viewport from terminal geometry
+***************************************************************
+
+_CONFIGURE_GAMEPLAY_VIEW
+        MOVE.B #ARENA_X,VIEWPORT_COLS
+        MOVE.B #ARENA_ROWS,VIEWPORT_ROWS
+        MOVE.B #ARENA_X,BOARD_COLS
+        MOVE.B #ARENA_ROWS,BOARD_ROWS
+        MOVE.W #SNK_SCR_SIZE,BOARD_SIZE
+        MOVE.B #1,VIEWPORT_SCREEN_Y
+        CMP.B  #LAYOUT_MOBILE_LANDSCAPE,LAYOUT_PROFILE
+        BEQ    config_view_landscape
+        CMP.B  #LAYOUT_MOBILE_PORTRAIT,LAYOUT_PROFILE
+        BEQ    config_view_portrait
+        RTS
+config_view_landscape
+        MOVE.B TERM_COLS,D0
+        CMP.B  #MAX_ARENA_X,D0
+        BLE    config_view_landscape_cols_ready
+        MOVE.B #MAX_ARENA_X,D0
+config_view_landscape_cols_ready
+        MOVE.B D0,VIEWPORT_COLS
+        MOVE.B D0,BOARD_COLS
+        MOVE.B TERM_ROWS,D0
+        SUBI.B #1,D0
+        CMP.B  #MAX_ARENA_ROWS,D0
+        BLE    config_view_landscape_rows_ready
+        MOVE.B #MAX_ARENA_ROWS,D0
+config_view_landscape_rows_ready
+        MOVE.B D0,VIEWPORT_ROWS
+        MOVE.B D0,BOARD_ROWS
+        MOVE.B #2,VIEWPORT_SCREEN_Y
+        BSR    _UPDATE_BOARD_SIZE
+        RTS
+config_view_portrait
+        MOVE.B TERM_COLS,D0
+        CMP.B  #MAX_ARENA_X,D0
+        BLE    config_view_portrait_cols_ready
+        MOVE.B #MAX_ARENA_X,D0
+config_view_portrait_cols_ready
+        MOVE.B D0,VIEWPORT_COLS
+        MOVE.B D0,BOARD_COLS
+        MOVE.B TERM_ROWS,D0
+        SUBI.B #1,D0
+        CMP.B  #MAX_ARENA_ROWS,D0
+        BLE    config_view_portrait_rows_ready
+        MOVE.B #MAX_ARENA_ROWS,D0
+config_view_portrait_rows_ready
+        MOVE.B D0,VIEWPORT_ROWS
+        MOVE.B D0,BOARD_ROWS
+        MOVE.B #2,VIEWPORT_SCREEN_Y
+        BSR    _UPDATE_BOARD_SIZE
+        RTS
+
+***************************************************************
+; Function _UPDATE_BOARD_SIZE
+***************************************************************
+
+_UPDATE_BOARD_SIZE
+        MOVEM.L D0-D1,-(SP)
+        CLR.L   D0
+        CLR.L   D1
+        MOVE.B  BOARD_ROWS,D0
+        MOVE.B  BOARD_COLS,D1
+        MULU    D1,D0
+        MOVE.W  D0,BOARD_SIZE
+        MOVEM.L (SP)+,D0-D1
+        RTS
+
+***************************************************************
+; Function _LOCK_VIEWPORT_ORIGIN
+***************************************************************
+
+_LOCK_VIEWPORT_ORIGIN
+        CLR.B  VIEWPORT_ORIGIN_X
+        CLR.B  VIEWPORT_ORIGIN_Y
+        RTS
+
+***************************************************************
+; Function _SET_START_POSITION
+***************************************************************
+
+_SET_START_POSITION
+        CMP.B  #LAYOUT_DESKTOP,LAYOUT_PROFILE
+        BEQ    set_start_desktop
+        MOVE.B BOARD_COLS,D0
+        LSR.B  #1,D0
+        MOVE.B D0,POS_X
+        MOVE.B BOARD_ROWS,D0
+        LSR.B  #1,D0
+        MOVE.B D0,POS_Y
+        RTS
+set_start_desktop
+        MOVE.B #START_X,POS_X
+        MOVE.B #START_Y,POS_Y
+        RTS
+
+***************************************************************
+; Function _SYNC_VIEWPORT
+; Purpose  Fixed arena path for the current gameplay layout
+; Returns  D0 = 0 because viewport origin stays stable during play
+***************************************************************
+
+_SYNC_VIEWPORT
+        CLR.B  D0
+        RTS
+
+***************************************************************
+; Function _WORLD_TO_SCREEN
+; Purpose  Translate world coordinates into the current viewport
+; Returns  D0 = 1 when visible, D1/D2 rewritten to screen coordinates
+***************************************************************
+
+_WORLD_TO_SCREEN
+        MOVEM.L D3-D4,-(SP)
+        CMP.B  VIEWPORT_ORIGIN_X,D1
+        BLT    world_to_screen_hidden
+        MOVE.B D1,D3
+        SUB.B  VIEWPORT_ORIGIN_X,D3
+        CMP.B  VIEWPORT_COLS,D3
+        BGE    world_to_screen_hidden
+        CMP.B  VIEWPORT_ORIGIN_Y,D2
+        BLT    world_to_screen_hidden
+        MOVE.B D2,D4
+        SUB.B  VIEWPORT_ORIGIN_Y,D4
+        CMP.B  VIEWPORT_ROWS,D4
+        BGE    world_to_screen_hidden
+        ADDI.B #1,D3
+        ADD.B  VIEWPORT_SCREEN_Y,D4
+        MOVE.B D3,D1
+        MOVE.B D4,D2
+        MOVE.B #1,D0
+        BRA    world_to_screen_done
+world_to_screen_hidden
+        CLR.B  D0
+world_to_screen_done
+        MOVEM.L (SP)+,D3-D4
+        RTS
+
+***************************************************************
+; Function _DRAW_WALL_WORLD
+***************************************************************
+
+_DRAW_WALL_WORLD
+        MOVEM.L D1-D2/A1,-(SP)
+        BSR _WORLD_TO_SCREEN
+        CMP.B  #0,D0
+        BEQ    draw_wall_world_done
+        BSR _GOTOXY
+        MOVE.L #STR_WALL,A1
+        BSR _DISPSTR
+draw_wall_world_done
+        MOVEM.L (SP)+,D1-D2/A1
+        RTS
+
+***************************************************************
+; Function _DRAW_FOOD_WORLD
+***************************************************************
+
+_DRAW_FOOD_WORLD
+        MOVEM.L D1-D2/A1,-(SP)
+        BSR _WORLD_TO_SCREEN
+        CMP.B  #0,D0
+        BEQ    draw_food_world_done
+        BSR _GOTOXY
+        MOVE.L #STR_COL_YELLOW,A1
+        BSR _DISPSTR
+        MOVE.B FOOD_NUM,D0
+        ADDI.B #$30,D0
+        BSR _SPUTCH
+draw_food_world_done
+        MOVEM.L (SP)+,D1-D2/A1
+        RTS
+
+***************************************************************
+; Function _DRAW_SNAKE_WORLD
+***************************************************************
+
+_DRAW_SNAKE_WORLD
+        MOVEM.L D1-D2/A1,-(SP)
+        BSR _WORLD_TO_SCREEN
+        CMP.B  #0,D0
+        BEQ    draw_snake_world_done
+        BSR _GOTOXY
+        MOVE.L #STR_SNK_SEG,A1
+        BSR _DISPSTR
+        MOVE.L #STR_REV,A1
+        BSR _DISPSTR
+draw_snake_world_done
+        MOVEM.L (SP)+,D1-D2/A1
+        RTS
+
+***************************************************************
+; Function _CLEAR_WORLD_CELL
+***************************************************************
+
+_CLEAR_WORLD_CELL
+        MOVEM.L D1-D2,-(SP)
+        BSR _WORLD_TO_SCREEN
+        CMP.B  #0,D0
+        BEQ    clear_world_cell_done
+        BSR _GOTOXY
+        MOVE.B #$20,D0
+        BSR _SPUTCH
+clear_world_cell_done
+        MOVEM.L (SP)+,D1-D2
+        RTS
+
+***************************************************************
+; Function _CLEAR_VIEWPORT
+***************************************************************
+
+_CLEAR_VIEWPORT
+        MOVEM.L D1-D4/A1,-(SP)
+        MOVEA.L #STR_COL_DEFAULT,A1
+        BSR _DISPSTR
+        CLR.B  D4
+clear_viewport_row
+        MOVE.B #1,D1
+        MOVE.B VIEWPORT_SCREEN_Y,D2
+        ADD.B  D4,D2
+        BSR _GOTOXY
+        MOVE.B VIEWPORT_COLS,D3
+clear_viewport_col
+        MOVE.B #$20,D0
+        BSR _SPUTCH
+        SUBI.B #1,D3
+        BNE    clear_viewport_col
+        ADDI.B #1,D4
+        CMP.B  VIEWPORT_ROWS,D4
+        BLT    clear_viewport_row
+        MOVEM.L (SP)+,D1-D4/A1
+        RTS
+
+***************************************************************
+; Function _BUILD_MOBILE_BORDER_LEVEL
+; Purpose  Create a touch-friendly empty arena with a perimeter wall
+***************************************************************
+
+_BUILD_MOBILE_BORDER_LEVEL
+        MOVEM.L D0-D5/A0,-(SP)
+        MOVE.L  #SNK_SCR,A0
+        CLR.W   D0
+        CLR.B   D1
+        CLR.B   D2
+build_mobile_level_next
+        CMP.W   BOARD_SIZE,D0
+        BEQ     build_mobile_level_done
+        MOVE.W  D0,D5
+        MULU    #2,D5
+        CMP.B   #0,D1
+        BEQ     build_mobile_level_wall
+        MOVE.B  BOARD_COLS,D3
+        SUBI.B  #1,D3
+        CMP.B   D3,D1
+        BEQ     build_mobile_level_wall
+        CMP.B   #0,D2
+        BEQ     build_mobile_level_wall
+        MOVE.B  BOARD_ROWS,D4
+        SUBI.B  #1,D4
+        CMP.B   D4,D2
+        BEQ     build_mobile_level_wall
+        MOVE.W  #0,$00(A0,D5.W)
+        BRA     build_mobile_level_inc
+build_mobile_level_wall
+        MOVE.W  #WALL_LIFE,$00(A0,D5.W)
+build_mobile_level_inc
+        ADDI.B  #1,D1
+        CMP.B   BOARD_COLS,D1
+        BLT     build_mobile_level_step
+        MOVE.B  #0,D1
+        ADDI.B  #1,D2
+build_mobile_level_step
+        ADDI.W  #1,D0
+        BRA     build_mobile_level_next
+build_mobile_level_done
+        MOVEM.L (SP)+,D0-D5/A0
+        RTS
+
+***************************************************************
+; Function _DRAW_MOBILE_BORDER_ARENA
+; Purpose  Paint the full-screen mobile border around the active arena
+***************************************************************
+
+_DRAW_MOBILE_BORDER_ARENA
+        MOVEM.L D0-D4/A1,-(SP)
+        BSR _CLEAR_VIEWPORT
+        MOVE.B #1,D1
+        MOVE.B VIEWPORT_SCREEN_Y,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_RED,A1
+        BSR _DISPSTR
+        MOVE.B BOARD_COLS,D3
+draw_mobile_top_border
+        MOVE.B #'#',D0
+        BSR _SPUTCH
+        SUBI.B #1,D3
+        BNE    draw_mobile_top_border
+
+        MOVE.B #1,D4
+draw_mobile_side_rows
+        MOVE.B BOARD_ROWS,D0
+        SUBI.B #1,D0
+        CMP.B  D0,D4
+        BGE    draw_mobile_bottom_border
+        MOVE.B #1,D1
+        MOVE.B VIEWPORT_SCREEN_Y,D2
+        ADD.B  D4,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_RED,A1
+        BSR _DISPSTR
+        MOVE.B #'#',D0
+        BSR _SPUTCH
+        MOVE.B BOARD_COLS,D1
+        MOVE.B VIEWPORT_SCREEN_Y,D2
+        ADD.B  D4,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_RED,A1
+        BSR _DISPSTR
+        MOVE.B #'#',D0
+        BSR _SPUTCH
+        ADDI.B #1,D4
+        BRA    draw_mobile_side_rows
+
+draw_mobile_bottom_border
+        MOVE.B #1,D1
+        MOVE.B VIEWPORT_SCREEN_Y,D2
+        ADD.B  BOARD_ROWS,D2
+        SUBI.B #1,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_RED,A1
+        BSR _DISPSTR
+        MOVE.B BOARD_COLS,D3
+draw_mobile_bottom_border_loop
+        MOVE.B #'#',D0
+        BSR _SPUTCH
+        SUBI.B #1,D3
+        BNE    draw_mobile_bottom_border_loop
+        MOVEM.L (SP)+,D0-D4/A1
+        RTS
+
+***************************************************************
+; Function _REDRAW_VIEWPORT
+; Purpose  Repaint the visible game board from logical memory
+***************************************************************
+
+_REDRAW_VIEWPORT
+        MOVEM.L D0-D5/A0,-(SP)
+        MOVE.L #SNK_SCR,A0
+        CLR.W  D0
+        CLR.B  D1
+        CLR.B  D2
+redraw_viewport_next
+        CMP.W  BOARD_SIZE,D0
+        BEQ    redraw_viewport_done
+        MOVE.W D0,D5
+        MULU   #2,D5
+        MOVE.W $00(A0,D5.W),D4
+        CMP.W  #0,D4
+        BEQ    redraw_viewport_inc
+        CMP.W  #WALL_LIFE,D4
+        BEQ    redraw_viewport_wall
+        CMP.W  #FOOD_LIFE,D4
+        BEQ    redraw_viewport_food
+        BSR _DRAW_SNAKE_WORLD
+        BRA    redraw_viewport_inc
+redraw_viewport_wall
+        BSR _DRAW_WALL_WORLD
+        BRA    redraw_viewport_inc
+redraw_viewport_food
+        BSR _DRAW_FOOD_WORLD
+redraw_viewport_inc
+        ADDI.B #1,D1
+        CMP.B  BOARD_COLS,D1
+        BLT    redraw_viewport_step
+        MOVE.B #0,D1
+        ADDI.B #1,D2
+redraw_viewport_step
+        ADDI.W #1,D0
+        BRA    redraw_viewport_next
+redraw_viewport_done
+        MOVEM.L (SP)+,D0-D5/A0
+        RTS
+
+***************************************************************
+; Function _DRAW_HUD
+; Purpose  Draw the current HUD values for the active layout
+***************************************************************
+
+_DRAW_HUD
+        MOVEM.L D0-D4/A1,-(SP)
+        CMP.B  #LAYOUT_DESKTOP,LAYOUT_PROFILE
+        BEQ    draw_hud_desktop
+        CMP.B  #LAYOUT_MOBILE_LANDSCAPE,LAYOUT_PROFILE
+        BEQ    draw_hud_landscape
+        BRA    draw_hud_portrait
+draw_hud_desktop
+        MOVE.B #19,D1
+        MOVE.B #24,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_YELLOW,A1
+        BSR _DISPSTR
+        MOVE.B SCORE,D4
+        BSR _DISPNUM10
+        MOVE.B #35,D1
+        MOVE.B #24,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_YELLOW,A1
+        BSR _DISPSTR
+        MOVE.B LIVES,D4
+        BSR _DISPNUM10
+        MOVE.B #51,D1
+        MOVE.B #24,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_YELLOW,A1
+        BSR _DISPSTR
+        MOVE.B LEVEL,D4
+        ADDI.B #1,D4
+        BSR _DISPNUM10
+        BRA    draw_hud_done
+draw_hud_landscape
+        MOVE.B #1,D1
+        MOVE.B #1,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_YELLOW,A1
+        BSR _DISPSTR
+        MOVEA.L #STR_HUD_LANDSCAPE,A1
+        BSR _DISPSTR
+        BRA    draw_hud_mobile_values
+draw_hud_portrait
+        MOVE.B #1,D1
+        MOVE.B #1,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_YELLOW,A1
+        BSR _DISPSTR
+        MOVEA.L #STR_HUD_PORTRAIT_ROW1,A1
+        BSR _DISPSTR
+draw_hud_mobile_values
+        MOVE.B #3,D1
+        MOVE.B #1,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_YELLOW,A1
+        BSR _DISPSTR
+        MOVE.B SCORE,D4
+        BSR _DISPNUM10
+        MOVE.B #8,D1
+        MOVE.B #1,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_YELLOW,A1
+        BSR _DISPSTR
+        MOVE.B LIVES,D4
+        BSR _DISPNUM10
+        MOVE.B #14,D1
+        MOVE.B #1,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_YELLOW,A1
+        BSR _DISPSTR
+        MOVE.B LEVEL,D4
+        ADDI.B #1,D4
+        BSR _DISPNUM10
+draw_hud_done
+        MOVEM.L (SP)+,D0-D4/A1
         RTS
 
         
@@ -711,6 +1196,249 @@ gotoskipten
         MOVEM.L	(SP)+,D0-D4
         RTS    
 
+***************************************************************
+; Function _INIT_LAYOUT
+; Purpose  Refresh terminal geometry-derived layout state
+***************************************************************
+
+_INIT_LAYOUT
+        CMP.B  #LAYOUT_PROFILE_UNKNOWN,LAYOUT_PROFILE
+        BNE    init_layout_ready
+        BSR    _SELECT_LAYOUT_PROFILE
+init_layout_ready
+        CLR.B TOUCH_PENDING
+        CLR.B TOUCH_PHASE
+        CLR.B TOUCH_ROW
+        CLR.B TOUCH_COL
+        CLR.B TOUCH_FLAGS
+        CLR.B TOUCH_CONFIRM_PENDING
+        RTS
+
+***************************************************************
+; Function _SELECT_LAYOUT_PROFILE
+; Purpose  Pick a layout profile from TERM_COLS and TERM_ROWS
+***************************************************************
+
+_SELECT_LAYOUT_PROFILE
+        MOVE.B #LAYOUT_MOBILE_PORTRAIT,LAYOUT_PROFILE
+        MOVE.B TERM_COLS,D0
+        MOVE.B TERM_ROWS,D1
+        CMP.B  #52,D0
+        BLT    layout_profile_done
+        CMP.B  #11,D1
+        BLT    layout_profile_done
+        MOVE.B #LAYOUT_MOBILE_LANDSCAPE,LAYOUT_PROFILE
+        CMP.B  #78,D0
+        BLT    layout_profile_done
+        CMP.B  #24,D1
+        BLT    layout_profile_done
+        MOVE.B #LAYOUT_DESKTOP,LAYOUT_PROFILE
+layout_profile_done
+        RTS
+
+***************************************************************
+; Function _DRAW_INTRO_SCREEN
+; Purpose  Draw a profile-aware intro screen
+***************************************************************
+
+_DRAW_INTRO_SCREEN
+        CMP.B #LAYOUT_MOBILE_LANDSCAPE,LAYOUT_PROFILE
+        BEQ    draw_intro_landscape
+        CMP.B #LAYOUT_MOBILE_PORTRAIT,LAYOUT_PROFILE
+        BEQ    draw_intro_portrait
+        MOVEA.L #STR_SPLASH_SCR,A1
+        BSR _DISPSTR
+        RTS
+draw_intro_landscape
+        MOVEA.L #STR_SPLASH_LANDSCAPE,A1
+        BSR _DISPSTR
+        RTS
+draw_intro_portrait
+        MOVEA.L #STR_SPLASH_PORTRAIT,A1
+        BSR _DISPSTR
+        MOVEA.L #STR_SPLASH_PORTRAIT_FOOTER,A1
+        BSR _DISPSTR
+        RTS
+
+***************************************************************
+; Function _GET_DIFF_LAYOUT
+; Purpose  Get difficulty menu origin and row step
+; Returns D1=x, D2=y, D3=row step
+***************************************************************
+
+_GET_DIFF_LAYOUT
+        MOVE.B #8,D1
+        MOVE.B #10,D2
+        MOVE.B #1,D3
+        CMP.B  #LAYOUT_MOBILE_LANDSCAPE,LAYOUT_PROFILE
+        BEQ    diff_layout_landscape
+        CMP.B  #LAYOUT_MOBILE_PORTRAIT,LAYOUT_PROFILE
+        BEQ    diff_layout_portrait
+        RTS
+diff_layout_landscape
+        MOVE.B #7,D1
+        MOVE.B #6,D2
+        MOVE.B #1,D3
+        RTS
+diff_layout_portrait
+        MOVE.B #4,D1
+        MOVE.B #8,D2
+        MOVE.B #3,D3
+        RTS
+
+***************************************************************
+; Function _APPLY_DIFFICULTY_SPEED
+; Purpose  Sync SNK_SPEED with the selected difficulty
+***************************************************************
+
+_APPLY_DIFFICULTY_SPEED
+        CMP.B  #0,DIFFICULTY
+        BEQ    apply_diff_easy
+        CMP.B  #1,DIFFICULTY
+        BEQ    apply_diff_medium
+        CMP.B  #2,DIFFICULTY
+        BEQ    apply_diff_hard
+        MOVE.L #SNK_SPEED_INSANE,SNK_SPEED
+        RTS
+apply_diff_easy
+        MOVE.L #SNK_SPEED_EASY,SNK_SPEED
+        RTS
+apply_diff_medium
+        MOVE.L #SNK_SPEED_MEDIUM,SNK_SPEED
+        RTS
+apply_diff_hard
+        MOVE.L #SNK_SPEED_HARD,SNK_SPEED
+        RTS
+
+***************************************************************
+; Function _HANDLE_INTRO_TOUCH
+; Purpose  Map touch rows to large difficulty-row targets
+***************************************************************
+
+_HANDLE_INTRO_TOUCH
+        BSR    _GET_DIFF_LAYOUT
+        MOVE.B TOUCH_ROW,D4
+        CMP.B  D2,D4
+        BLT    intro_touch_done
+
+        MOVE.B D2,D5
+        ADD.B  D3,D5
+        CMP.B  D5,D4
+        BLT    intro_touch_easy
+
+        ADD.B  D3,D5
+        CMP.B  D5,D4
+        BLT    intro_touch_medium
+
+        ADD.B  D3,D5
+        CMP.B  D5,D4
+        BLT    intro_touch_hard
+
+        ADD.B  D3,D5
+        CMP.B  D5,D4
+        BLT    intro_touch_insane
+        RTS
+intro_touch_easy
+        MOVE.B #0,DIFFICULTY
+        BRA    intro_touch_confirm
+intro_touch_medium
+        MOVE.B #1,DIFFICULTY
+        BRA    intro_touch_confirm
+intro_touch_hard
+        MOVE.B #2,DIFFICULTY
+        BRA    intro_touch_confirm
+intro_touch_insane
+        MOVE.B #3,DIFFICULTY
+intro_touch_confirm
+        BSR    _APPLY_DIFFICULTY_SPEED
+        MOVE.B #1,TOUCH_CONFIRM_PENDING
+intro_touch_done
+        RTS
+
+***************************************************************
+; Function _HANDLE_PLAY_TOUCH
+; Purpose  Convert touch direction into snake movement requests
+***************************************************************
+
+_HANDLE_PLAY_TOUCH
+        MOVE.B TOUCH_COL,D0
+        MOVE.B VIEWPORT_COLS,D1
+        LSR.B  #1,D1
+        SUB.B  D1,D0
+
+        MOVE.B TOUCH_ROW,D2
+        CMP.B  VIEWPORT_SCREEN_Y,D2
+        BLT    play_touch_done
+        SUB.B  VIEWPORT_SCREEN_Y,D2
+        MOVE.B VIEWPORT_ROWS,D3
+        LSR.B  #1,D3
+        SUB.B  D3,D2
+
+        MOVE.B D0,D4
+        CMP.B  #0,D4
+        BGE    play_touch_dx_abs_done
+        NEG.B  D4
+play_touch_dx_abs_done
+        MOVE.B D2,D5
+        CMP.B  #0,D5
+        BGE    play_touch_dy_abs_done
+        NEG.B  D5
+play_touch_dy_abs_done
+        CMP.B  #1,D4
+        BGT    play_touch_pick_axis
+        CMP.B  #1,D5
+        BLE    play_touch_done
+play_touch_pick_axis
+        CMP.B  D5,D4
+        BGE    play_touch_horizontal
+        CMP.B  #0,D2
+        BLT    play_touch_up
+        BGT    play_touch_down
+        RTS
+play_touch_horizontal
+        CMP.B  #0,D0
+        BLT    play_touch_left
+        BGT    play_touch_right
+        RTS
+play_touch_up
+        BSR _REQUEST_DIR_UP
+        RTS
+play_touch_down
+        BSR _REQUEST_DIR_DOWN
+        RTS
+play_touch_left
+        BSR _REQUEST_DIR_LEFT
+        RTS
+play_touch_right
+        BSR _REQUEST_DIR_RIGHT
+play_touch_done
+        RTS
+
+***************************************************************
+; Function TOUCH_ISR
+; Purpose  Consume host-published touch mailbox events
+***************************************************************
+
+TOUCH_ISR
+        MOVEM.L D0-D5/A0,-(SP)
+        CMP.B  #0,TOUCH_PENDING
+        BEQ    touch_isr_done
+        CMP.B  #GAME_MODE_INTRO,GAME_MODE
+        BEQ    touch_isr_intro
+        CMP.B  #GAME_MODE_PLAY,GAME_MODE
+        BEQ    touch_isr_play
+        BRA    touch_isr_done
+touch_isr_intro
+        BSR    _HANDLE_INTRO_TOUCH
+        BRA    touch_isr_finish
+touch_isr_play
+        BSR    _HANDLE_PLAY_TOUCH
+touch_isr_finish
+        CLR.B  TOUCH_PENDING
+touch_isr_done
+        MOVEM.L (SP)+,D0-D5/A0
+        RTS
+
 *************************************************************** 
 ; Function _SELECT_DIFF
 ; Purpose  Select Difficulty
@@ -720,8 +1448,7 @@ _SELECT_DIFF
         MOVEM.L D0-D3,-(SP)
         ; Select Difficulty
 draw_select
-        MOVE.B   #9,D1    
-        MOVE.B   #15,D2
+        BSR      _GET_DIFF_LAYOUT
         CMP.B     #0,DIFFICULTY  ; 
         BEQ     draw_easy_select        
         CMP.B     #1,DIFFICULTY  ; 
@@ -737,15 +1464,15 @@ draw_easy_select     ; Draw EASY selected
         BSR      _GOTOXY
         MOVEA.L  #STR_SEASY,A1 ; draw selected
         BSR _DISPSTR
-        ADDI.B   #1,D2         ; add 1 to y
+        ADD.B    D3,D2
         BSR      _GOTOXY
         MOVEA.L  #STR_MEDIUM,A1 ; draw unselected
         BSR _DISPSTR
-        ADDI.B   #1,D2         ; add 1 to y
+        ADD.B    D3,D2
         BSR      _GOTOXY
         MOVEA.L  #STR_HARD,A1 ; draw unselected
         BSR _DISPSTR
-        ADDI.B   #1,D2         ; add 1 to y
+        ADD.B    D3,D2
         BSR      _GOTOXY
         MOVEA.L  #STR_INSANE,A1 ; draw unselected
         BSR _DISPSTR
@@ -756,15 +1483,15 @@ draw_medium_select
         BSR      _GOTOXY
         MOVEA.L  #STR_EASY,A1 
         BSR _DISPSTR
-        ADDI.B   #1,D2         ; add 1 to y
+        ADD.B    D3,D2
         BSR      _GOTOXY
         MOVEA.L  #STR_SMEDIUM,A1 
         BSR _DISPSTR
-        ADDI.B   #1,D2         ; add 1 to y
+        ADD.B    D3,D2
         BSR      _GOTOXY
         MOVEA.L  #STR_HARD,A1 
         BSR _DISPSTR
-        ADDI.B   #1,D2         ; add 1 to y
+        ADD.B    D3,D2
         BSR      _GOTOXY
         MOVEA.L  #STR_INSANE,A1
         BSR _DISPSTR
@@ -775,15 +1502,15 @@ draw_hard_select
         BSR      _GOTOXY
         MOVEA.L  #STR_EASY,A1 
         BSR _DISPSTR
-        ADDI.B   #1,D2  
-        BSR      _GOTOXY       ; add 1 to y
+        ADD.B    D3,D2
+        BSR      _GOTOXY
         MOVEA.L  #STR_MEDIUM,A1 
         BSR _DISPSTR
-        ADDI.B   #1,D2         ; add 1 to y
+        ADD.B    D3,D2
         BSR      _GOTOXY
         MOVEA.L  #STR_SHARD,A1 
         BSR _DISPSTR
-        ADDI.B   #1,D2         ; add 1 to y
+        ADD.B    D3,D2
         BSR      _GOTOXY
         MOVEA.L  #STR_INSANE,A1 
         BSR _DISPSTR
@@ -794,15 +1521,15 @@ draw_insane_select
         BSR      _GOTOXY
         MOVEA.L  #STR_EASY,A1 ; draw splash screen
         BSR _DISPSTR
-        ADDI.B   #1,D2         ; add 1 to y
+        ADD.B    D3,D2
         BSR      _GOTOXY
         MOVEA.L  #STR_MEDIUM,A1 ; draw splash screen
         BSR _DISPSTR
-        ADDI.B   #1,D2         ; add 1 to y
+        ADD.B    D3,D2
         BSR      _GOTOXY
         MOVEA.L  #STR_HARD,A1 ; draw splash screen
         BSR _DISPSTR
-        ADDI.B   #1,D2         ; add 1 to y
+        ADD.B    D3,D2
         BSR      _GOTOXY
         MOVEA.L  #STR_SINSANE,A1 ; draw splash screen
         BSR _DISPSTR
@@ -812,6 +1539,14 @@ get_select
         MOVE.B   #0,D1    
         MOVE.B   #0,D2
         BSR _SGETCH  ; else, get the character 
+
+        CMP.B  #0,TOUCH_CONFIRM_PENDING
+        BEQ    select_read_keys
+        CLR.B  TOUCH_CONFIRM_PENDING
+        MOVEM.L (SP)+,D0-D3
+        RTS
+
+select_read_keys
 
         CMP.B  #'s',D0 ; check if down arrow was pressed
         BEQ    select_key_down
@@ -960,6 +1695,25 @@ OP_POLL
         MOVEM.L	(SP)+,D1/A0
         RTS
 
+TERM_COLS DC.B 80
+TERM_ROWS DC.B 25
+LAYOUT_PROFILE DC.B LAYOUT_PROFILE_UNKNOWN
+GAME_MODE DC.B GAME_MODE_INTRO
+TOUCH_PENDING DC.B 0
+TOUCH_PHASE DC.B 0
+TOUCH_ROW DC.B 0
+TOUCH_COL DC.B 0
+TOUCH_FLAGS DC.B 0
+TOUCH_CONFIRM_PENDING DC.B 0
+VIEWPORT_ORIGIN_X DC.B 0
+VIEWPORT_ORIGIN_Y DC.B 0
+VIEWPORT_COLS DC.B ARENA_X
+VIEWPORT_ROWS DC.B ARENA_ROWS
+VIEWPORT_SCREEN_Y DC.B 1
+BOARD_COLS DC.B ARENA_X
+BOARD_ROWS DC.B ARENA_ROWS
+BOARD_SIZE DC.W SNK_SCR_SIZE
+
 LIVES   DC.B $00
 LEVEL   DC.B $00
 FOOD_NUM   DC.B $00
@@ -979,7 +1733,7 @@ DIRECTION DS.B  1
 MOVING    DS.B  1
 TIMER     DS.L  1
 
-SNK_SCR   DS.W  SNK_SCR_SIZE  ; x*y = 78*22
+SNK_SCR   DS.W  MAX_SNK_SCR_SIZE
 
 STR_EASY   DC.B    '[32;40mEASY  [37;40m',0
 STR_MEDIUM DC.B    '[32;40mMEDIUM [37;40m',0
@@ -1006,36 +1760,35 @@ STR_CLS   DC.B    $1B,'[2J',0
 STR_COL_RED   DC.B  $1B,'[31;40m',0
 STR_COL_YELLOW DC.B '[33;40m',0
 STR_COL_GREEN  DC.B '[32;40m',0
+STR_COL_DEFAULT DC.B '[37;40m',0
 
 STR_SNK_SEG DC.B     $1B,'[32;40m',$DB,0
-STR_WALL  DC.B     $1B,'[31;40m','�',0
-STR_FOOD  DC.B     $1B,'[33;40m','�',0
+STR_WALL  DC.B     $1B,'[31;40m','#',0
+STR_FOOD  DC.B     $1B,'[33;40m','*',0
 STR_HOME  DC.B    '[0;0H',0
 
-STR_SPLASH_SCR DC.B  '[2J[0m[5C[1;32m   [0m[39C[1;32m [0m',$0D,$0A
- DC.B '[12C[1;31m���[37m�[0m[3C[1;31m��[37m� [31m��[37m� [31m������[37m�  [31m������[37m�  [31m��[37m�[0m[6C[1;31m�������[37m� [31m�������[37m�[0m',$0D,$0A
- DC.B '[12C[1;31m����[37m�  [31m��[37m� [31m��[37m� [31m��[37m���[31m��[37m� [31m��[37m���[31m��[37m� [31m��[37m�[0m[6C[1;31m��[37m����ͼ [31m��[37m����ͼ[0m',$0D,$0A
- DC.B '[12C[1;31m��[37m�[31m��[37m� [31m��[37m� [31m��[37m� [31m������[37mɼ [31m������[37mɼ [31m��[37m�[0m[6C[1;31m�����[37m�[0m[3C[1;31m�������[37m�[0m',$0D,$0A
- DC.B '[12C[1;31m��[37m��[31m��[37m�[31m��[37m� [31m��[37m� [31m��[37m���[31m��[37m� [31m��[37m���[31m��[37m� [31m��[37m�[0m[6C[1;31m��[37m��ͼ[0m[3C[1m�����[31m��[37m�[0m',$0D,$0A
- DC.B '[3C[1;32m        [0m [1;31m��[37m� �[31m����[37m� [31m��[37m� [31m������[37mɼ [31m������[37mɼ [31m�������[37m� [31m�������[37m� [31m�������[37m�[0m',$0D,$0A
- DC.B '[12C[1m�ͼ  ���ͼ �ͼ �����ͼ  �����ͼ  ������ͼ ������ͼ ������ͼ[0m',$0D,$0A
- DC.B '[32C[1;33m����Ŀ  �����Ŀ �����Ŀ �����Ŀ �����Ŀ[0m',$0D,$0A
- DC.B '[32C[1;33m� ����  � �Ŀ � � �Ŀ � � �Ŀ � � �Ŀ �[0m',$0D,$0A
- DC.B '[25C[1;32m���    [33m� ���Ŀ � ��� � � � � � � � � � � � � �[0m',$0D,$0A
- DC.B '[22C[1;32m���  ��   [33m� �Ŀ � � �Ŀ � � � � � � � � � � � � �[0m',$0D,$0A
- DC.B '[22C[1;32m�������   [33m� ��� � � ��� � � ��� � � ��� � � ��� �[0m',$0D,$0A
- DC.B '[4C[37m��[33mDifficulty[37m͸[0m  [1m [0m [1;32m��������  [33m������� ������� ������� ������� �������[0m',$0D,$0A
- DC.B '[4C[37m�[12C�[0m[10C[1;32m��[0m[11C[1;32m����[0m',$0D,$0A
- DC.B '[4C[37m� [0m[3C[1;32mEasy[0m[4C[1m�[0m[9C[1;32m��[0m[11C[1;32m��  ��[0m[14C[1m [31mMovement Keys   [32m  [0m',$0D,$0A
- DC.B '[4C[37m� [32m  Medium[0m[3C[1m�[0m[8C[1;32m��[0m[11C[1;32m��    ��[0m[6C[1;32m [0m [1;32m�[0m',$0D,$0A
- DC.B '[4C[37m� [0m[3C[1;32mHard[0m[4C[1m�[0m[8C[1;32m��[0m[10C[1;32m��[0m[5C[1;32m��[0m[5C[1;32m��[0m[6C[1m [5C[7C ',$0D,$0A
- DC.B '[0m[4C[1m� [32m  Insane[0m[3C[1m�[0m[8C[1;32m��[0m[10C[1;32m��    ��[0m[5C[1;32m��[0m[7C[1m    [37m���Ŀ',$0D,$0A
- DC.B '[0m[4C[1m�        [4C�[0m[9C[1;32m��[0m[8C[1;32m��[0m[5C[1;32m��[0m[4C[1;32m��[0m[8C[1m    [37m� W �',$0D,$0A
- DC.B '[0m[4C[1m������������;[0m [9C[1;32m��[0m[6C[1;32m��[0m[6C[1;32m���  ��[0m[9C[1m [37m�����������Ŀ',$0D,$0A
- DC.B '[0m[19C  [8C[1;32m��������[0m[8C[1;32m�����[0m[9C[1m[37m  � A � S � D � ',$0D,$0A
- DC.B '[0m[5C[1;32m [0m                  [36C[1m[37m �������������',$0D,$0A
- DC.B '[30m [34msmysnk.com[0m      [1m                                                    ',$0D,$0A
- DC.B ' Joshua Bellamy[0m',$0D,$0A,0
+STR_SPLASH_SCR DC.B $1B,'[2J',$1B,'[2;29H',$1B,'[1;32mNIBBLES',$1B,'[0m'
+ DC.B $1B,'[4;18H',$1B,'[33mTouch the rows or use W/S + Enter',$1B,'[0m'
+ DC.B $1B,'[6;8H',$1B,'[37mDifficulty',$1B,'[0m'
+ DC.B $1B,'[15;40H',$1B,'[31mMovement Keys: W A S D',$1B,'[0m'
+ DC.B $1B,'[23;3H',$1B,'[34msmysnk.com',$1B,'[0m'
+ DC.B $1B,'[24;3HJoshua Bellamy',0
+
+STR_SPLASH_LANDSCAPE DC.B $1B,'[2J',$1B,'[2;18H',$1B,'[1;32mNIBBLES',$1B,'[0m'
+ DC.B $1B,'[3;7H',$1B,'[37mDifficulty',$1B,'[0m'
+ DC.B $1B,'[4;7H',$1B,'[33mTap a row to start',$1B,'[0m'
+ DC.B $1B,'[11;3H',$1B,'[34msmysnk.com',$1B,'[0m'
+ DC.B $1B,'[11;18HJoshua Bellamy',0
+
+STR_SPLASH_PORTRAIT DC.B $1B,'[2J',$1B,'[2;11H',$1B,'[1;32mNIBBLES',$1B,'[0m'
+ DC.B $1B,'[4;4H',$1B,'[37mDifficulty',$1B,'[0m'
+ DC.B $1B,'[6;4H',$1B,'[33mTap difficulty',$1B,'[0m'
+ DC.B $1B,'[7;4Hor W/S + Enter',0
+STR_SPLASH_PORTRAIT_FOOTER DC.B $1B,'[18;2H',$1B,'[34msmysnk.com',$1B,'[0m'
+ DC.B $1B,'[19;2HJoshua Bellamy',0
+
+STR_HUD_LANDSCAPE DC.B 'S:   L:   Lv:   Touch',0
+STR_HUD_PORTRAIT_ROW1 DC.B 'S:   L:   Lv:',0
 
 
 STR_ARENA_SCR DC.B '[2J[0m[1;31m������������������������������������������������������������������������������Ŀ�[0m[78C[1;31m�� '

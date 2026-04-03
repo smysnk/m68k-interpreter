@@ -23,7 +23,7 @@ const nextConfig = {
       }
     : {}),
   outputFileTracingRoot: fileURLToPath(new URL('../../', import.meta.url)),
-  transpilePackages: ['@m68k/interpreter', '@m68k/interpreter-redux'],
+  transpilePackages: ['@m68k/interpreter'],
   webpack(config) {
     config.module.rules.push({
       test: /\.asm$/i,

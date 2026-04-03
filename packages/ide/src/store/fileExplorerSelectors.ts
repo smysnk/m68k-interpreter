@@ -6,13 +6,11 @@ export const selectFileExplorerModel = createSelector(
   [
     selectFiles,
     selectActiveFileId,
-    (state: RootState) => state.settings.engineMode,
     (state: RootState) => state.uiShell.chromeOffsets,
   ],
-  (files, activeFileId, engineMode, chromeOffsets) => ({
+  (files, activeFileId, chromeOffsets) => ({
     files,
     activeFileId,
-    engineMode,
     chromeOffsets,
     groupedFiles: [
       {

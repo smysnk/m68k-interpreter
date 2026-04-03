@@ -47,39 +47,6 @@ const FAKE_ENGINE_REPORT: EngineBatteryProfileReport = {
           symbols: [],
         },
       },
-      interpreterRedux: {
-        elapsedMs: { min: 2, max: 4, mean: 3, median: 3 },
-        stepsPerSecond: { min: 20, max: 40, mean: 30, median: 30 },
-        heapDeltaBytes: { min: 200, max: 400, mean: 300, median: 300 },
-        rssDeltaBytes: { min: 2000, max: 4000, mean: 3000, median: 3000 },
-        userCpuMicros: { min: 6, max: 8, mean: 7, median: 7 },
-        systemCpuMicros: { min: 9, max: 11, mean: 10, median: 10 },
-        steps: 100,
-        sampleCount: 3,
-        finalSnapshot: {
-          registers: [],
-          memory: [],
-          pc: 0,
-          flags: { z: 0, v: 0, n: 0, c: 0, x: 0 },
-          terminalMeta: {
-            rows: 25,
-            columns: 80,
-            cursorRow: 0,
-            cursorColumn: 0,
-            output: '',
-            version: 1,
-            geometryVersion: 1,
-          },
-          terminalText: '',
-          lastInstruction: '',
-          errors: [],
-          halted: true,
-          waitingForInput: false,
-          symbols: [],
-        },
-      },
-      elapsedRatio: 1.5,
-      throughputRatio: 1.5,
     },
   ],
 };
@@ -87,7 +54,7 @@ const FAKE_ENGINE_REPORT: EngineBatteryProfileReport = {
 describe('test station benchmark metrics', () => {
   it('creates stable benchmark namespaces and series metadata', () => {
     const payload = createEngineBenchmarkSuitePayload({
-      suiteLabel: 'Engine Benchmark Battery',
+      suiteLabel: 'Classic Interpreter Benchmark Battery',
       report: FAKE_ENGINE_REPORT,
       durationMs: 25,
       runnerKey: 'gha-ubuntu-latest-node20',
@@ -95,21 +62,21 @@ describe('test station benchmark metrics', () => {
     });
 
     expect(payload.status).toBe('passed');
-    expect(payload.performanceStats).toHaveLength(16);
+    expect(payload.performanceStats).toHaveLength(7);
     expect(payload.performanceStats[0]).toMatchObject({
-      statGroup: 'benchmark.node.engine.shared.tight_arithmetic_loop',
+      statGroup: 'benchmark.node.classic_interpreter.shared.tight_arithmetic_loop',
       statName: 'elapsed_ms',
       unit: 'ms',
       metadata: {
-        seriesId: 'interpreter',
+        seriesId: 'classic-interpreter',
         runnerKey: 'gha-ubuntu-latest-node20',
         statistic: 'median',
       },
     });
     expect(payload.performanceStats.at(-1)).toMatchObject({
-      statName: 'throughput_ratio_vs_interpreter',
+      statName: 'steps',
       metadata: {
-        seriesId: 'interpreter-redux-vs-interpreter',
+        seriesId: 'classic-interpreter',
       },
     });
   });

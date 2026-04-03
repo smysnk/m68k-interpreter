@@ -1,18 +1,22 @@
-import { combineReducers, configureStore, type Middleware, type UnknownAction } from '@reduxjs/toolkit';
 import {
-  createInterpreterReduxIoMiddleware,
-  interpreterReducer as interpreterReduxReducer,
-} from '@m68k/interpreter-redux';
+  combineReducers,
+  configureStore,
+  type Middleware,
+  type UnknownAction,
+} from '@reduxjs/toolkit';
 import { getIdeBootConfig, resolvePreloadedFileId } from '@/config/ideBootConfig';
 import emulatorReducer from '@/store/emulatorSlice';
 import filesReducer, {
-  NIBBLES_FILE_ID,
   getActiveFile,
   normalizeFilesState,
   setActiveFileContent,
   type FilesState,
 } from '@/store/filesSlice';
-import { readPersistedIdeState, writePersistedIdeState, type PersistedIdeState } from '@/store/persistence';
+import {
+  readPersistedIdeState,
+  writePersistedIdeState,
+  type PersistedIdeState,
+} from '@/store/persistence';
 import settingsReducer, { initialSettingsState } from '@/store/settingsSlice';
 import uiShellReducer, { initialUiShellState } from '@/store/uiShellSlice';
 import { resetEmulatorState, setEditorCode } from '@/store/emulatorSlice';
@@ -20,7 +24,6 @@ import { resetEmulatorState, setEditorCode } from '@/store/emulatorSlice';
 const combinedReducer = combineReducers({
   emulator: emulatorReducer,
   files: filesReducer,
-  interpreterRedux: interpreterReduxReducer,
   settings: settingsReducer,
   uiShell: uiShellReducer,
 });
@@ -36,32 +39,6 @@ function createSourceSummary(source: string) {
       source.length <= SOURCE_PREVIEW_LENGTH
         ? source
         : `${source.slice(0, SOURCE_PREVIEW_LENGTH)}...`,
-  };
-}
-
-function countMemoryImageBytes(memoryImage: Record<number, number>): number {
-  return Object.keys(memoryImage).length;
-}
-
-function sanitizeInterpreterReduxState(interpreterRedux: ReturnType<typeof combinedReducer>['interpreterRedux']) {
-  return {
-    ...interpreterRedux,
-    program: {
-      ...interpreterRedux.program,
-      source: createSourceSummary(interpreterRedux.program.source),
-      sourceLines: {
-        count: interpreterRedux.program.sourceLines.length,
-      },
-      memoryImage: {
-        usedBytes: countMemoryImageBytes(interpreterRedux.program.memoryImage),
-      },
-    },
-    terminal: {
-      ...interpreterRedux.terminal,
-      output: {
-        length: interpreterRedux.terminal.output.length,
-      },
-    },
   };
 }
 
@@ -106,39 +83,6 @@ export function sanitizeIdeDevToolsAction<A extends UnknownAction>(action: A, _i
         ...action,
         payload: action.payload ? '<runtime>' : null,
       } as A;
-    case 'runtimeStateHydrated':
-    case 'programLoadedCommitted':
-    case 'stepCommitted':
-    case 'frameCommitted':
-    case 'undoCommitted':
-    case 'resetCommitted':
-      if (
-        typeof action.payload === 'object' &&
-        action.payload !== null &&
-        'state' in action.payload &&
-        action.payload.state
-      ) {
-        return {
-          ...action,
-          payload: {
-            ...action.payload,
-            state: sanitizeInterpreterReduxState(
-              action.payload.state as ReturnType<typeof combinedReducer>['interpreterRedux']
-            ),
-          },
-        } as A;
-      }
-
-      if (action.payload) {
-        return {
-          ...action,
-          payload: sanitizeInterpreterReduxState(
-            action.payload as ReturnType<typeof combinedReducer>['interpreterRedux']
-          ),
-        } as A;
-      }
-
-      return action;
     default:
       return action;
   }
@@ -162,7 +106,6 @@ export function sanitizeIdeDevToolsState<S>(state: S, _index?: number): S {
       },
     },
     files: sanitizeFilesState(typedState.files),
-    interpreterRedux: sanitizeInterpreterReduxState(typedState.interpreterRedux),
   } as S;
 }
 
@@ -174,9 +117,7 @@ export function createActionSizeGuardMiddleware<RootState>(
     const bytes = measureSerializedSize(sanitizeIdeDevToolsAction(action as UnknownAction));
 
     if (bytes > warnAtBytes && typeof action === 'object' && action !== null && 'type' in action) {
-      console.warn(
-        `[redux-size-guard] action ${String(action.type)} serialized to ${bytes} bytes`
-      );
+      console.warn(`[redux-size-guard] action ${String(action.type)} serialized to ${bytes} bytes`);
     }
 
     return result;
@@ -188,22 +129,17 @@ const rootReducer = (
   action: Parameters<typeof combinedReducer>[1]
 ) => {
   if (action.type === resetEmulatorState.type) {
-    return combinedReducer(
-      state
-        ? {
-            ...state,
-            interpreterRedux: undefined,
-          }
-        : state,
-      action
-    );
+    return combinedReducer(state, action);
   }
 
   if (action.type === setEditorCode.type && state) {
     return combinedReducer(
       {
         ...state,
-        files: filesReducer(state.files, setActiveFileContent((action as ReturnType<typeof setEditorCode>).payload)),
+        files: filesReducer(
+          state.files,
+          setActiveFileContent((action as ReturnType<typeof setEditorCode>).payload)
+        ),
       },
       action
     );
@@ -233,13 +169,6 @@ export function createIdeStore() {
         ...persisted.settings,
       }
     : initialState.settings;
-  const settings =
-    files.activeFileId === NIBBLES_FILE_ID && hydratedSettings.engineMode === 'interpreter-redux'
-      ? {
-          ...hydratedSettings,
-          engineMode: 'interpreter' as const,
-        }
-      : hydratedSettings;
   const preloadedState = {
     ...initialState,
     emulator: {
@@ -247,7 +176,7 @@ export function createIdeStore() {
       editorCode: activeFile.content,
     },
     files,
-    settings,
+    settings: hydratedSettings,
     uiShell: persisted?.uiShell
       ? {
           ...initialUiShellState,
@@ -260,10 +189,6 @@ export function createIdeStore() {
       : initialState.uiShell,
   };
 
-  const interpreterReduxIo = createInterpreterReduxIoMiddleware<ReturnType<typeof combinedReducer>>({
-    selectState: (rootState) => rootState.interpreterRedux,
-  });
-
   const store = configureStore({
     reducer: rootReducer,
     preloadedState,
@@ -274,10 +199,7 @@ export function createIdeStore() {
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({
         serializableCheck: false,
-      }).concat(
-        interpreterReduxIo.middleware as Middleware<unknown, ReturnType<typeof combinedReducer>>,
-        createActionSizeGuardMiddleware<ReturnType<typeof combinedReducer>>()
-      ),
+      }).concat(createActionSizeGuardMiddleware<ReturnType<typeof combinedReducer>>()),
   });
 
   let lastPersistedState = '';
@@ -290,8 +212,8 @@ export function createIdeStore() {
         editorTheme: state.settings.editorTheme,
         followSystemTheme: state.settings.followSystemTheme,
         lineNumbers: state.settings.lineNumbers,
-        engineMode: state.settings.engineMode,
         registerEditRadix: state.settings.registerEditRadix,
+        terminalInputMode: state.settings.terminalInputMode,
       },
       uiShell: {
         workspaceTab: state.uiShell.workspaceTab,
@@ -311,9 +233,7 @@ export function createIdeStore() {
     writePersistedIdeState(persistableState);
   });
 
-  return Object.assign(store, {
-    getInterpreterReduxRuntimeStore: interpreterReduxIo.getRuntimeStore,
-  });
+  return store;
 }
 
 export const ideStore = createIdeStore();

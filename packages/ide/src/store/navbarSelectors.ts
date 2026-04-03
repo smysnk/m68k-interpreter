@@ -35,6 +35,7 @@ export const selectNavbarViewModel = createSelector(
     (state: RootState) => state.settings.editorTheme,
     (state: RootState) => state.settings.followSystemTheme,
     (state: RootState) => state.settings.lineNumbers,
+    (state: RootState) => state.settings.terminalInputMode,
     (state: RootState) => state.emulator.speedMultiplier,
     selectShowHelp,
   ],
@@ -44,6 +45,7 @@ export const selectNavbarViewModel = createSelector(
     editorTheme,
     followSystemTheme,
     lineNumbers,
+    terminalInputMode,
     speedMultiplier,
     showHelp
   ) => ({
@@ -52,6 +54,7 @@ export const selectNavbarViewModel = createSelector(
     editorTheme,
     followSystemTheme,
     lineNumbers,
+    terminalInputMode,
     speedMultiplier,
     showHelp,
   })

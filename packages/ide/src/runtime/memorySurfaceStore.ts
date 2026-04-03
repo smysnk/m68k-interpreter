@@ -49,6 +49,10 @@ class MemorySurfaceStore {
     this.publish(meta);
   }
 
+  syncRuntime(runtime: MemorySurfaceRuntime): void {
+    this.runtime = runtime;
+  }
+
   setMeta(meta: MemoryMeta): void {
     this.publish(meta);
   }

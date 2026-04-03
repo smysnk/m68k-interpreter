@@ -1,5 +1,6 @@
 import React from 'react';
-import { useEmulatorStore } from '@/stores/emulatorStore';
+import { useSelector } from 'react-redux';
+import type { RootState } from '@/store';
 
 function formatLastInstruction(lastInstruction: string): string {
   const trimmedInstruction = lastInstruction.replace(/\s*;.*$/, '').trim();
@@ -8,7 +9,7 @@ function formatLastInstruction(lastInstruction: string): string {
 }
 
 const Output: React.FC = () => {
-  const { executionState } = useEmulatorStore();
+  const executionState = useSelector((state: RootState) => state.emulator.executionState);
   const displayInstruction = formatLastInstruction(executionState.lastInstruction);
   const hasDiagnostics = executionState.errors.length > 0 || Boolean(executionState.exception);
 

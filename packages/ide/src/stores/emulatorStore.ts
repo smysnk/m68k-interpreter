@@ -177,5 +177,10 @@ export const useEmulatorStore = Object.assign(useEmulatorStoreImpl, {
   dispatch: ideStore.dispatch,
 }) as UseEmulatorStoreHook;
 
+export function useEmulatorActions(): ReturnType<typeof createActions> {
+  const dispatch = useDispatch<AppDispatch>();
+  return React.useMemo(() => createActions(dispatch), [dispatch]);
+}
+
 export type { RuntimeMetrics };
 export { createEmptyTerminalState };

@@ -1,9 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { resolveDecodedInstruction } from './instructionDecoder';
 import { loadProgramSource } from './programLoader';
 
-const nibblesPath = fileURLToPath(new URL('../../../examples/nibbles.asm', import.meta.url));
+const nibblesPath = fileURLToPath(
+  new URL('../../../packages/ide/src/fixtures/nibbles.asm', import.meta.url)
+);
 
 function readBytes(memory: Record<number, number>, address: number, length: number): number[] {
   return Array.from({ length }, (_, index) => memory[address + index] ?? 0);
@@ -23,6 +26,12 @@ END START
 
     expect(result.exception).toBeUndefined();
     expect(result.codeLabels.START).toBe(1);
+    expect(result.codeLabelLookup.start).toBe(1);
+    expect(result.decodedInstructions[1]?.operation).toBe('movea');
+    expect(result.decodedInstructions[1]?.operandsResolved).toBe(false);
+    expect(
+      resolveDecodedInstruction(result.decodedInstructions[1]!, result.symbolLookup).operands
+    ).toHaveLength(2);
     expect(result.symbols.START).toBe(0);
     expect(result.symbols.MSG).toBe(4);
     expect(result.symbols.BUFFER).toBe(7);
@@ -39,6 +48,7 @@ END START
     expect(result.exception).toBeUndefined();
     expect(result.errors).toEqual([]);
     expect(result.endPointer).toBeDefined();
+    expect(result.decodedInstructions.length).toBe(result.instructions.length);
     expect(result.symbols.SCORE).toBe(result.symbols.RAND_MEM + 2);
     expect(result.symbols.SNK_SCR).toBe(result.symbols.TIMER + 4);
     expect(result.symbols.STR_SPLASH_SCR).toBeGreaterThan(result.symbols.SNK_SCR);
@@ -50,7 +60,7 @@ END START
       0x4a,
       0x1b,
       0x5b,
-      0x30,
+      0x32,
     ]);
   });
 });

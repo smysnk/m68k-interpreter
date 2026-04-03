@@ -8,6 +8,5 @@ describe('statusBarSelectors', () => {
     const model = selectStatusBarModel(store.getState());
 
     expect(model.runtime.label).toBe('Ready');
-    expect(model.engineLabel).toBe('Interpreter');
   });
 });

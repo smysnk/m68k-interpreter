@@ -1,6 +1,5 @@
 import { performance } from 'node:perf_hooks';
 import { Emulator, type TerminalMeta } from '@m68k/interpreter';
-import { ReducerInterpreterSession } from '@m68k/interpreter-redux';
 import type {
   BenchmarkEngineId,
   BenchmarkScenario,
@@ -106,9 +105,6 @@ export interface EngineProfileSummary {
 export interface ScenarioProfileReport {
   scenario: BenchmarkScenario;
   interpreter: EngineProfileSummary;
-  interpreterRedux: EngineProfileSummary;
-  elapsedRatio: number;
-  throughputRatio: number;
 }
 
 export interface EngineBatteryProfileReport {
@@ -137,12 +133,10 @@ const REGISTER_INDEX_BY_NAME: Record<RegisterName, number> = {
   d7: 15,
 };
 
-function createSession(engine: BenchmarkEngineId, program: string): BenchmarkSession {
-  if (engine === 'interpreter') {
-    return new Emulator(program);
-  }
-
-  return new ReducerInterpreterSession(program);
+function createSession(program: string): BenchmarkSession {
+  return new Emulator(program, {
+    undoMode: 'off',
+  });
 }
 
 function maybeRunGarbageCollection(): void {
@@ -300,7 +294,7 @@ export function runBenchmarkScenario(
   const beforeResources = process.resourceUsage();
   const startedAt = performance.now();
 
-  const session = createSession(engine, scenario.program);
+  const session = createSession(scenario.program);
   const { steps, stopped } = runScenarioUntilStop(session, scenario);
 
   const elapsedMs = performance.now() - startedAt;
@@ -379,26 +373,7 @@ function summarizeRuns(runs: EngineRunResult[]): EngineProfileSummary {
   };
 }
 
-export function validateScenarioParity(scenario: BenchmarkScenario): {
-  interpreter: EngineRunResult;
-  interpreterRedux: EngineRunResult;
-} {
-  const interpreterRun = runBenchmarkScenario('interpreter', scenario);
-  const reducerRun = runBenchmarkScenario('interpreter-redux', scenario);
-
-  if (JSON.stringify(interpreterRun.snapshot) !== JSON.stringify(reducerRun.snapshot)) {
-    throw new Error(
-      `Scenario ${scenario.id} completed with mismatched final state between interpreter engines`
-    );
-  }
-
-  return {
-    interpreter: interpreterRun,
-    interpreterRedux: reducerRun,
-  };
-}
-
-export function profileScenarioPair(
+export function profileScenario(
   scenario: BenchmarkScenario,
   options: {
     warmupRuns?: number;
@@ -408,42 +383,19 @@ export function profileScenarioPair(
   const warmupRuns = options.warmupRuns ?? 1;
   const measuredRuns = options.measuredRuns ?? 5;
 
-  validateScenarioParity(scenario);
-
   for (let index = 0; index < warmupRuns; index += 1) {
     runBenchmarkScenario('interpreter', scenario);
-    runBenchmarkScenario('interpreter-redux', scenario);
   }
 
   const interpreterRuns: EngineRunResult[] = [];
-  const reducerRuns: EngineRunResult[] = [];
 
   for (let index = 0; index < measuredRuns; index += 1) {
     interpreterRuns.push(runBenchmarkScenario('interpreter', scenario));
-    reducerRuns.push(runBenchmarkScenario('interpreter-redux', scenario));
-  }
-
-  const interpreter = summarizeRuns(interpreterRuns);
-  const interpreterRedux = summarizeRuns(reducerRuns);
-
-  if (JSON.stringify(interpreter.finalSnapshot) !== JSON.stringify(interpreterRedux.finalSnapshot)) {
-    throw new Error(
-      `Scenario ${scenario.id} produced divergent final state during profiling runs`
-    );
   }
 
   return {
     scenario,
-    interpreter,
-    interpreterRedux,
-    elapsedRatio:
-      interpreter.elapsedMs.median > 0
-        ? interpreterRedux.elapsedMs.median / interpreter.elapsedMs.median
-        : 0,
-    throughputRatio:
-      interpreter.stepsPerSecond.median > 0
-        ? interpreterRedux.stepsPerSecond.median / interpreter.stepsPerSecond.median
-        : 0,
+    interpreter: summarizeRuns(interpreterRuns),
   };
 }
 
@@ -462,7 +414,7 @@ export function profileEngineBattery(
     warmupRuns,
     measuredRuns,
     scenarios: scenarios.map((scenario) =>
-      profileScenarioPair(scenario, {
+      profileScenario(scenario, {
         warmupRuns,
         measuredRuns,
       })
@@ -479,13 +431,8 @@ export function formatEngineBatteryRows(
 ): Array<Record<string, number | string>> {
   return report.scenarios.map((scenarioReport) => ({
     scenario: scenarioReport.scenario.id,
-    'interp median ms': roundMetric(scenarioReport.interpreter.elapsedMs.median),
-    'redux median ms': roundMetric(scenarioReport.interpreterRedux.elapsedMs.median),
-    'redux/interp ms': roundMetric(scenarioReport.elapsedRatio),
-    'interp steps/s': roundMetric(scenarioReport.interpreter.stepsPerSecond.median),
-    'redux steps/s': roundMetric(scenarioReport.interpreterRedux.stepsPerSecond.median),
-    'redux/interp steps/s': roundMetric(scenarioReport.throughputRatio),
-    'interp heap KB': roundMetric(scenarioReport.interpreter.heapDeltaBytes.median / 1024),
-    'redux heap KB': roundMetric(scenarioReport.interpreterRedux.heapDeltaBytes.median / 1024),
+    'classic median ms': roundMetric(scenarioReport.interpreter.elapsedMs.median),
+    'classic steps/s': roundMetric(scenarioReport.interpreter.stepsPerSecond.median),
+    'classic heap KB': roundMetric(scenarioReport.interpreter.heapDeltaBytes.median / 1024),
   }));
 }

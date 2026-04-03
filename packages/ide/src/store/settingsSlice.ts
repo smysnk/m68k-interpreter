@@ -9,27 +9,27 @@ import {
 } from '@/theme/editorThemeRegistry';
 
 export type RegisterEditRadix = 'hex' | 'dec' | 'bin';
+export type TerminalInputModePreference = 'auto' | 'text-input' | 'touch-only';
 export interface SettingsState {
   themes: EditorThemeId[];
   editorTheme: EditorThemeId;
-  engineMode: EngineMode;
   followSystemTheme: boolean;
   lineNumbers: boolean;
   registerEditRadix: RegisterEditRadix;
+  terminalInputMode: TerminalInputModePreference;
 }
-
-export type EngineMode = 'interpreter' | 'interpreter-redux';
 
 export const initialSettingsState: SettingsState = {
   themes: defaultEditorThemes,
   editorTheme: defaultEditorTheme,
-  engineMode: 'interpreter',
   followSystemTheme: true,
   lineNumbers: true,
   registerEditRadix: 'hex',
+  terminalInputMode: 'auto',
 };
 
 const registerEditRadices: RegisterEditRadix[] = ['hex', 'dec', 'bin'];
+const terminalInputModes: TerminalInputModePreference[] = ['auto', 'text-input', 'touch-only'];
 
 function getOppositeTheme(currentTheme: EditorThemeId): EditorThemeId {
   return currentTheme === EditorThemeEnum.M68K_DARK
@@ -47,9 +47,6 @@ const settingsSlice = createSlice({
       }
       state.editorTheme = action.payload;
       state.followSystemTheme = false;
-    },
-    setEngineMode(state, action: PayloadAction<EngineMode>) {
-      state.engineMode = action.payload;
     },
     toggleEditorTheme(state) {
       state.editorTheme = getOppositeTheme(state.editorTheme);
@@ -73,6 +70,12 @@ const settingsSlice = createSlice({
       }
       state.registerEditRadix = action.payload;
     },
+    setTerminalInputMode(state, action: PayloadAction<TerminalInputModePreference>) {
+      if (!terminalInputModes.includes(action.payload)) {
+        return;
+      }
+      state.terminalInputMode = action.payload;
+    },
     resetSettingsState() {
       return { ...initialSettingsState };
     },
@@ -81,12 +84,12 @@ const settingsSlice = createSlice({
 
 export const {
   setEditorTheme,
-  setEngineMode,
   toggleEditorTheme,
   syncSystemTheme,
   setFollowSystemTheme,
   setLineNumbers,
   setRegisterEditRadix,
+  setTerminalInputMode,
   resetSettingsState,
 } = settingsSlice.actions;
 

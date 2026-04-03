@@ -28,14 +28,14 @@ describe('uiShellSlice', () => {
   });
 
   it('tracks workspace, inspector, and context state in Redux', () => {
-    let state = uiShellReducer(undefined, setWorkspaceTab('code'));
+    let state = uiShellReducer(undefined, setWorkspaceTab('memory'));
     state = uiShellReducer(state, toggleInspectorView());
     state = uiShellReducer(state, toggleContextView('help'));
     state = uiShellReducer(state, toggleAppMenu());
     state = uiShellReducer(state, setActiveSubmenu('style'));
     state = uiShellReducer(state, setChromeOffsets({ top: 64, bottom: 40 }));
 
-    expect(state.workspaceTab).toBe('code');
+    expect(state.workspaceTab).toBe('memory');
     expect(state.inspectorView).toBe('memory');
     expect(state.contextOpen).toBe(true);
     expect(state.contextView).toBe('help');

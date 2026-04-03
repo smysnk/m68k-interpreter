@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeTerminalByte } from './terminalCharset';
+import { decodeTerminalByte, encodeTerminalByte } from './terminalCharset';
 
 describe('terminalCharset', () => {
   it('keeps ASCII bytes unchanged', () => {
@@ -17,5 +17,15 @@ describe('terminalCharset', () => {
     expect(decodeTerminalByte(0xd9)).toBe('┘');
     expect(decodeTerminalByte(0xdb)).toBe('█');
   });
-});
 
+  it('encodes CP437 box and block drawing glyphs back to their original bytes', () => {
+    expect(encodeTerminalByte('▓')).toBe(0xb2);
+    expect(encodeTerminalByte('│')).toBe(0xb3);
+    expect(encodeTerminalByte('─')).toBe(0xc4);
+    expect(encodeTerminalByte('┌')).toBe(0xda);
+    expect(encodeTerminalByte('┐')).toBe(0xbf);
+    expect(encodeTerminalByte('└')).toBe(0xc0);
+    expect(encodeTerminalByte('┘')).toBe(0xd9);
+    expect(encodeTerminalByte('█')).toBe(0xdb);
+  });
+});

@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+import type { ExecutionState } from '@m68k/interpreter';
 import {
   RetroLcd,
   createRetroLcdController,
+  type RetroLcdGeometry,
   type RetroLcdController,
 } from 'react-retro-display-tty-ansi';
 import { useTheme } from 'styled-components';
@@ -10,13 +12,51 @@ import {
   buildTerminalAnsiFullRedraw,
   buildTerminalAnsiRowPatch,
 } from '@/runtime/terminalAnsiPatch';
+import {
+  dispatchRuntimeTouchCell,
+  dispatchRuntimeTouchCellAsync,
+  resolveTerminalInputMode,
+  syncRuntimeGeometryBridge,
+} from '@/runtime/terminalProgramBridge';
+import { buildTerminalTouchCellEvent, shouldHandleTerminalPointer } from '@/runtime/terminalTouchAdapter';
+import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
+import type { TerminalTouchPhase } from '@/runtime/terminalTouchProtocol';
+import {
+  createTerminalGeometrySignature,
+  normalizeTerminalGeometry,
+} from '@/runtime/terminalGeometry';
+import {
+  recordInputAccepted,
+  recordTerminalRepaint,
+  recordInputProgressRequest,
+  recordTouchDispatch,
+  useIdeRenderTelemetry,
+} from '@/runtime/idePerformanceTelemetry';
 import { useTerminalSurface } from '@/runtime/useTerminalSurface';
-import { useEmulatorStore } from '@/stores/emulatorStore';
-import { requestResume, type AppDispatch, type RootState } from '@/store';
+import { useCompactShell } from '@/hooks/useCompactShell';
+import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
+import { selectActiveFileId } from '@/store/filesSlice';
+import {
+  requestResume,
+  requestPulseResume,
+  setTerminalState as setTerminalStateAction,
+  type AppDispatch,
+  type RootState,
+} from '@/store';
 
 type KeyboardLikeEvent = {
   key: string;
 };
+
+declare global {
+  interface Window {
+    __M68K_IDE_TEST_PENDING_INPUT__?: {
+      dispatched?: boolean;
+      hudMarkers: string[];
+      inputs: Array<string | number>;
+    };
+  }
+}
 
 function mapKeyboardEventToInput(event: KeyboardLikeEvent): string | number | null {
   switch (event.key) {
@@ -51,10 +91,6 @@ function shouldIgnoreGlobalKeyboardEvent(event: KeyboardEvent): boolean {
     return false;
   }
 
-  if (target.closest('[data-testid="terminal-screen"]')) {
-    return true;
-  }
-
   if (
     target.closest(
       [
@@ -69,7 +105,6 @@ function shouldIgnoreGlobalKeyboardEvent(event: KeyboardEvent): boolean {
         '.cm-scroller',
         '.navbar-menu',
         '.navbar-submenu',
-        '.status-engine-menu',
       ].join(', ')
     )
   ) {
@@ -97,10 +132,10 @@ function isPageEligibleForAssemblerInput(): boolean {
 }
 
 function queueAssemblerInput(
-  emulatorInstance: ReturnType<typeof useEmulatorStore>['emulatorInstance'],
-  executionState: ReturnType<typeof useEmulatorStore>['executionState'],
+  emulatorInstance: IdeRuntimeSession | null,
+  executionState: ExecutionState,
   event: KeyboardLikeEvent,
-  requestResumeExecution: () => void,
+  requestResumeExecution: (mode: 'resume' | 'pulse') => void,
   preventDefault?: () => void
 ): boolean {
   if (!emulatorInstance) {
@@ -113,28 +148,91 @@ function queueAssemblerInput(
   }
 
   preventDefault?.();
-  emulatorInstance.queueInput(input);
+  if ('stopPropagation' in event && typeof event.stopPropagation === 'function') {
+    event.stopPropagation();
+  }
+  const inputStartedAtMs =
+    typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : Date.now();
+  if (emulatorInstance.getRuntimeTransport?.() === 'worker' && emulatorInstance.controller) {
+    void emulatorInstance.controller
+      .requestQueueInput(input)
+      .then(() => {
+        recordInputAccepted();
+        recordInputProgressRequest({ startedAtMs: inputStartedAtMs });
+        if (shouldRequestVisualResume(emulatorInstance, executionState)) {
+          requestResumeExecution(
+            shouldRequestFullResume(emulatorInstance, executionState) ? 'resume' : 'pulse'
+          );
+        }
+      })
+      .catch(() => undefined);
+  } else {
+    emulatorInstance.queueInput(input);
+    recordInputAccepted();
+    recordInputProgressRequest({ startedAtMs: inputStartedAtMs });
 
-  if (executionState.started && !executionState.ended) {
-    requestResumeExecution();
+    if (shouldRequestVisualResume(emulatorInstance, executionState)) {
+      requestResumeExecution(
+        shouldRequestFullResume(emulatorInstance, executionState) ? 'resume' : 'pulse'
+      );
+    }
   }
 
   return true;
 }
 
+function shouldRequestVisualResume(
+  emulatorInstance: IdeRuntimeSession | null,
+  executionState: ExecutionState
+): boolean {
+  return Boolean(emulatorInstance) && !executionState.ended;
+}
+
+function shouldRequestFullResume(
+  emulatorInstance: IdeRuntimeSession | null,
+  executionState: ExecutionState
+): boolean {
+  if (!emulatorInstance || executionState.ended) {
+    return false;
+  }
+
+  return !executionState.started || executionState.stopped || emulatorInstance.isWaitingForInput?.() === true;
+}
+
 const Terminal: React.FC = () => {
+  useIdeRenderTelemetry('Terminal');
   const dispatch = useDispatch<AppDispatch>();
   const terminalRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<RetroLcdController | null>(null);
   const previousGeometryVersionRef = useRef<number | null>(null);
   const previousVersionRef = useRef<number | null>(null);
   const previousCursorPositionRef = useRef<string>('');
+  const geometryCommitTimeoutRef = useRef<number | null>(null);
+  const lastMeasuredGeometrySignatureRef = useRef('');
+  const hasCommittedMeasuredGeometryRef = useRef(false);
   const [focused, setFocused] = useState(false);
-  const { emulatorInstance, executionState } = useEmulatorStore();
+  const emulatorInstance = useSelector((state: RootState) => state.emulator.emulatorInstance);
+  const executionState = useSelector((state: RootState) => state.emulator.executionState);
   const { frameBuffer, meta, dirtyRows } = useTerminalSurface();
-  const focusTerminalIntent = useSelector((state: RootState) => state.emulator.runtimeIntents.focusTerminal);
+  const focusTerminalIntent = useSelector(
+    (state: RootState) => state.emulator.runtimeIntents.focusTerminal
+  );
+  const terminalState = useSelector((state: RootState) => state.emulator.terminal);
+  const activeFileId = useSelector((state: RootState) => selectActiveFileId(state));
+  const terminalInputModePreference = useSelector(
+    (state: RootState) => state.settings.terminalInputMode
+  );
   const theme = useTheme();
+  const isCompactShell = useCompactShell();
   const focusTerminalIntentRef = useRef(focusTerminalIntent);
+  const effectiveTerminalInputMode = resolveTerminalInputMode({
+    activeFileId,
+    isCompactShell,
+    preference: terminalInputModePreference,
+  });
+  const isTouchOnlyMode = effectiveTerminalInputMode === 'touch-only';
 
   if (controllerRef.current === null) {
     controllerRef.current = createRetroLcdController({
@@ -152,6 +250,7 @@ const Terminal: React.FC = () => {
     }
 
     const geometryChanged = previousGeometryVersionRef.current !== meta.geometryVersion;
+    const hasFullFramePatch = dirtyRows.length >= meta.rows && meta.rows > 0;
 
     if (geometryChanged) {
       controller.reset();
@@ -160,16 +259,50 @@ const Terminal: React.FC = () => {
     }
 
     const versionChanged = previousVersionRef.current !== meta.version;
+    const shouldForceFullRedraw =
+      versionChanged && (dirtyRows.length === 0 || hasFullFramePatch);
 
-    if (geometryChanged) {
+    if (geometryChanged || shouldForceFullRedraw) {
+      const repaintStartedAt =
+        typeof performance !== 'undefined' && typeof performance.now === 'function'
+          ? performance.now()
+          : Date.now();
+      if (!geometryChanged && hasFullFramePatch) {
+        controller.reset();
+        controller.resize(meta.rows, meta.columns);
+      }
       const redraw = buildTerminalAnsiFullRedraw(frameBuffer);
       if (redraw.length > 0) {
         controller.write(redraw);
+        const repaintFinishedAt =
+          typeof performance !== 'undefined' && typeof performance.now === 'function'
+            ? performance.now()
+            : Date.now();
+        recordTerminalRepaint({
+          kind: 'full-redraw',
+          durationMs: Math.max(0, repaintFinishedAt - repaintStartedAt),
+          ansiBytes: redraw.length,
+          rowsPatched: meta.rows,
+        });
       }
     } else if (versionChanged && dirtyRows.length > 0) {
+      const repaintStartedAt =
+        typeof performance !== 'undefined' && typeof performance.now === 'function'
+          ? performance.now()
+          : Date.now();
       const patch = buildTerminalAnsiRowPatch(frameBuffer, dirtyRows);
       if (patch.length > 0) {
         controller.write(patch);
+        const repaintFinishedAt =
+          typeof performance !== 'undefined' && typeof performance.now === 'function'
+            ? performance.now()
+            : Date.now();
+        recordTerminalRepaint({
+          kind: 'row-patch',
+          durationMs: Math.max(0, repaintFinishedAt - repaintStartedAt),
+          ansiBytes: patch.length,
+          rowsPatched: dirtyRows.length,
+        });
       }
     }
 
@@ -180,25 +313,48 @@ const Terminal: React.FC = () => {
     }
 
     previousVersionRef.current = meta.version;
-  }, [dirtyRows, frameBuffer, meta.columns, meta.cursorColumn, meta.cursorRow, meta.geometryVersion, meta.rows, meta.version]);
+  }, [
+    dirtyRows,
+    frameBuffer,
+    meta.columns,
+    meta.cursorColumn,
+    meta.cursorRow,
+    meta.geometryVersion,
+    meta.rows,
+    meta.version,
+  ]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (isTouchOnlyMode) {
+      return;
+    }
+
     queueAssemblerInput(
       emulatorInstance,
       executionState,
       event,
-      () => dispatch(requestResume()),
+      (resumeMode) => {
+        dispatch(resumeMode === 'resume' ? requestResume() : requestPulseResume());
+      },
       () => event.preventDefault()
     );
   };
 
-  const focusTerminal = (): void => {
+  const focusTerminal = React.useCallback((): void => {
+    if (isTouchOnlyMode) {
+      return;
+    }
+
     const viewport = terminalRef.current?.querySelector<HTMLDivElement>('.retro-lcd__viewport');
     viewport?.focus();
-  };
+  }, [isTouchOnlyMode]);
 
   useEffect(() => {
     const handleWindowKeyDown = (event: KeyboardEvent): void => {
+      if (isTouchOnlyMode) {
+        return;
+      }
+
       if (!isPageEligibleForAssemblerInput()) {
         return;
       }
@@ -208,8 +364,7 @@ const Terminal: React.FC = () => {
       }
 
       const overlayOpen =
-        document.getElementById('navbar-app-menu') !== null ||
-        document.getElementById('status-engine-menu') !== null;
+        document.getElementById('navbar-app-menu') !== null;
 
       if (overlayOpen) {
         return;
@@ -219,7 +374,9 @@ const Terminal: React.FC = () => {
         emulatorInstance,
         executionState,
         event,
-        () => dispatch(requestResume()),
+        (resumeMode) => {
+          dispatch(resumeMode === 'resume' ? requestResume() : requestPulseResume());
+        },
         () => event.preventDefault()
       );
     };
@@ -229,7 +386,62 @@ const Terminal: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleWindowKeyDown);
     };
-  }, [dispatch, emulatorInstance, executionState]);
+  }, [dispatch, emulatorInstance, executionState, isTouchOnlyMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const pendingInput = window.__M68K_IDE_TEST_PENDING_INPUT__;
+    if (!pendingInput || pendingInput.dispatched || !emulatorInstance || executionState.ended) {
+      return;
+    }
+
+    const terminalText =
+      emulatorInstance.getTerminalLines?.().join('\n') ??
+      emulatorInstance.getTerminalText?.() ??
+      meta.output ??
+      '';
+    if (!pendingInput.hudMarkers.every((marker) => terminalText.includes(marker))) {
+      return;
+    }
+
+    pendingInput.dispatched = true;
+    const inputStartedAtMs =
+      typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now()
+        : Date.now();
+
+    const queuePendingInputs = async (): Promise<void> => {
+      try {
+        if (emulatorInstance.getRuntimeTransport?.() === 'worker' && emulatorInstance.controller) {
+          for (const input of pendingInput.inputs) {
+            await emulatorInstance.controller.requestQueueInput(input);
+          }
+        } else {
+          for (const input of pendingInput.inputs) {
+            emulatorInstance.queueInput(input);
+          }
+        }
+
+        recordInputAccepted();
+        recordInputProgressRequest({ startedAtMs: inputStartedAtMs });
+
+        if (shouldRequestVisualResume(emulatorInstance, executionState)) {
+          dispatch(
+            shouldRequestFullResume(emulatorInstance, executionState)
+              ? requestResume()
+              : requestPulseResume()
+          );
+        }
+      } catch {
+        pendingInput.dispatched = false;
+      }
+    };
+
+    void queuePendingInputs();
+  }, [dispatch, emulatorInstance, executionState, meta.output, meta.version]);
 
   useEffect(() => {
     if (focusTerminalIntent === focusTerminalIntentRef.current) {
@@ -238,7 +450,222 @@ const Terminal: React.FC = () => {
 
     focusTerminalIntentRef.current = focusTerminalIntent;
     focusTerminal();
-  }, [focusTerminalIntent]);
+  }, [focusTerminal, focusTerminalIntent]);
+
+  useEffect(() => {
+    lastMeasuredGeometrySignatureRef.current = createTerminalGeometrySignature(
+      terminalState.columns,
+      terminalState.rows
+    );
+  }, [terminalState.columns, terminalState.rows]);
+
+  useEffect(() => {
+    return () => {
+      if (geometryCommitTimeoutRef.current !== null) {
+        window.clearTimeout(geometryCommitTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const applyMeasuredGeometry = React.useCallback(
+    async (columns: number, rows: number): Promise<void> => {
+      if (terminalState.columns === columns && terminalState.rows === rows) {
+        if (!emulatorInstance) {
+          terminalSurfaceStore.reset(columns, rows);
+          dispatch(
+            setTerminalStateAction({
+              columns,
+              rows,
+              cursorRow: 0,
+              cursorColumn: 0,
+              version: terminalState.version + 1,
+              geometryVersion: terminalState.geometryVersion + 1,
+            })
+          );
+        }
+        return;
+      }
+
+      if (
+        emulatorInstance?.getRuntimeTransport?.() === 'worker' &&
+        emulatorInstance.controller !== undefined
+      ) {
+        await emulatorInstance.controller.requestResizeTerminal(columns, rows);
+        terminalSurfaceStore.replaceFromRuntime(emulatorInstance);
+        dispatch(setTerminalStateAction(emulatorInstance.getTerminalMeta()));
+        return;
+      }
+
+      if (typeof emulatorInstance?.resizeTerminal === 'function') {
+        emulatorInstance.resizeTerminal(columns, rows);
+        syncRuntimeGeometryBridge(emulatorInstance, columns, rows);
+        terminalSurfaceStore.replaceFromRuntime(emulatorInstance);
+        dispatch(setTerminalStateAction(emulatorInstance.getTerminalMeta()));
+        return;
+      }
+
+      terminalSurfaceStore.reset(columns, rows);
+      dispatch(
+        setTerminalStateAction({
+          columns,
+          rows,
+          cursorRow: 0,
+          cursorColumn: 0,
+          version: terminalState.version + 1,
+          geometryVersion: terminalState.geometryVersion + 1,
+        })
+      );
+    },
+    [
+      dispatch,
+      emulatorInstance,
+      terminalState.columns,
+      terminalState.geometryVersion,
+      terminalState.rows,
+      terminalState.version,
+    ]
+  );
+
+  const handleGeometryChange = React.useCallback(
+    (geometry: RetroLcdGeometry): void => {
+      const normalizedGeometry = normalizeTerminalGeometry(geometry);
+
+      if (!normalizedGeometry) {
+        return;
+      }
+
+      const nextSignature = createTerminalGeometrySignature(
+        normalizedGeometry.columns,
+        normalizedGeometry.rows
+      );
+
+      if (
+        lastMeasuredGeometrySignatureRef.current === nextSignature &&
+        hasCommittedMeasuredGeometryRef.current
+      ) {
+        return;
+      }
+
+      if (geometryCommitTimeoutRef.current !== null) {
+        window.clearTimeout(geometryCommitTimeoutRef.current);
+      }
+
+      geometryCommitTimeoutRef.current = window.setTimeout(
+        () => {
+          geometryCommitTimeoutRef.current = null;
+          hasCommittedMeasuredGeometryRef.current = true;
+          lastMeasuredGeometrySignatureRef.current = nextSignature;
+          void applyMeasuredGeometry(normalizedGeometry.columns, normalizedGeometry.rows);
+        },
+        isCompactShell ? 40 : 80
+      );
+    },
+    [applyMeasuredGeometry, isCompactShell]
+  );
+
+  const handleTouchPointer = React.useCallback(
+    async (
+      event: React.PointerEvent<HTMLDivElement>,
+      phase: TerminalTouchPhase
+    ): Promise<void> => {
+      if (!emulatorInstance) {
+        return;
+      }
+
+      if (
+        !shouldHandleTerminalPointer({
+          isTouchOnlyMode,
+          phase,
+          pointerType: event.pointerType,
+          buttons: event.buttons,
+        })
+      ) {
+        return;
+      }
+
+      const touchEvent = buildTerminalTouchCellEvent({
+        root: terminalRef.current,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        columns: meta.columns,
+        rows: meta.rows,
+        phase,
+        pointerType: event.pointerType,
+        buttons: event.buttons,
+      });
+
+      if (!touchEvent) {
+        return;
+      }
+
+      if (phase === 'down') {
+        try {
+          event.currentTarget.setPointerCapture(event.pointerId);
+        } catch {
+          // Ignore capture failures from unsupported pointer types in tests/browsers.
+        }
+      }
+
+      if (phase === 'up') {
+        try {
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+        } catch {
+          // Ignore capture release failures.
+        }
+      }
+
+      event.preventDefault();
+      const touchDispatchStartedAt =
+        typeof performance !== 'undefined' && typeof performance.now === 'function'
+          ? performance.now()
+          : Date.now();
+
+      const dispatched =
+        emulatorInstance.getRuntimeTransport?.() === 'worker'
+          ? await dispatchRuntimeTouchCellAsync(emulatorInstance, {
+              ...touchEvent,
+            })
+          : dispatchRuntimeTouchCell(emulatorInstance, {
+              ...touchEvent,
+            });
+
+      if (dispatched) {
+        const touchDispatchFinishedAt =
+          typeof performance !== 'undefined' && typeof performance.now === 'function'
+            ? performance.now()
+            : Date.now();
+        recordInputAccepted();
+        recordTouchDispatch({
+          startedAtMs: touchDispatchStartedAt,
+          durationMs: Math.max(0, touchDispatchFinishedAt - touchDispatchStartedAt),
+        });
+        const isWorkerRuntime = emulatorInstance.getRuntimeTransport?.() === 'worker';
+        if (!isWorkerRuntime) {
+          syncRuntimeGeometryBridge(emulatorInstance, meta.columns, meta.rows);
+          terminalSurfaceStore.replaceFromRuntime(emulatorInstance);
+          dispatch(setTerminalStateAction(emulatorInstance.getTerminalMeta()));
+        }
+
+        if (shouldRequestVisualResume(emulatorInstance, executionState)) {
+          dispatch(
+            shouldRequestFullResume(emulatorInstance, executionState)
+              ? requestResume()
+              : requestPulseResume()
+          );
+        }
+      }
+    },
+    [
+      dispatch,
+      emulatorInstance,
+      executionState,
+      isTouchOnlyMode,
+      meta.columns,
+      meta.rows,
+    ]
+  );
 
   return (
     <section className="terminal-container" data-terminal-theme={theme.surfaceMode}>
@@ -246,8 +673,21 @@ const Terminal: React.FC = () => {
         ref={terminalRef}
         className="terminal-screen"
         data-terminal-focused={focused ? 'true' : 'false'}
+        data-terminal-input-mode={effectiveTerminalInputMode}
         data-testid="terminal-screen"
         onClick={focusTerminal}
+        onPointerCancel={(event) => {
+          void handleTouchPointer(event, 'up');
+        }}
+        onPointerDown={(event) => {
+          void handleTouchPointer(event, 'down');
+        }}
+        onPointerMove={(event) => {
+          void handleTouchPointer(event, 'move');
+        }}
+        onPointerUp={(event) => {
+          void handleTouchPointer(event, 'up');
+        }}
         onFocusCapture={() => {
           setFocused(true);
         }}
@@ -262,17 +702,29 @@ const Terminal: React.FC = () => {
         role="application"
         aria-label="M68K terminal"
       >
+        {isTouchOnlyMode ? (
+          <div
+            className="terminal-touch-overlay"
+            data-testid="terminal-touch-overlay"
+            aria-hidden="true"
+          />
+        ) : null}
         <RetroLcd
+          captureKeyboard={!isTouchOnlyMode}
+          captureMouse={false}
           className="terminal-retro-lcd"
           controller={controllerRef.current}
           cursorMode="hollow"
           displayColorMode="ansi-extended"
-          displayPadding={{ top: 18, right: 20, bottom: 18, left: 20 }}
+          displayPadding={
+            isCompactShell
+              ? { top: 3, right: 5, bottom: 3, left: 5 }
+              : { top: 4, right: 6, bottom: 4, left: 6 }
+          }
           displaySurfaceMode={theme.surfaceMode}
-          gridMode="static"
+          gridMode="auto"
           mode="terminal"
-          rows={meta.rows}
-          cols={meta.columns}
+          onGeometryChange={handleGeometryChange}
         />
       </div>
     </section>

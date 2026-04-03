@@ -8,7 +8,6 @@ export interface StatusBarModel {
     label: string;
     tone: RuntimeTone;
   };
-  engineLabel: string;
 }
 
 export const selectWorkspaceTab = (state: RootState) => state.uiShell.workspaceTab;
@@ -19,10 +18,9 @@ export const selectActiveInspectorPane = createSelector(
 
 export const selectStatusBarModel = createSelector(
   [
-    (state: RootState) => state.settings.engineMode,
     (state: RootState) => state.emulator.executionState,
   ],
-  (engineMode, executionState): StatusBarModel => {
+  (executionState): StatusBarModel => {
     const runtime =
       executionState.exception !== null
         ? { label: 'Exception', tone: 'danger' as const }
@@ -36,7 +34,6 @@ export const selectStatusBarModel = createSelector(
 
     return {
       runtime,
-      engineLabel: engineMode === 'interpreter-redux' ? 'Interpreter Redux' : 'Interpreter',
     };
   }
 );

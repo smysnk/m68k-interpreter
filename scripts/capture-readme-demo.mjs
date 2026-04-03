@@ -66,7 +66,6 @@ await page.addInitScript(([key]) => {
         editorTheme: 'M68K_DARK',
         followSystemTheme: false,
         lineNumbers: true,
-        engineMode: 'interpreter',
         registerEditRadix: 'hex',
       },
     })

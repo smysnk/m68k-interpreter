@@ -57,6 +57,8 @@ describe('appShellSelectors', () => {
       activeWorkspaceTab: 'code',
       terminalActive: false,
       codeActive: true,
+      registersActive: false,
+      memoryActive: false,
     });
   });
 

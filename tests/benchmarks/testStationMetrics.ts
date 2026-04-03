@@ -78,56 +78,37 @@ const ENGINE_METRICS = [
   {
     statName: 'elapsed_ms',
     unit: 'ms',
-    selectMedian: (report: ScenarioProfileReport, engineId: 'interpreter' | 'interpreter-redux') =>
-      engineId === 'interpreter'
-        ? report.interpreter.elapsedMs.median
-        : report.interpreterRedux.elapsedMs.median,
+    selectMedian: (report: ScenarioProfileReport) => report.interpreter.elapsedMs.median,
   },
   {
     statName: 'steps_per_second',
     unit: 'ops_per_sec',
-    selectMedian: (report: ScenarioProfileReport, engineId: 'interpreter' | 'interpreter-redux') =>
-      engineId === 'interpreter'
-        ? report.interpreter.stepsPerSecond.median
-        : report.interpreterRedux.stepsPerSecond.median,
+    selectMedian: (report: ScenarioProfileReport) => report.interpreter.stepsPerSecond.median,
   },
   {
     statName: 'heap_delta_bytes',
     unit: 'bytes',
-    selectMedian: (report: ScenarioProfileReport, engineId: 'interpreter' | 'interpreter-redux') =>
-      engineId === 'interpreter'
-        ? report.interpreter.heapDeltaBytes.median
-        : report.interpreterRedux.heapDeltaBytes.median,
+    selectMedian: (report: ScenarioProfileReport) => report.interpreter.heapDeltaBytes.median,
   },
   {
     statName: 'rss_delta_bytes',
     unit: 'bytes',
-    selectMedian: (report: ScenarioProfileReport, engineId: 'interpreter' | 'interpreter-redux') =>
-      engineId === 'interpreter'
-        ? report.interpreter.rssDeltaBytes.median
-        : report.interpreterRedux.rssDeltaBytes.median,
+    selectMedian: (report: ScenarioProfileReport) => report.interpreter.rssDeltaBytes.median,
   },
   {
     statName: 'user_cpu_micros',
     unit: 'micros',
-    selectMedian: (report: ScenarioProfileReport, engineId: 'interpreter' | 'interpreter-redux') =>
-      engineId === 'interpreter'
-        ? report.interpreter.userCpuMicros.median
-        : report.interpreterRedux.userCpuMicros.median,
+    selectMedian: (report: ScenarioProfileReport) => report.interpreter.userCpuMicros.median,
   },
   {
     statName: 'system_cpu_micros',
     unit: 'micros',
-    selectMedian: (report: ScenarioProfileReport, engineId: 'interpreter' | 'interpreter-redux') =>
-      engineId === 'interpreter'
-        ? report.interpreter.systemCpuMicros.median
-        : report.interpreterRedux.systemCpuMicros.median,
+    selectMedian: (report: ScenarioProfileReport) => report.interpreter.systemCpuMicros.median,
   },
   {
     statName: 'steps',
     unit: 'count',
-    selectMedian: (report: ScenarioProfileReport, engineId: 'interpreter' | 'interpreter-redux') =>
-      engineId === 'interpreter' ? report.interpreter.steps : report.interpreterRedux.steps,
+    selectMedian: (report: ScenarioProfileReport) => report.interpreter.steps,
   },
 ] as const;
 
@@ -146,10 +127,10 @@ function slugToNamespaceSegment(value: string): string {
 
 function getScenarioStatGroup(scenarioId: string): string {
   if (scenarioId === 'nibbles-intro-screen') {
-    return 'benchmark.node.engine.nibbles.intro';
+    return 'benchmark.node.classic_interpreter.nibbles.intro';
   }
 
-  return `benchmark.node.engine.shared.${slugToNamespaceSegment(scenarioId)}`;
+  return `benchmark.node.classic_interpreter.shared.${slugToNamespaceSegment(scenarioId)}`;
 }
 
 function roundMetric(value: number): number {
@@ -158,13 +139,12 @@ function roundMetric(value: number): number {
 
 function buildNodeMetadata(
   scenarioReport: ScenarioProfileReport,
-  engineId: 'interpreter' | 'interpreter-redux',
   runnerKey: string,
   report: EngineBatteryProfileReport
 ): Record<string, boolean | number | string | null> {
   return {
-    seriesId: engineId,
-    engineId,
+    seriesId: 'classic-interpreter',
+    runtimeId: 'classic-interpreter',
     scenarioId: scenarioReport.scenario.id,
     scenarioTitle: scenarioReport.scenario.title,
     statistic: 'median',
@@ -173,34 +153,7 @@ function buildNodeMetadata(
     harnessVersion: '1',
     warmupRuns: report.warmupRuns,
     measuredRuns: report.measuredRuns,
-    sampleCount:
-      engineId === 'interpreter'
-        ? scenarioReport.interpreter.sampleCount
-        : scenarioReport.interpreterRedux.sampleCount,
-    parityVerified: true,
-    nodeVersion: process.version,
-    platform: process.platform,
-    arch: process.arch,
-  };
-}
-
-function buildComparisonMetadata(
-  scenarioReport: ScenarioProfileReport,
-  runnerKey: string,
-  report: EngineBatteryProfileReport
-): Record<string, boolean | number | string | null> {
-  return {
-    seriesId: 'interpreter-redux-vs-interpreter',
-    scenarioId: scenarioReport.scenario.id,
-    scenarioTitle: scenarioReport.scenario.title,
-    statistic: 'median',
-    runnerKey,
-    runtime: 'node',
-    harnessVersion: '1',
-    warmupRuns: report.warmupRuns,
-    measuredRuns: report.measuredRuns,
-    parityVerified: true,
-    comparison: 'interpreter-redux/interpreter',
+    sampleCount: scenarioReport.interpreter.sampleCount,
     nodeVersion: process.version,
     platform: process.platform,
     arch: process.arch,
@@ -213,47 +166,21 @@ function buildEnginePerformanceStats(
   runnerKey: string
 ): StructuredPerformanceStat[] {
   const statGroup = getScenarioStatGroup(scenarioReport.scenario.id);
-  const stats: StructuredPerformanceStat[] = [];
 
-  for (const engineId of ['interpreter', 'interpreter-redux'] as const) {
-    for (const metric of ENGINE_METRICS) {
-      stats.push({
-        statGroup,
-        statName: metric.statName,
-        unit: metric.unit,
-        numericValue: roundMetric(metric.selectMedian(scenarioReport, engineId)),
-        metadata: buildNodeMetadata(scenarioReport, engineId, runnerKey, report),
-      });
-    }
-  }
-
-  stats.push({
+  return ENGINE_METRICS.map((metric) => ({
     statGroup,
-    statName: 'elapsed_ratio_vs_interpreter',
-    unit: 'ratio',
-    numericValue: roundMetric(scenarioReport.elapsedRatio),
-    metadata: buildComparisonMetadata(scenarioReport, runnerKey, report),
-  });
-  stats.push({
-    statGroup,
-    statName: 'throughput_ratio_vs_interpreter',
-    unit: 'ratio',
-    numericValue: roundMetric(scenarioReport.throughputRatio),
-    metadata: buildComparisonMetadata(scenarioReport, runnerKey, report),
-  });
-
-  return stats;
+    statName: metric.statName,
+    unit: metric.unit,
+    numericValue: roundMetric(metric.selectMedian(scenarioReport)),
+    metadata: buildNodeMetadata(scenarioReport, runnerKey, report),
+  }));
 }
 
 function formatEngineScenarioSummary(report: ScenarioProfileReport): string {
   return [
     `${report.scenario.id}`,
-    `  interpreter median ms: ${report.interpreter.elapsedMs.median.toFixed(2)}`,
-    `  interpreter-redux median ms: ${report.interpreterRedux.elapsedMs.median.toFixed(2)}`,
-    `  ratio (redux/interpreter): ${report.elapsedRatio.toFixed(2)}`,
-    `  interpreter steps/s: ${report.interpreter.stepsPerSecond.median.toFixed(2)}`,
-    `  interpreter-redux steps/s: ${report.interpreterRedux.stepsPerSecond.median.toFixed(2)}`,
-    `  throughput ratio: ${report.throughputRatio.toFixed(2)}`,
+    `  classic interpreter median ms: ${report.interpreter.elapsedMs.median.toFixed(2)}`,
+    `  classic interpreter steps/s: ${report.interpreter.stepsPerSecond.median.toFixed(2)}`,
   ].join('\n');
 }
 
@@ -291,18 +218,6 @@ function createSerializableEngineReport(report: EngineBatteryProfileReport): Rec
         steps: scenarioReport.interpreter.steps,
         sampleCount: scenarioReport.interpreter.sampleCount,
       },
-      interpreterRedux: {
-        elapsedMs: scenarioReport.interpreterRedux.elapsedMs,
-        stepsPerSecond: scenarioReport.interpreterRedux.stepsPerSecond,
-        heapDeltaBytes: scenarioReport.interpreterRedux.heapDeltaBytes,
-        rssDeltaBytes: scenarioReport.interpreterRedux.rssDeltaBytes,
-        userCpuMicros: scenarioReport.interpreterRedux.userCpuMicros,
-        systemCpuMicros: scenarioReport.interpreterRedux.systemCpuMicros,
-        steps: scenarioReport.interpreterRedux.steps,
-        sampleCount: scenarioReport.interpreterRedux.sampleCount,
-      },
-      elapsedRatio: scenarioReport.elapsedRatio,
-      throughputRatio: scenarioReport.throughputRatio,
     })),
   };
 }
@@ -312,11 +227,8 @@ export function createEngineBenchmarkSuitePayload(options: EngineSuiteOptions): 
     name: scenarioReport.scenario.title,
     fullName: `${options.suiteLabel} ${scenarioReport.scenario.title}`,
     status: 'passed',
-    durationMs: roundMetric(
-      scenarioReport.interpreter.elapsedMs.median + scenarioReport.interpreterRedux.elapsedMs.median
-    ),
+    durationMs: roundMetric(scenarioReport.interpreter.elapsedMs.median),
     assertions: [
-      'final-state parity preserved across interpreter engines',
       `emitted stable benchmark namespace ${getScenarioStatGroup(scenarioReport.scenario.id)}`,
       `measured ${options.report.measuredRuns} sample(s) with ${options.report.warmupRuns} warmup run(s)`,
     ],
@@ -346,13 +258,13 @@ export function createEngineBenchmarkSuitePayload(options: EngineSuiteOptions): 
     rawArtifacts: [
       {
         relativePath: `benchmarks/${options.artifactBaseName}.json`,
-        label: 'Engine benchmark report',
+        label: 'Classic interpreter benchmark report',
         content: `${JSON.stringify(createSerializableEngineReport(options.report), null, 2)}\n`,
         mediaType: 'application/json',
       },
       {
         relativePath: `benchmarks/${options.artifactBaseName}-summary.txt`,
-        label: 'Engine benchmark summary',
+        label: 'Classic interpreter benchmark summary',
         content: `${formatEngineBatterySummary(options.report)}\n`,
         mediaType: 'text/plain',
       },

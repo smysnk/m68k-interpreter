@@ -21,6 +21,7 @@ describe('ideBootConfig', () => {
 
     expect(resolvePreloadedFileId(files, NIBBLES_FILE_ID)).toBe(NIBBLES_FILE_ID);
     expect(resolvePreloadedFileId(files, 'nibbles.asm')).toBe(NIBBLES_FILE_ID);
+    expect(resolvePreloadedFileId(files, 'fixtures/nibbles.asm')).toBe(NIBBLES_FILE_ID);
     expect(resolvePreloadedFileId(files, 'examples/nibbles.asm')).toBe(NIBBLES_FILE_ID);
     expect(resolvePreloadedFileId(files, SCRATCH_FILE_ID)).toBe(SCRATCH_FILE_ID);
   });
@@ -38,4 +39,3 @@ describe('ideBootConfig', () => {
     expect(resolvePreloadedFileId(files, getIdeBootConfig().preloadFile)).toBe(SCRATCH_FILE_ID);
   });
 });
-

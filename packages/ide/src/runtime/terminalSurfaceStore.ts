@@ -1,9 +1,9 @@
 import {
   clearTerminalFrameBufferDirtyRows,
+  encodeTerminalByte,
   TERMINAL_BUFFER_COLOR_DEFAULT,
   TERMINAL_BUFFER_FLAG_BOLD,
   TERMINAL_BUFFER_FLAG_INVERSE,
-  TERMINAL_BUFFER_SPACE_BYTE,
   createTerminalFrameBuffer,
   readTerminalFrameBufferLine,
   readTerminalFrameBufferText,
@@ -52,14 +52,6 @@ function terminalMetaEquals(left: TerminalMeta, right: TerminalMeta): boolean {
   );
 }
 
-function toTerminalByte(value: string | undefined): number {
-  if (!value || value.length === 0) {
-    return TERMINAL_BUFFER_SPACE_BYTE;
-  }
-
-  return value.charCodeAt(0) & 0xff;
-}
-
 function copySnapshotIntoFrameBuffer(
   frameBuffer: TerminalFrameBuffer,
   snapshot: TerminalSnapshot
@@ -78,7 +70,7 @@ function copySnapshotIntoFrameBuffer(
       const offset = row * snapshot.columns + column;
       const cell = cells[column];
 
-      frameBuffer.charBytes[offset] = toTerminalByte(cell?.char ?? line[column]);
+      frameBuffer.charBytes[offset] = encodeTerminalByte(cell?.char ?? line[column]);
       frameBuffer.foregroundBytes[offset] =
         cell?.foreground === null || cell?.foreground === undefined
           ? TERMINAL_BUFFER_COLOR_DEFAULT

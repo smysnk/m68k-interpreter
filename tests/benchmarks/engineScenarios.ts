@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { ProgramSource } from '@m68k/interpreter';
 
-export type BenchmarkEngineId = 'interpreter' | 'interpreter-redux';
+export type BenchmarkEngineId = 'interpreter';
 
 export type BenchmarkScenarioMode = 'load-only' | 'load-and-run';
 export type BenchmarkStopCondition = 'halt-or-stop' | 'waiting-for-input';
@@ -24,18 +24,21 @@ export interface BenchmarkScenario {
   expectation?: BenchmarkScenarioExpectation;
 }
 
-const nibblesPath = fileURLToPath(new URL('../../examples/nibbles.asm', import.meta.url));
+const nibblesPath = fileURLToPath(
+  new URL('../../packages/ide/src/fixtures/nibbles.asm', import.meta.url)
+);
 const nibblesProgram = new Uint8Array(readFileSync(nibblesPath));
 
 export const NIBBLES_INTRO_BENCHMARK_SCENARIO: BenchmarkScenario = {
   id: 'nibbles-intro-screen',
   title: 'Nibbles Intro Screen',
-  description: 'Measures how long each engine takes to boot nibbles.asm and render the intro/menu screen.',
+  description:
+    'Measures how long the classic interpreter takes to boot nibbles.asm and render the intro/menu screen.',
   program: nibblesProgram,
   mode: 'load-and-run',
   maxSteps: 200000,
   stopCondition: 'waiting-for-input',
-  terminalMarkers: ['Difficulty', 'Programmed By Joshua Bellamy'],
+  terminalMarkers: ['Difficulty', 'Joshua Bellamy', 'smysnk.com'],
 };
 
 function buildColdLoadProgram(entryCount = 96): string {
