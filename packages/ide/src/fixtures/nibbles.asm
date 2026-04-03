@@ -42,7 +42,7 @@ TOUCH_PHASE_UP EQU 3
 
 WALL_LIFE EQU   $FFFE     ; Wall Special Time
 FOOD_LIFE EQU   $FFFF     ; Food Special Time
-FOOD_GROWTH EQU 15      ; How long snake will grow after eating food
+FOOD_GROWTH EQU 1       ; Grow by one segment for each food item
 
 SNK_START_LIFE  EQU   5      ; Life of single segment of the snake
 ; Browser-tuned movement gates. The original board-oriented delays were
@@ -52,10 +52,10 @@ SNK_SPEED_MEDIUM EQU  $00002C00
 SNK_SPEED_HARD EQU    $00002000
 SNK_SPEED_INSANE EQU  $00001000
 
-SNK_SCR_SIZE EQU 1716   ; x*y = 78*22
+SNK_SCR_SIZE EQU 1920   ; default 80x24 gameplay surface
 
-ARENA_X EQU     78
-ARENA_ROWS EQU  22
+ARENA_X EQU     80
+ARENA_ROWS EQU  24
 MAX_ARENA_X EQU 100
 MAX_ARENA_ROWS EQU 60
 MAX_SNK_SCR_SIZE EQU 6000
@@ -63,6 +63,13 @@ ARENA_Y EQU     23
 
 START_X EQU     38
 START_Y EQU     10
+
+WALL_CHAR_VERTICAL EQU $B3
+WALL_CHAR_HORIZONTAL EQU $C4
+WALL_CHAR_TOP_LEFT EQU $DA
+WALL_CHAR_TOP_RIGHT EQU $BF
+WALL_CHAR_BOTTOM_LEFT EQU $C0
+WALL_CHAR_BOTTOM_RIGHT EQU $D9
 
         ORG     $4000              
         
@@ -98,26 +105,8 @@ loadlevel
         BSR _SET_START_POSITION
         BSR _DRAW_ARENA_SCREEN
         BSR     _CLEARMEM    ; Clear Arena Memory
-
-        CMP.B  #LAYOUT_DESKTOP,LAYOUT_PROFILE
-        BNE    load_mobile_arena
-        CLR.L  D1
-        MOVE.B LEVEL, D1        ;
-        CMP.B  #22,D1           ; Check if player finished the game
-        BEQ    gamecompletescr  ;      
-
-        MULU   #SNK_SCR_SIZE,D1 ;offset=level*SNK_SCR_SIZE
-        ADD.L  #STR_LEVEL1,D1   ;level=STR_LEVEL1+offset
-        MOVEA.L D1,A2
-        BSR     _LOADMEM     ; Load Level 1
-        BRA     loadlevel_render
-load_mobile_arena
         BSR     _BUILD_MOBILE_BORDER_LEVEL
         BSR     _DRAW_MOBILE_BORDER_ARENA
-        BRA     loadlevel_hud
-loadlevel_render
-        BSR     _REDRAW_VIEWPORT
-loadlevel_hud
         BSR     _DRAW_HUD
         BSR     _DRAWSNK
 
@@ -478,6 +467,8 @@ checkseg
         MOVE.W  $00(A0,D5.W),D4  ; move current life of segment x,y into D4
         CMP.W   #FOOD_LIFE,D4  ; check if food exists here
         BEQ     incseg  ; it does, don't decay it
+        CMP.W   #WALL_LIFE,D4
+        BEQ     incseg
 
         CMP.W   #0,D4    ; if snake segment exists here
         BNE     decayseg    ; decay segment here
@@ -565,17 +556,11 @@ clearnextmem
 
 ***************************************************************
 ; Function _DRAW_ARENA_SCREEN
-; Purpose  Draw the desktop arena shell or clear the mobile view
+; Purpose  Clear the gameplay surface before repainting the arena
 ***************************************************************
 
 _DRAW_ARENA_SCREEN
-        CMP.B  #LAYOUT_DESKTOP,LAYOUT_PROFILE
-        BEQ    draw_arena_desktop
         MOVEA.L #STR_CLS,A1
-        BSR _DISPSTR
-        RTS
-draw_arena_desktop
-        MOVEA.L #STR_ARENA_SCR,A1
         BSR _DISPSTR
         RTS
 
@@ -585,53 +570,22 @@ draw_arena_desktop
 ***************************************************************
 
 _CONFIGURE_GAMEPLAY_VIEW
-        MOVE.B #ARENA_X,VIEWPORT_COLS
-        MOVE.B #ARENA_ROWS,VIEWPORT_ROWS
-        MOVE.B #ARENA_X,BOARD_COLS
-        MOVE.B #ARENA_ROWS,BOARD_ROWS
-        MOVE.W #SNK_SCR_SIZE,BOARD_SIZE
+        MOVE.B TERM_COLS,D0
+        CMP.B  #MAX_ARENA_X,D0
+        BLE    config_view_cols_ready
+        MOVE.B #MAX_ARENA_X,D0
+config_view_cols_ready
+        MOVE.B D0,VIEWPORT_COLS
+        MOVE.B D0,BOARD_COLS
+        MOVE.B TERM_ROWS,D0
+        SUBI.B #1,D0
+        CMP.B  #MAX_ARENA_ROWS,D0
+        BLE    config_view_rows_ready
+        MOVE.B #MAX_ARENA_ROWS,D0
+config_view_rows_ready
+        MOVE.B D0,VIEWPORT_ROWS
+        MOVE.B D0,BOARD_ROWS
         MOVE.B #1,VIEWPORT_SCREEN_Y
-        CMP.B  #LAYOUT_MOBILE_LANDSCAPE,LAYOUT_PROFILE
-        BEQ    config_view_landscape
-        CMP.B  #LAYOUT_MOBILE_PORTRAIT,LAYOUT_PROFILE
-        BEQ    config_view_portrait
-        RTS
-config_view_landscape
-        MOVE.B TERM_COLS,D0
-        CMP.B  #MAX_ARENA_X,D0
-        BLE    config_view_landscape_cols_ready
-        MOVE.B #MAX_ARENA_X,D0
-config_view_landscape_cols_ready
-        MOVE.B D0,VIEWPORT_COLS
-        MOVE.B D0,BOARD_COLS
-        MOVE.B TERM_ROWS,D0
-        SUBI.B #1,D0
-        CMP.B  #MAX_ARENA_ROWS,D0
-        BLE    config_view_landscape_rows_ready
-        MOVE.B #MAX_ARENA_ROWS,D0
-config_view_landscape_rows_ready
-        MOVE.B D0,VIEWPORT_ROWS
-        MOVE.B D0,BOARD_ROWS
-        MOVE.B #2,VIEWPORT_SCREEN_Y
-        BSR    _UPDATE_BOARD_SIZE
-        RTS
-config_view_portrait
-        MOVE.B TERM_COLS,D0
-        CMP.B  #MAX_ARENA_X,D0
-        BLE    config_view_portrait_cols_ready
-        MOVE.B #MAX_ARENA_X,D0
-config_view_portrait_cols_ready
-        MOVE.B D0,VIEWPORT_COLS
-        MOVE.B D0,BOARD_COLS
-        MOVE.B TERM_ROWS,D0
-        SUBI.B #1,D0
-        CMP.B  #MAX_ARENA_ROWS,D0
-        BLE    config_view_portrait_rows_ready
-        MOVE.B #MAX_ARENA_ROWS,D0
-config_view_portrait_rows_ready
-        MOVE.B D0,VIEWPORT_ROWS
-        MOVE.B D0,BOARD_ROWS
-        MOVE.B #2,VIEWPORT_SCREEN_Y
         BSR    _UPDATE_BOARD_SIZE
         RTS
 
@@ -664,18 +618,12 @@ _LOCK_VIEWPORT_ORIGIN
 ***************************************************************
 
 _SET_START_POSITION
-        CMP.B  #LAYOUT_DESKTOP,LAYOUT_PROFILE
-        BEQ    set_start_desktop
         MOVE.B BOARD_COLS,D0
         LSR.B  #1,D0
         MOVE.B D0,POS_X
         MOVE.B BOARD_ROWS,D0
         LSR.B  #1,D0
         MOVE.B D0,POS_Y
-        RTS
-set_start_desktop
-        MOVE.B #START_X,POS_X
-        MOVE.B #START_Y,POS_Y
         RTS
 
 ***************************************************************
@@ -725,15 +673,56 @@ world_to_screen_done
 ***************************************************************
 
 _DRAW_WALL_WORLD
-        MOVEM.L D1-D2/A1,-(SP)
+        MOVEM.L D1-D4/A1,-(SP)
+        MOVE.B D1,D3
+        MOVE.B D2,D4
         BSR _WORLD_TO_SCREEN
         CMP.B  #0,D0
         BEQ    draw_wall_world_done
         BSR _GOTOXY
-        MOVE.L #STR_WALL,A1
+        MOVE.L #STR_COL_WALL,A1
         BSR _DISPSTR
+        MOVE.B #WALL_CHAR_VERTICAL,D0
+        CMP.B  #0,D4
+        BEQ    draw_wall_world_top
+        MOVE.B BOARD_ROWS,D2
+        SUBI.B #1,D2
+        CMP.B  D2,D4
+        BEQ    draw_wall_world_bottom
+        BRA    draw_wall_world_emit
+draw_wall_world_top
+        MOVE.B #WALL_CHAR_HORIZONTAL,D0
+        CMP.B  #0,D3
+        BEQ    draw_wall_world_top_left
+        MOVE.B BOARD_COLS,D2
+        SUBI.B #1,D2
+        CMP.B  D2,D3
+        BEQ    draw_wall_world_top_right
+        BRA    draw_wall_world_emit
+draw_wall_world_top_left
+        MOVE.B #WALL_CHAR_TOP_LEFT,D0
+        BRA    draw_wall_world_emit
+draw_wall_world_top_right
+        MOVE.B #WALL_CHAR_TOP_RIGHT,D0
+        BRA    draw_wall_world_emit
+draw_wall_world_bottom
+        MOVE.B #WALL_CHAR_HORIZONTAL,D0
+        CMP.B  #0,D3
+        BEQ    draw_wall_world_bottom_left
+        MOVE.B BOARD_COLS,D2
+        SUBI.B #1,D2
+        CMP.B  D2,D3
+        BEQ    draw_wall_world_bottom_right
+        BRA    draw_wall_world_emit
+draw_wall_world_bottom_left
+        MOVE.B #WALL_CHAR_BOTTOM_LEFT,D0
+        BRA    draw_wall_world_emit
+draw_wall_world_bottom_right
+        MOVE.B #WALL_CHAR_BOTTOM_RIGHT,D0
+draw_wall_world_emit
+        BSR _SPUTCH
 draw_wall_world_done
-        MOVEM.L (SP)+,D1-D2/A1
+        MOVEM.L (SP)+,D1-D4/A1
         RTS
 
 ***************************************************************
@@ -817,7 +806,7 @@ clear_viewport_col
 
 ***************************************************************
 ; Function _BUILD_MOBILE_BORDER_LEVEL
-; Purpose  Create a touch-friendly empty arena with a perimeter wall
+; Purpose  Create an empty arena with a one-cell perimeter wall
 ***************************************************************
 
 _BUILD_MOBILE_BORDER_LEVEL
@@ -862,23 +851,32 @@ build_mobile_level_done
 
 ***************************************************************
 ; Function _DRAW_MOBILE_BORDER_ARENA
-; Purpose  Paint the full-screen mobile border around the active arena
+; Purpose  Clear the viewport before repainting the border arena
 ***************************************************************
 
 _DRAW_MOBILE_BORDER_ARENA
         MOVEM.L D0-D4/A1,-(SP)
         BSR _CLEAR_VIEWPORT
+
         MOVE.B #1,D1
         MOVE.B VIEWPORT_SCREEN_Y,D2
         BSR _GOTOXY
-        MOVE.L #STR_COL_RED,A1
+        MOVE.L #STR_COL_WALL,A1
         BSR _DISPSTR
+        MOVE.B #WALL_CHAR_TOP_LEFT,D0
+        BSR _SPUTCH
         MOVE.B BOARD_COLS,D3
+        SUBI.B #2,D3
 draw_mobile_top_border
-        MOVE.B #'#',D0
+        CMP.B  #0,D3
+        BEQ    draw_mobile_top_right
+        MOVE.B #WALL_CHAR_HORIZONTAL,D0
         BSR _SPUTCH
         SUBI.B #1,D3
-        BNE    draw_mobile_top_border
+        BRA    draw_mobile_top_border
+draw_mobile_top_right
+        MOVE.B #WALL_CHAR_TOP_RIGHT,D0
+        BSR _SPUTCH
 
         MOVE.B #1,D4
 draw_mobile_side_rows
@@ -890,17 +888,17 @@ draw_mobile_side_rows
         MOVE.B VIEWPORT_SCREEN_Y,D2
         ADD.B  D4,D2
         BSR _GOTOXY
-        MOVE.L #STR_COL_RED,A1
+        MOVE.L #STR_COL_WALL,A1
         BSR _DISPSTR
-        MOVE.B #'#',D0
+        MOVE.B #WALL_CHAR_VERTICAL,D0
         BSR _SPUTCH
         MOVE.B BOARD_COLS,D1
         MOVE.B VIEWPORT_SCREEN_Y,D2
         ADD.B  D4,D2
         BSR _GOTOXY
-        MOVE.L #STR_COL_RED,A1
+        MOVE.L #STR_COL_WALL,A1
         BSR _DISPSTR
-        MOVE.B #'#',D0
+        MOVE.B #WALL_CHAR_VERTICAL,D0
         BSR _SPUTCH
         ADDI.B #1,D4
         BRA    draw_mobile_side_rows
@@ -911,14 +909,22 @@ draw_mobile_bottom_border
         ADD.B  BOARD_ROWS,D2
         SUBI.B #1,D2
         BSR _GOTOXY
-        MOVE.L #STR_COL_RED,A1
+        MOVE.L #STR_COL_WALL,A1
         BSR _DISPSTR
+        MOVE.B #WALL_CHAR_BOTTOM_LEFT,D0
+        BSR _SPUTCH
         MOVE.B BOARD_COLS,D3
+        SUBI.B #2,D3
 draw_mobile_bottom_border_loop
-        MOVE.B #'#',D0
+        CMP.B  #0,D3
+        BEQ    draw_mobile_bottom_right
+        MOVE.B #WALL_CHAR_HORIZONTAL,D0
         BSR _SPUTCH
         SUBI.B #1,D3
-        BNE    draw_mobile_bottom_border_loop
+        BRA    draw_mobile_bottom_border_loop
+draw_mobile_bottom_right
+        MOVE.B #WALL_CHAR_BOTTOM_RIGHT,D0
+        BSR _SPUTCH
         MOVEM.L (SP)+,D0-D4/A1
         RTS
 
@@ -972,77 +978,168 @@ redraw_viewport_done
 
 _DRAW_HUD
         MOVEM.L D0-D4/A1,-(SP)
+        BSR    _CLEAR_STATUS_ROW
         CMP.B  #LAYOUT_DESKTOP,LAYOUT_PROFILE
         BEQ    draw_hud_desktop
         CMP.B  #LAYOUT_MOBILE_LANDSCAPE,LAYOUT_PROFILE
         BEQ    draw_hud_landscape
         BRA    draw_hud_portrait
 draw_hud_desktop
-        MOVE.B #19,D1
-        MOVE.B #24,D2
+        MOVE.B #2,D1
+        MOVE.B TERM_ROWS,D2
         BSR _GOTOXY
-        MOVE.L #STR_COL_YELLOW,A1
+        MOVE.L #STR_COL_CYAN,A1
+        BSR _DISPSTR
+        MOVEA.L #STR_HUD_SCORE_LABEL,A1
+        BSR _DISPSTR
+        MOVE.B #9,D1
+        MOVE.B TERM_ROWS,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_GREEN,A1
         BSR _DISPSTR
         MOVE.B SCORE,D4
         BSR _DISPNUM10
-        MOVE.B #35,D1
-        MOVE.B #24,D2
+        MOVE.B #18,D1
+        MOVE.B TERM_ROWS,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_MAGENTA,A1
+        BSR _DISPSTR
+        MOVEA.L #STR_HUD_LIVES_LABEL,A1
+        BSR _DISPSTR
+        MOVE.B #25,D1
+        MOVE.B TERM_ROWS,D2
         BSR _GOTOXY
         MOVE.L #STR_COL_YELLOW,A1
         BSR _DISPSTR
         MOVE.B LIVES,D4
         BSR _DISPNUM10
-        MOVE.B #51,D1
-        MOVE.B #24,D2
+        MOVE.B #34,D1
+        MOVE.B TERM_ROWS,D2
         BSR _GOTOXY
-        MOVE.L #STR_COL_YELLOW,A1
+        MOVE.L #STR_COL_CYAN,A1
+        BSR _DISPSTR
+        MOVEA.L #STR_HUD_LEVEL_LABEL,A1
+        BSR _DISPSTR
+        MOVE.B #41,D1
+        MOVE.B TERM_ROWS,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_GREEN,A1
         BSR _DISPSTR
         MOVE.B LEVEL,D4
         ADDI.B #1,D4
         BSR _DISPNUM10
         BRA    draw_hud_done
 draw_hud_landscape
-        MOVE.B #1,D1
-        MOVE.B #1,D2
+        MOVE.B #2,D1
+        MOVE.B TERM_ROWS,D2
         BSR _GOTOXY
-        MOVE.L #STR_COL_YELLOW,A1
+        MOVE.L #STR_COL_CYAN,A1
         BSR _DISPSTR
-        MOVEA.L #STR_HUD_LANDSCAPE,A1
+        MOVEA.L #STR_HUD_SCORE_SHORT,A1
         BSR _DISPSTR
-        BRA    draw_hud_mobile_values
-draw_hud_portrait
-        MOVE.B #1,D1
-        MOVE.B #1,D2
+        MOVE.B #4,D1
+        MOVE.B TERM_ROWS,D2
         BSR _GOTOXY
-        MOVE.L #STR_COL_YELLOW,A1
-        BSR _DISPSTR
-        MOVEA.L #STR_HUD_PORTRAIT_ROW1,A1
-        BSR _DISPSTR
-draw_hud_mobile_values
-        MOVE.B #3,D1
-        MOVE.B #1,D2
-        BSR _GOTOXY
-        MOVE.L #STR_COL_YELLOW,A1
+        MOVE.L #STR_COL_GREEN,A1
         BSR _DISPSTR
         MOVE.B SCORE,D4
         BSR _DISPNUM10
-        MOVE.B #8,D1
-        MOVE.B #1,D2
+        MOVE.B #7,D1
+        MOVE.B TERM_ROWS,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_MAGENTA,A1
+        BSR _DISPSTR
+        MOVEA.L #STR_HUD_LIVES_SHORT,A1
+        BSR _DISPSTR
+        MOVE.B #9,D1
+        MOVE.B TERM_ROWS,D2
         BSR _GOTOXY
         MOVE.L #STR_COL_YELLOW,A1
         BSR _DISPSTR
         MOVE.B LIVES,D4
         BSR _DISPNUM10
-        MOVE.B #14,D1
-        MOVE.B #1,D2
+        MOVE.B #12,D1
+        MOVE.B TERM_ROWS,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_CYAN,A1
+        BSR _DISPSTR
+        MOVEA.L #STR_HUD_LEVEL_SHORT,A1
+        BSR _DISPSTR
+        MOVE.B #15,D1
+        MOVE.B TERM_ROWS,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_GREEN,A1
+        BSR _DISPSTR
+        MOVE.B LEVEL,D4
+        ADDI.B #1,D4
+        BSR _DISPNUM10
+        BRA    draw_hud_done
+draw_hud_portrait
+        MOVE.B #2,D1
+        MOVE.B TERM_ROWS,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_CYAN,A1
+        BSR _DISPSTR
+        MOVEA.L #STR_HUD_SCORE_SHORT,A1
+        BSR _DISPSTR
+        MOVE.B #4,D1
+        MOVE.B TERM_ROWS,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_GREEN,A1
+        BSR _DISPSTR
+        MOVE.B SCORE,D4
+        BSR _DISPNUM10
+        MOVE.B #7,D1
+        MOVE.B TERM_ROWS,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_MAGENTA,A1
+        BSR _DISPSTR
+        MOVEA.L #STR_HUD_LIVES_SHORT,A1
+        BSR _DISPSTR
+        MOVE.B #9,D1
+        MOVE.B TERM_ROWS,D2
         BSR _GOTOXY
         MOVE.L #STR_COL_YELLOW,A1
+        BSR _DISPSTR
+        MOVE.B LIVES,D4
+        BSR _DISPNUM10
+        MOVE.B #12,D1
+        MOVE.B TERM_ROWS,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_CYAN,A1
+        BSR _DISPSTR
+        MOVEA.L #STR_HUD_LEVEL_SHORT,A1
+        BSR _DISPSTR
+        MOVE.B #15,D1
+        MOVE.B TERM_ROWS,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_GREEN,A1
         BSR _DISPSTR
         MOVE.B LEVEL,D4
         ADDI.B #1,D4
         BSR _DISPNUM10
 draw_hud_done
         MOVEM.L (SP)+,D0-D4/A1
+        RTS
+
+***************************************************************
+; Function _CLEAR_STATUS_ROW
+***************************************************************
+
+_CLEAR_STATUS_ROW
+        MOVEM.L D0-D3/A1,-(SP)
+        MOVE.B #1,D1
+        MOVE.B TERM_ROWS,D2
+        BSR _GOTOXY
+        MOVEA.L #STR_COL_DEFAULT,A1
+        BSR _DISPSTR
+        MOVE.B TERM_COLS,D3
+clear_status_row_loop
+        MOVE.B #$20,D0
+        BSR _SPUTCH
+        SUBI.B #1,D3
+        BNE    clear_status_row_loop
+        MOVEM.L (SP)+,D0-D3/A1
         RTS
 
         
@@ -1241,23 +1338,231 @@ layout_profile_done
 ; Purpose  Draw a profile-aware intro screen
 ***************************************************************
 
+_DRAW_SCREEN_BORDER
+        MOVEM.L D0-D4/A1,-(SP)
+        MOVE.B TERM_COLS,D3
+        CMP.B  #2,D3
+        BLT    draw_screen_border_done
+        MOVE.B TERM_ROWS,D4
+        CMP.B  #2,D4
+        BLT    draw_screen_border_done
+
+        MOVE.B #1,D1
+        MOVE.B #1,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_WALL,A1
+        BSR _DISPSTR
+        MOVE.B #WALL_CHAR_TOP_LEFT,D0
+        BSR _SPUTCH
+        MOVE.B D3,D1
+        SUBI.B #2,D1
+draw_screen_border_top
+        CMP.B  #0,D1
+        BEQ    draw_screen_border_top_right
+        MOVE.B #WALL_CHAR_HORIZONTAL,D0
+        BSR _SPUTCH
+        SUBI.B #1,D1
+        BRA    draw_screen_border_top
+draw_screen_border_top_right
+        MOVE.B #WALL_CHAR_TOP_RIGHT,D0
+        BSR _SPUTCH
+
+        MOVE.B #2,D0
+draw_screen_border_sides
+        MOVE.B D4,D1
+        SUBI.B #1,D1
+        CMP.B  D1,D0
+        BGE    draw_screen_border_bottom
+        MOVE.B #1,D1
+        MOVE.B D0,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_WALL,A1
+        BSR _DISPSTR
+        MOVE.B #WALL_CHAR_VERTICAL,D0
+        BSR _SPUTCH
+        MOVE.B D3,D1
+        BSR _GOTOXY
+        MOVE.L #STR_COL_WALL,A1
+        BSR _DISPSTR
+        MOVE.B #WALL_CHAR_VERTICAL,D0
+        BSR _SPUTCH
+        MOVE.B D2,D0
+        ADDI.B #1,D0
+        BRA    draw_screen_border_sides
+
+draw_screen_border_bottom
+        MOVE.B #1,D1
+        MOVE.B D4,D2
+        BSR _GOTOXY
+        MOVE.L #STR_COL_WALL,A1
+        BSR _DISPSTR
+        MOVE.B #WALL_CHAR_BOTTOM_LEFT,D0
+        BSR _SPUTCH
+        MOVE.B D3,D1
+        SUBI.B #2,D1
+draw_screen_border_bottom_loop
+        CMP.B  #0,D1
+        BEQ    draw_screen_border_bottom_right
+        MOVE.B #WALL_CHAR_HORIZONTAL,D0
+        BSR _SPUTCH
+        SUBI.B #1,D1
+        BRA    draw_screen_border_bottom_loop
+draw_screen_border_bottom_right
+        MOVE.B #WALL_CHAR_BOTTOM_RIGHT,D0
+        BSR _SPUTCH
+draw_screen_border_done
+        MOVEM.L (SP)+,D0-D4/A1
+        RTS
+
+***************************************************************
+; Function _GET_CENTERED_X
+; Purpose  Resolve a centered x-origin for a fixed-width string
+; Input    D0 = printable width
+; Returns  D1 = centered x column
+***************************************************************
+
+_GET_CENTERED_X
+        MOVE.B #2,D1
+        MOVE.B TERM_COLS,D3
+        CMP.B  D0,D3
+        BLE    get_centered_x_done
+        SUB.B  D0,D3
+        LSR.B  #1,D3
+        ADDI.B #1,D3
+        CMP.B  #2,D3
+        BLT    get_centered_x_done
+        MOVE.B D3,D1
+get_centered_x_done
+        RTS
+
+***************************************************************
+; Function _DRAW_CENTERED_LINE
+; Purpose  Draw a centered line at a specific row
+; Input    D0 = printable width, D2 = row, A1 = string
+***************************************************************
+
+_DRAW_CENTERED_LINE
+        MOVE.L A1,-(SP)
+        BSR    _GET_CENTERED_X
+        BSR    _GOTOXY
+        MOVEA.L (SP)+,A1
+        BSR    _DISPSTR
+        RTS
+
+***************************************************************
+; Function _DRAW_DESKTOP_INTRO
+; Purpose  Draw the centered desktop intro copy
+***************************************************************
+
+_DRAW_DESKTOP_INTRO
+        MOVE.B #7,D0
+        MOVE.B #3,D2
+        MOVEA.L #STR_INTRO_TITLE,A1
+        BSR    _DRAW_CENTERED_LINE
+
+        MOVE.B #19,D0
+        MOVE.B #4,D2
+        MOVEA.L #STR_INTRO_SUBTITLE,A1
+        BSR    _DRAW_CENTERED_LINE
+
+        MOVE.B #32,D0
+        MOVE.B #6,D2
+        MOVEA.L #STR_INTRO_TOUCH_HINT,A1
+        BSR    _DRAW_CENTERED_LINE
+
+        MOVE.B #17,D0
+        MOVE.B #8,D2
+        MOVEA.L #STR_INTRO_SELECT_LABEL,A1
+        BSR    _DRAW_CENTERED_LINE
+
+        MOVE.B #22,D0
+        MOVE.B TERM_ROWS,D2
+        SUBI.B #4,D2
+        MOVEA.L #STR_INTRO_MOVE_HINT,A1
+        BSR    _DRAW_CENTERED_LINE
+
+        MOVE.B #10,D0
+        MOVE.B TERM_ROWS,D2
+        SUBI.B #3,D2
+        MOVEA.L #STR_INTRO_SITE,A1
+        BSR    _DRAW_CENTERED_LINE
+
+        MOVE.B #14,D0
+        MOVE.B TERM_ROWS,D2
+        SUBI.B #2,D2
+        MOVEA.L #STR_INTRO_AUTHOR,A1
+        BSR    _DRAW_CENTERED_LINE
+        RTS
+
+***************************************************************
+; Function _DRAW_LANDSCAPE_INTRO
+; Purpose  Draw the centered mobile landscape intro copy
+***************************************************************
+
+_DRAW_LANDSCAPE_INTRO
+        MOVE.B #7,D0
+        MOVE.B #2,D2
+        MOVEA.L #STR_INTRO_TITLE,A1
+        BSR    _DRAW_CENTERED_LINE
+
+        MOVE.B #19,D0
+        MOVE.B #3,D2
+        MOVEA.L #STR_INTRO_SUBTITLE,A1
+        BSR    _DRAW_CENTERED_LINE
+
+        MOVE.B #17,D0
+        MOVE.B #4,D2
+        MOVEA.L #STR_INTRO_SELECT_LABEL,A1
+        BSR    _DRAW_CENTERED_LINE
+        RTS
+
+***************************************************************
+; Function _DRAW_PORTRAIT_INTRO
+; Purpose  Draw the centered mobile portrait intro copy
+***************************************************************
+
+_DRAW_PORTRAIT_INTRO
+        MOVE.B #7,D0
+        MOVE.B #3,D2
+        MOVEA.L #STR_INTRO_TITLE,A1
+        BSR    _DRAW_CENTERED_LINE
+
+        MOVE.B #12,D0
+        MOVE.B #4,D2
+        MOVEA.L #STR_INTRO_SUBTITLE_SHORT,A1
+        BSR    _DRAW_CENTERED_LINE
+
+        MOVE.B #17,D0
+        MOVE.B #5,D2
+        MOVEA.L #STR_INTRO_SELECT_LABEL,A1
+        BSR    _DRAW_CENTERED_LINE
+
+        MOVE.B #14,D0
+        MOVE.B #6,D2
+        MOVEA.L #STR_INTRO_TAP_DIFFICULTY,A1
+        BSR    _DRAW_CENTERED_LINE
+
+        MOVE.B #16,D0
+        MOVE.B #7,D2
+        MOVEA.L #STR_INTRO_KEYS_HINT,A1
+        BSR    _DRAW_CENTERED_LINE
+        RTS
+
 _DRAW_INTRO_SCREEN
+        MOVEA.L #STR_CLS,A1
+        BSR _DISPSTR
+        BSR _DRAW_SCREEN_BORDER
         CMP.B #LAYOUT_MOBILE_LANDSCAPE,LAYOUT_PROFILE
         BEQ    draw_intro_landscape
         CMP.B #LAYOUT_MOBILE_PORTRAIT,LAYOUT_PROFILE
         BEQ    draw_intro_portrait
-        MOVEA.L #STR_SPLASH_SCR,A1
-        BSR _DISPSTR
+        BSR    _DRAW_DESKTOP_INTRO
         RTS
 draw_intro_landscape
-        MOVEA.L #STR_SPLASH_LANDSCAPE,A1
-        BSR _DISPSTR
+        BSR    _DRAW_LANDSCAPE_INTRO
         RTS
 draw_intro_portrait
-        MOVEA.L #STR_SPLASH_PORTRAIT,A1
-        BSR _DISPSTR
-        MOVEA.L #STR_SPLASH_PORTRAIT_FOOTER,A1
-        BSR _DISPSTR
+        BSR    _DRAW_PORTRAIT_INTRO
         RTS
 
 ***************************************************************
@@ -1267,23 +1572,120 @@ draw_intro_portrait
 ***************************************************************
 
 _GET_DIFF_LAYOUT
-        MOVE.B #8,D1
-        MOVE.B #10,D2
-        MOVE.B #1,D3
+        MOVE.B #8,D0
+        BSR    _GET_CENTERED_X
+        MOVE.B #11,D2
+        MOVE.B #2,D3
         CMP.B  #LAYOUT_MOBILE_LANDSCAPE,LAYOUT_PROFILE
         BEQ    diff_layout_landscape
         CMP.B  #LAYOUT_MOBILE_PORTRAIT,LAYOUT_PROFILE
         BEQ    diff_layout_portrait
         RTS
 diff_layout_landscape
-        MOVE.B #7,D1
+        MOVE.B #8,D0
+        BSR    _GET_CENTERED_X
         MOVE.B #6,D2
-        MOVE.B #1,D3
+        MOVE.B #2,D3
         RTS
 diff_layout_portrait
-        MOVE.B #4,D1
-        MOVE.B #8,D2
+        MOVE.B #10,D2
+        MOVE.B #8,D0
+        BSR    _GET_CENTERED_X
         MOVE.B #3,D3
+        RTS
+
+***************************************************************
+; Function _DRAW_MOBILE_DIFF_BOX
+; Purpose  Draw a boxed mobile difficulty button group
+***************************************************************
+
+_DRAW_MOBILE_DIFF_BOX
+        CMP.B  #LAYOUT_DESKTOP,LAYOUT_PROFILE
+        BEQ    draw_mobile_diff_box_done
+        MOVEM.L D0-D7/A1,-(SP)
+        BSR    _GET_DIFF_LAYOUT
+
+        MOVE.B D1,D4
+        SUBI.B #3,D4
+        MOVE.B D1,D5
+        ADDI.B #10,D5
+        MOVE.B D2,D6
+        SUBI.B #1,D6
+        MOVE.B D2,D7
+        MOVE.B D3,D0
+        ADD.B  D0,D7
+        ADD.B  D0,D7
+        ADD.B  D0,D7
+        ADDI.B #1,D7
+
+        MOVE.B D4,D1
+        MOVE.B D6,D2
+        BSR    _GOTOXY
+        MOVEA.L #STR_COL_MAGENTA,A1
+        BSR    _DISPSTR
+        MOVE.B #WALL_CHAR_TOP_LEFT,D0
+        BSR    _SPUTCH
+        MOVE.B D5,D1
+        SUB.B  D4,D1
+        SUBI.B #1,D1
+draw_mobile_diff_box_top
+        CMP.B  #0,D1
+        BEQ    draw_mobile_diff_box_top_right
+        MOVE.B #WALL_CHAR_HORIZONTAL,D0
+        BSR    _SPUTCH
+        SUBI.B #1,D1
+        BRA    draw_mobile_diff_box_top
+draw_mobile_diff_box_top_right
+        MOVE.B #WALL_CHAR_TOP_RIGHT,D0
+        BSR    _SPUTCH
+
+        MOVE.B D6,D0
+        ADDI.B #1,D0
+draw_mobile_diff_box_sides
+        CMP.B  D7,D0
+        BGE    draw_mobile_diff_box_bottom
+        MOVE.B D4,D1
+        MOVE.B D0,D2
+        BSR    _GOTOXY
+        MOVEA.L #STR_COL_MAGENTA,A1
+        BSR    _DISPSTR
+        MOVE.B #WALL_CHAR_VERTICAL,D0
+        BSR    _SPUTCH
+        MOVE.B D5,D1
+        BSR    _GOTOXY
+        MOVEA.L #STR_COL_MAGENTA,A1
+        BSR    _DISPSTR
+        MOVE.B #WALL_CHAR_VERTICAL,D0
+        BSR    _SPUTCH
+        MOVE.B D2,D0
+        ADDI.B #1,D0
+        BRA    draw_mobile_diff_box_sides
+
+draw_mobile_diff_box_bottom
+        MOVE.B D4,D1
+        MOVE.B D7,D2
+        BSR    _GOTOXY
+        MOVEA.L #STR_COL_MAGENTA,A1
+        BSR    _DISPSTR
+        MOVE.B #WALL_CHAR_BOTTOM_LEFT,D0
+        BSR    _SPUTCH
+        MOVE.B D5,D1
+        SUB.B  D4,D1
+        SUBI.B #1,D1
+draw_mobile_diff_box_bottom_loop
+        CMP.B  #0,D1
+        BEQ    draw_mobile_diff_box_bottom_right
+        MOVE.B #WALL_CHAR_HORIZONTAL,D0
+        BSR    _SPUTCH
+        SUBI.B #1,D1
+        BRA    draw_mobile_diff_box_bottom_loop
+draw_mobile_diff_box_bottom_right
+        MOVE.B #WALL_CHAR_BOTTOM_RIGHT,D0
+        BSR    _SPUTCH
+        MOVEA.L #STR_COL_DEFAULT,A1
+        BSR    _DISPSTR
+        MOVEM.L (SP)+,D0-D7/A1
+draw_mobile_diff_box_done
         RTS
 
 ***************************************************************
@@ -1317,6 +1719,18 @@ apply_diff_hard
 
 _HANDLE_INTRO_TOUCH
         BSR    _GET_DIFF_LAYOUT
+        CMP.B  #LAYOUT_DESKTOP,LAYOUT_PROFILE
+        BEQ    intro_touch_rows
+        MOVE.B TOUCH_COL,D6
+        MOVE.B D1,D0
+        SUBI.B #3,D0
+        CMP.B  D0,D6
+        BLT    intro_touch_done
+        MOVE.B D1,D0
+        ADDI.B #10,D0
+        CMP.B  D0,D6
+        BGT    intro_touch_done
+intro_touch_rows
         MOVE.B TOUCH_ROW,D4
         CMP.B  D2,D4
         BLT    intro_touch_done
@@ -1449,6 +1863,7 @@ _SELECT_DIFF
         ; Select Difficulty
 draw_select
         BSR      _GET_DIFF_LAYOUT
+        BSR      _DRAW_MOBILE_DIFF_BOX
         CMP.B     #0,DIFFICULTY  ; 
         BEQ     draw_easy_select        
         CMP.B     #1,DIFFICULTY  ; 
@@ -1735,21 +2150,21 @@ TIMER     DS.L  1
 
 SNK_SCR   DS.W  MAX_SNK_SCR_SIZE
 
-STR_EASY   DC.B    '[32;40mEASY  [37;40m',0
-STR_MEDIUM DC.B    '[32;40mMEDIUM [37;40m',0
-STR_HARD   DC.B    '[32;40mHARD   [37;40m',0
-STR_INSANE DC.B    '[32;40mINSANE [37;40m',0
+STR_EASY   DC.B    '[36m  EASY  [0m',0
+STR_MEDIUM DC.B    '[35m MEDIUM [0m',0
+STR_HARD   DC.B    '[33m  HARD  [0m',0
+STR_INSANE DC.B    '[31m INSANE [0m',0
 
-STR_SEASY   DC.B   '[30;42mEASY   [37;40m',0
-STR_SMEDIUM DC.B   '[30;42mMEDIUM [37;40m',0
-STR_SHARD   DC.B   '[30;42mHARD   [37;40m',0
-STR_SINSANE DC.B   '[30;42mINSANE [37;40m',0
+STR_SEASY   DC.B   '[30;46m  EASY  [0m',0
+STR_SMEDIUM DC.B   '[30;45m MEDIUM [0m',0
+STR_SHARD   DC.B   '[30;43m  HARD  [0m',0
+STR_SINSANE DC.B   '[30;41m INSANE [0m',0
 
-STR_GG_YES  DC.B   '[34;40mPLAY AGAIN[37;40m',0
-STR_GG_SYES DC.B   '[30;44mPLAY AGAIN[37;40m',0
+STR_GG_YES  DC.B   '[34mPLAY AGAIN[0m',0
+STR_GG_SYES DC.B   '[1;36mPLAY AGAIN[0m',0
 
-STR_GG_NO   DC.B   '[34;40mNO, THANKS[37;40m',0
-STR_GG_SNO  DC.B   '[30;44mNO, THANKS[37;40m',0
+STR_GG_NO   DC.B   '[35mNO, THANKS[0m',0
+STR_GG_SNO  DC.B   '[1;36mNO, THANKS[0m',0
 
 STR_ESC   DC.B    $1B,'[',0
 STR_UP    DC.B    $1B,'[1A',0
@@ -1757,38 +2172,60 @@ STR_DOWN  DC.B    $1B,'[1B',0
 STR_FWD   DC.B    $1B,'[1C',0
 STR_REV   DC.B    $1B,'[1D',0
 STR_CLS   DC.B    $1B,'[2J',0
-STR_COL_RED   DC.B  $1B,'[31;40m',0
-STR_COL_YELLOW DC.B '[33;40m',0
-STR_COL_GREEN  DC.B '[32;40m',0
-STR_COL_DEFAULT DC.B '[37;40m',0
+STR_COL_RED   DC.B  $1B,'[31m',0
+STR_COL_YELLOW DC.B '[33m',0
+STR_COL_GREEN  DC.B '[32m',0
+STR_COL_CYAN   DC.B '[36m',0
+STR_COL_MAGENTA DC.B '[35m',0
+STR_COL_WALL   DC.B '[1;36m',0
+STR_COL_DEFAULT DC.B '[0m',0
 
-STR_SNK_SEG DC.B     $1B,'[32;40m',$DB,0
-STR_WALL  DC.B     $1B,'[31;40m','#',0
-STR_FOOD  DC.B     $1B,'[33;40m','*',0
+STR_SNK_SEG DC.B     $1B,'[1;32m',$DB,0
+STR_WALL  DC.B     $1B,'[1;36m',$DB,0
+STR_FOOD  DC.B     $1B,'[33m','*',0
 STR_HOME  DC.B    '[0;0H',0
 
-STR_SPLASH_SCR DC.B $1B,'[2J',$1B,'[2;29H',$1B,'[1;32mNIBBLES',$1B,'[0m'
- DC.B $1B,'[4;18H',$1B,'[33mTouch the rows or use W/S + Enter',$1B,'[0m'
- DC.B $1B,'[6;8H',$1B,'[37mDifficulty',$1B,'[0m'
- DC.B $1B,'[15;40H',$1B,'[31mMovement Keys: W A S D',$1B,'[0m'
- DC.B $1B,'[23;3H',$1B,'[34msmysnk.com',$1B,'[0m'
- DC.B $1B,'[24;3HJoshua Bellamy',0
+STR_INTRO_TITLE DC.B '[1;35mNIBBLES[0m',0
+STR_INTRO_SUBTITLE DC.B '[36mNEON SERPENT ARCADE[0m',0
+STR_INTRO_SUBTITLE_SHORT DC.B '[36mNEON SERPENT[0m',0
+STR_INTRO_TOUCH_HINT DC.B '[33mTouch a row or use W / S + Enter[0m',0
+STR_INTRO_TAP_ROW DC.B '[33mTap a row to start[0m',0
+STR_INTRO_SELECT_LABEL DC.B '[35mSELECT DIFFICULTY[0m',0
+STR_INTRO_MOVE_HINT DC.B '[32mMovement Keys: W A S D[0m',0
+STR_INTRO_SITE DC.B '[35msmysnk.com[0m',0
+STR_INTRO_AUTHOR DC.B '[36mJoshua Bellamy[0m',0
+STR_INTRO_TAP_DIFFICULTY DC.B '[33mTap difficulty[0m',0
+STR_INTRO_KEYS_HINT DC.B '[32mor W / S + Enter[0m',0
 
-STR_SPLASH_LANDSCAPE DC.B $1B,'[2J',$1B,'[2;18H',$1B,'[1;32mNIBBLES',$1B,'[0m'
- DC.B $1B,'[3;7H',$1B,'[37mDifficulty',$1B,'[0m'
+STR_SPLASH_SCR DC.B $1B,'[2;27H',$1B,'[1;35mNIBBLES',$1B,'[0m'
+ DC.B $1B,'[3;22H',$1B,'[36mNEON SERPENT ARCADE',$1B,'[0m'
+ DC.B $1B,'[5;14H',$1B,'[33mTouch a row or use W / S + Enter',$1B,'[0m'
+ DC.B $1B,'[7;11H',$1B,'[35mSELECT DIFFICULTY',$1B,'[0m'
+ DC.B $1B,'[15;27H',$1B,'[32mMovement Keys: W A S D',$1B,'[0m'
+ DC.B $1B,'[22;4H',$1B,'[35msmysnk.com',$1B,'[0m'
+ DC.B $1B,'[23;4H',$1B,'[36mJoshua Bellamy',$1B,'[0m',0
+
+STR_SPLASH_LANDSCAPE DC.B $1B,'[2;18H',$1B,'[1;35mNIBBLES',$1B,'[0m'
+ DC.B $1B,'[3;10H',$1B,'[36mNEON SERPENT ARCADE',$1B,'[0m'
  DC.B $1B,'[4;7H',$1B,'[33mTap a row to start',$1B,'[0m'
- DC.B $1B,'[11;3H',$1B,'[34msmysnk.com',$1B,'[0m'
- DC.B $1B,'[11;18HJoshua Bellamy',0
+ DC.B $1B,'[5;7H',$1B,'[35mSELECT DIFFICULTY',$1B,'[0m'
+ DC.B $1B,'[10;3H',$1B,'[35msmysnk.com',$1B,'[0m'
+ DC.B $1B,'[10;18H',$1B,'[36mJoshua Bellamy',$1B,'[0m',0
 
-STR_SPLASH_PORTRAIT DC.B $1B,'[2J',$1B,'[2;11H',$1B,'[1;32mNIBBLES',$1B,'[0m'
- DC.B $1B,'[4;4H',$1B,'[37mDifficulty',$1B,'[0m'
+STR_SPLASH_PORTRAIT DC.B $1B,'[2;10H',$1B,'[1;35mNIBBLES',$1B,'[0m'
+ DC.B $1B,'[3;6H',$1B,'[36mNEON SERPENT',$1B,'[0m'
+ DC.B $1B,'[5;4H',$1B,'[35mSELECT DIFFICULTY',$1B,'[0m'
  DC.B $1B,'[6;4H',$1B,'[33mTap difficulty',$1B,'[0m'
- DC.B $1B,'[7;4Hor W/S + Enter',0
-STR_SPLASH_PORTRAIT_FOOTER DC.B $1B,'[18;2H',$1B,'[34msmysnk.com',$1B,'[0m'
- DC.B $1B,'[19;2HJoshua Bellamy',0
+ DC.B $1B,'[7;4H',$1B,'[32mor W / S + Enter',$1B,'[0m',0
+STR_SPLASH_PORTRAIT_FOOTER DC.B $1B,'[18;2H',$1B,'[35msmysnk.com',$1B,'[0m'
+ DC.B $1B,'[19;2H',$1B,'[36mJoshua Bellamy',$1B,'[0m',0
 
-STR_HUD_LANDSCAPE DC.B 'S:   L:   Lv:   Touch',0
-STR_HUD_PORTRAIT_ROW1 DC.B 'S:   L:   Lv:',0
+STR_HUD_SCORE_LABEL DC.B 'SCORE:',0
+STR_HUD_LIVES_LABEL DC.B 'LIVES:',0
+STR_HUD_LEVEL_LABEL DC.B 'LEVEL:',0
+STR_HUD_SCORE_SHORT DC.B 'S:',0
+STR_HUD_LIVES_SHORT DC.B 'L:',0
+STR_HUD_LEVEL_SHORT DC.B 'Lv:',0
 
 
 STR_ARENA_SCR DC.B '[2J[0m[1;31m������������������������������������������������������������������������������Ŀ�[0m[78C[1;31m�� '
@@ -1796,7 +2233,7 @@ STR_ARENA_SCR DC.B '[2J[0m[1;31m���������������
  DC.B '[0m[78C[1;31m��[0m[78C[1;31m��[0m[78C[1;31m��[0m[78C[1;31m��[0m[78C[1;31m��[0m[78C[1;31m��[0m[78C[1;31m��'
  DC.B '[0m[78C[1;31m��[0m[78C[1;31m��[0m[78C[1;31m��[0m[78C[1;31m��[0m[78C[1;31m��[0m[78C[1;31m��'
  DC.B '                                                                              �������������������������������'
- DC.B '��������������������������������������������������      [33;40mSCORE:          LIVES:          LEVEL:[33;40m                    smysnk.com[0m',0
+ DC.B '��������������������������������������������������      [33mSCORE:          LIVES:          LEVEL:[33m                    smysnk.com[0m',0
 
 STR_GAME_OVER_SCR DC.B '[2J[0m',$0D,$0A
  DC.B '',$0D,$0A

@@ -35,7 +35,7 @@ import {
 import { useTerminalSurface } from '@/runtime/useTerminalSurface';
 import { useCompactShell } from '@/hooks/useCompactShell';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
-import { selectActiveFileId } from '@/store/filesSlice';
+import { NIBBLES_FILE_ID, selectActiveFileId } from '@/store/filesSlice';
 import {
   requestResume,
   requestPulseResume,
@@ -47,6 +47,10 @@ import {
 type KeyboardLikeEvent = {
   key: string;
 };
+
+function isDisposedWorkerRuntimeError(error: unknown): boolean {
+  return error instanceof Error && /disposed/i.test(error.message);
+}
 
 declare global {
   interface Window {
@@ -233,6 +237,7 @@ const Terminal: React.FC = () => {
     preference: terminalInputModePreference,
   });
   const isTouchOnlyMode = effectiveTerminalInputMode === 'touch-only';
+  const isNibblesScreen = activeFileId === NIBBLES_FILE_ID;
 
   if (controllerRef.current === null) {
     controllerRef.current = createRetroLcdController({
@@ -257,6 +262,8 @@ const Terminal: React.FC = () => {
       controller.resize(meta.rows, meta.columns);
       previousGeometryVersionRef.current = meta.geometryVersion;
     }
+
+    controller.setCursorVisible(!isNibblesScreen);
 
     const versionChanged = previousVersionRef.current !== meta.version;
     const shouldForceFullRedraw =
@@ -316,6 +323,7 @@ const Terminal: React.FC = () => {
   }, [
     dirtyRows,
     frameBuffer,
+    isNibblesScreen,
     meta.columns,
     meta.cursorColumn,
     meta.cursorRow,
@@ -470,19 +478,21 @@ const Terminal: React.FC = () => {
   const applyMeasuredGeometry = React.useCallback(
     async (columns: number, rows: number): Promise<void> => {
       if (terminalState.columns === columns && terminalState.rows === rows) {
-        if (!emulatorInstance) {
-          terminalSurfaceStore.reset(columns, rows);
-          dispatch(
-            setTerminalStateAction({
-              columns,
-              rows,
-              cursorRow: 0,
-              cursorColumn: 0,
-              version: terminalState.version + 1,
-              geometryVersion: terminalState.geometryVersion + 1,
-            })
-          );
-        }
+        return;
+      }
+
+      if (isNibblesScreen) {
+        terminalSurfaceStore.reset(columns, rows);
+        dispatch(
+          setTerminalStateAction({
+            columns,
+            rows,
+            cursorRow: 0,
+            cursorColumn: 0,
+            version: terminalState.version + 1,
+            geometryVersion: terminalState.geometryVersion + 1,
+          })
+        );
         return;
       }
 
@@ -490,7 +500,14 @@ const Terminal: React.FC = () => {
         emulatorInstance?.getRuntimeTransport?.() === 'worker' &&
         emulatorInstance.controller !== undefined
       ) {
-        await emulatorInstance.controller.requestResizeTerminal(columns, rows);
+        try {
+          await emulatorInstance.controller.requestResizeTerminal(columns, rows);
+        } catch (error) {
+          if (!isDisposedWorkerRuntimeError(error)) {
+            throw error;
+          }
+          return;
+        }
         terminalSurfaceStore.replaceFromRuntime(emulatorInstance);
         dispatch(setTerminalStateAction(emulatorInstance.getTerminalMeta()));
         return;
@@ -519,6 +536,7 @@ const Terminal: React.FC = () => {
     [
       dispatch,
       emulatorInstance,
+      isNibblesScreen,
       terminalState.columns,
       terminalState.geometryVersion,
       terminalState.rows,
@@ -673,6 +691,7 @@ const Terminal: React.FC = () => {
         ref={terminalRef}
         className="terminal-screen"
         data-terminal-focused={focused ? 'true' : 'false'}
+        data-terminal-game-screen={isNibblesScreen ? 'true' : 'false'}
         data-terminal-input-mode={effectiveTerminalInputMode}
         data-testid="terminal-screen"
         onClick={focusTerminal}

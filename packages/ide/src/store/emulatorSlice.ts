@@ -274,7 +274,10 @@ const emulatorSlice = createSlice({
       state,
       action: PayloadAction<TerminalRuntimeState | TerminalMeta | TerminalSnapshot>
     ) {
-      state.terminal = toTerminalRuntimeState(action.payload);
+      const nextTerminal = toTerminalRuntimeState(action.payload);
+      if (!terminalStateEqual(state.terminal, nextTerminal)) {
+        state.terminal = nextTerminal;
+      }
     },
     syncEmulatorFrame(
       state,

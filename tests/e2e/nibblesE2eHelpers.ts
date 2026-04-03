@@ -18,6 +18,22 @@ export interface NibblesRuntimeState {
   posY: number | null;
 }
 
+export interface TerminalSnapshotCell {
+  char: string;
+  foreground: number | null;
+  background: number | null;
+  bold: boolean;
+  inverse: boolean;
+}
+
+export interface TerminalBrowserSnapshot {
+  columns: number;
+  rows: number;
+  lines: string[];
+  cells: TerminalSnapshotCell[][];
+  cursorVisible: boolean;
+}
+
 export interface NibblesRuntimeMotionState {
   waitingForInput: boolean | null;
   direction: number | null;
@@ -583,6 +599,37 @@ export async function readRuntimeState(page: Page): Promise<NibblesRuntimeState>
   });
 }
 
+export async function readTerminalSnapshot(page: Page): Promise<TerminalBrowserSnapshot | null> {
+  return page.evaluate(() => {
+    const runtime = (window as typeof window & { emulatorInstance?: any }).emulatorInstance;
+    const snapshot = runtime?.getTerminalSnapshot?.() ?? null;
+    if (!snapshot) {
+      return null;
+    }
+
+    return {
+      columns: snapshot.columns ?? 0,
+      rows: snapshot.rows ?? 0,
+      lines: Array.isArray(snapshot.lines) ? snapshot.lines.slice() : [],
+      cursorVisible:
+        document.querySelector('[data-testid="terminal-screen"] .retro-lcd__cursor') !== null,
+      cells: Array.isArray(snapshot.cells)
+        ? snapshot.cells.map((row: Array<any>) =>
+            row.map((cell) => ({
+              char: typeof cell?.char === 'string' ? cell.char : ' ',
+              foreground:
+                typeof cell?.foreground === 'number' ? cell.foreground : null,
+              background:
+                typeof cell?.background === 'number' ? cell.background : null,
+              bold: cell?.bold === true,
+              inverse: cell?.inverse === true,
+            }))
+          )
+        : [],
+    };
+  });
+}
+
 export async function readRuntimeMotionState(page: Page): Promise<NibblesRuntimeMotionState> {
   return page.evaluate(async function () {
     const runtime = (window as typeof window & { emulatorInstance?: any }).emulatorInstance;
@@ -680,7 +727,7 @@ export async function waitForIntro(
 ): Promise<string> {
   const terminalText = await waitForTerminalText(
     page,
-    ['Difficulty', 'Joshua Bellamy', 'smysnk.com'],
+    ['DIFFICULTY', 'Joshua Bellamy', 'smysnk.com'],
     options.timeoutMs ?? 60_000
   );
 

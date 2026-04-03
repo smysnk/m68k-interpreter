@@ -24,6 +24,7 @@ import {
 import type { RuntimeMetrics } from '@/stores/emulatorStore';
 import { useCompactShell } from '@/hooks/useCompactShell';
 import {
+  NIBBLES_FILE_ID,
   resetEmulatorState,
   setEmulatorInstance as setEmulatorInstanceAction,
   setExecutionState as setExecutionStateAction,
@@ -159,9 +160,15 @@ function cancelFrame(handle: number): void {
   window.clearTimeout(handle);
 }
 
+function isDisposedWorkerRuntimeError(error: unknown): boolean {
+  return error instanceof Error && /disposed/i.test(error.message);
+}
+
 export const useEmulatorEvents = () => {
   const dispatch = useDispatch<AppDispatch>();
   const runtimeIntents = useSelector((state: RootState) => state.emulator.runtimeIntents);
+  const terminalColumns = useSelector((state: RootState) => state.emulator.terminal.columns);
+  const terminalRows = useSelector((state: RootState) => state.emulator.terminal.rows);
   const terminalGeometryVersion = useSelector(
     (state: RootState) => state.emulator.terminal.geometryVersion
   );
@@ -208,6 +215,11 @@ export const useEmulatorEvents = () => {
   const frameSyncCacheRef = useRef(createRuntimeFrameSyncCache());
   const runtimeEpochRef = useRef(0);
   const workerUnsubscribeRef = useRef<(() => void) | null>(null);
+  const isInitializingRuntimeRef = useRef(false);
+  const queuedRunAfterInitRef = useRef(false);
+  const lastHandledNibblesGeometrySignatureRef = useRef(
+    `${terminalColumns}x${terminalRows}`
+  );
   const syncStoreFromEmulatorRef = useRef<
     (
       emulator: IdeRuntimeSession,
@@ -350,7 +362,13 @@ export const useEmulatorEvents = () => {
 
     const disposeRuntime = async (runtime: IdeRuntimeSession | null): Promise<void> => {
       if (runtime?.controller) {
-        await runtime.controller.dispose();
+        try {
+          await runtime.controller.dispose();
+        } catch (error) {
+          if (!isDisposedWorkerRuntimeError(error)) {
+            throw error;
+          }
+        }
       }
     };
 
@@ -566,6 +584,11 @@ export const useEmulatorEvents = () => {
 
     const handleRun = (): void => {
       void (async () => {
+        if (isInitializingRuntimeRef.current) {
+          queuedRunAfterInitRef.current = true;
+          return;
+        }
+
         if (
           terminalGeometryVersionRef.current <= 1 &&
           pendingRunRetryCountRef.current < MANUAL_RUN_GEOMETRY_MAX_RETRIES
@@ -580,34 +603,51 @@ export const useEmulatorEvents = () => {
           return;
         }
 
-        clearPendingRunRetry();
-        pendingRunRetryCountRef.current = 0;
-        pendingRunUntilGeometryRef.current = false;
+        isInitializingRuntimeRef.current = true;
 
-        const code = getCurrentEditorCode();
-        if (!code.trim()) {
-          dispatch(
-            setExecutionStateAction({
-              lastInstruction: 'Error: No code to execute',
-              exception: 'No code provided',
-            })
-          );
-          return;
+        try {
+          clearPendingRunRetry();
+          pendingRunRetryCountRef.current = 0;
+          pendingRunUntilGeometryRef.current = false;
+
+          const code = getCurrentEditorCode();
+          if (!code.trim()) {
+            dispatch(
+              setExecutionStateAction({
+                lastInstruction: 'Error: No code to execute',
+                exception: 'No code provided',
+              })
+            );
+            return;
+          }
+
+          const emulator = await initializeEmulator(code);
+          if (!emulator) {
+            return;
+          }
+
+          await primeRuntimeForAutoplay(emulator);
+          const workerController = getWorkerController(emulator);
+          if (workerController) {
+            await workerController.requestRun(buildWorkerExecutionConfig());
+            return;
+          }
+
+          scheduleExecutionFrame();
+        } catch (error) {
+          if (!isDisposedWorkerRuntimeError(error)) {
+            console.error(error);
+          }
+        } finally {
+          isInitializingRuntimeRef.current = false;
+
+          if (queuedRunAfterInitRef.current) {
+            queuedRunAfterInitRef.current = false;
+            window.setTimeout(() => {
+              handleRunRef.current();
+            }, 0);
+          }
         }
-
-        const emulator = await initializeEmulator(code);
-        if (!emulator) {
-          return;
-        }
-
-        await primeRuntimeForAutoplay(emulator);
-        const workerController = getWorkerController(emulator);
-        if (workerController) {
-          await workerController.requestRun(buildWorkerExecutionConfig());
-          return;
-        }
-
-        scheduleExecutionFrame();
       })();
     };
 
@@ -773,6 +813,8 @@ export const useEmulatorEvents = () => {
         lastRegisterSyncAtRef.current = 0;
         pendingRunUntilGeometryRef.current = false;
         pendingRunRetryCountRef.current = 0;
+        isInitializingRuntimeRef.current = false;
+        queuedRunAfterInitRef.current = false;
         const { columns, rows } = ideStore.getState().emulator.terminal;
         terminalSurfaceStore.reset(columns, rows);
         frameSyncCacheRef.current = createRuntimeFrameSyncCache();
@@ -799,6 +841,8 @@ export const useEmulatorEvents = () => {
       clearWorkerSubscription();
       pendingRunRetryCountRef.current = 0;
       pendingRunUntilGeometryRef.current = false;
+      isInitializingRuntimeRef.current = false;
+      queuedRunAfterInitRef.current = false;
       terminalSurfaceStore.reset();
       frameSyncCacheRef.current = createRuntimeFrameSyncCache();
       void disposeRuntime(emulatorRef.current);
@@ -814,29 +858,35 @@ export const useEmulatorEvents = () => {
       return;
     }
 
-    void controller.requestConfigureExecution({
-      delayMs: toWorkerDelayMs(delay),
-      speedMultiplier,
-      frameBudgetMs: resolveWorkerFrameBudgetMs({
-        activeFileId,
-        workspaceTab,
-        terminalInputModePreference,
-        isCompactShell,
-        environmentFrameBudgetMs: getFrameBudgetForEnvironment(),
-      }),
-      publishMemoryDuringContinuousFrames: !shouldUseTerminalFocusedWorkerProfile({
-        activeFileId,
-        workspaceTab,
-        terminalInputModePreference,
-        isCompactShell,
-      }),
-      terminalFocusedContinuousFrames: shouldUseTerminalFocusedWorkerProfile({
-        activeFileId,
-        workspaceTab,
-        terminalInputModePreference,
-        isCompactShell,
-      }),
-    });
+    void controller
+      .requestConfigureExecution({
+        delayMs: toWorkerDelayMs(delay),
+        speedMultiplier,
+        frameBudgetMs: resolveWorkerFrameBudgetMs({
+          activeFileId,
+          workspaceTab,
+          terminalInputModePreference,
+          isCompactShell,
+          environmentFrameBudgetMs: getFrameBudgetForEnvironment(),
+        }),
+        publishMemoryDuringContinuousFrames: !shouldUseTerminalFocusedWorkerProfile({
+          activeFileId,
+          workspaceTab,
+          terminalInputModePreference,
+          isCompactShell,
+        }),
+        terminalFocusedContinuousFrames: shouldUseTerminalFocusedWorkerProfile({
+          activeFileId,
+          workspaceTab,
+          terminalInputModePreference,
+          isCompactShell,
+        }),
+      })
+      .catch((error) => {
+        if (!isDisposedWorkerRuntimeError(error)) {
+          console.error(error);
+        }
+      });
   }, [
     activeFileId,
     delay,
@@ -858,8 +908,14 @@ export const useEmulatorEvents = () => {
     }
 
     void (async () => {
-      await controller.requestSnapshot();
-      syncStoreFromEmulatorRef.current(emulator, { forceRegisterSync: true });
+      try {
+        await controller.requestSnapshot();
+        syncStoreFromEmulatorRef.current(emulator, { forceRegisterSync: true });
+      } catch (error) {
+        if (!isDisposedWorkerRuntimeError(error)) {
+          console.error(error);
+        }
+      }
     })();
   }, [workspaceTab]);
 
@@ -882,18 +938,39 @@ export const useEmulatorEvents = () => {
   }, [runtimeIntents.run]);
 
   useEffect(() => {
-    if (!pendingRunUntilGeometryRef.current || terminalGeometryVersion <= 1) {
+    const nextGeometrySignature = `${terminalColumns}x${terminalRows}`;
+    const previousGeometrySignature = lastHandledNibblesGeometrySignatureRef.current;
+    lastHandledNibblesGeometrySignatureRef.current = nextGeometrySignature;
+
+    if (pendingRunUntilGeometryRef.current && terminalGeometryVersion > 1) {
+      if (pendingRunRetryTimeoutRef.current !== null) {
+        window.clearTimeout(pendingRunRetryTimeoutRef.current);
+        pendingRunRetryTimeoutRef.current = null;
+      }
+      pendingRunUntilGeometryRef.current = false;
+      pendingRunRetryCountRef.current = 0;
+      handleRunRef.current();
       return;
     }
 
-    if (pendingRunRetryTimeoutRef.current !== null) {
-      window.clearTimeout(pendingRunRetryTimeoutRef.current);
-      pendingRunRetryTimeoutRef.current = null;
+    if (
+      activeFileId !== NIBBLES_FILE_ID ||
+      !emulatorRef.current ||
+      previousGeometrySignature === nextGeometrySignature ||
+      isInitializingRuntimeRef.current ||
+      pendingRunUntilGeometryRef.current ||
+      !ideStore.getState().emulator.executionState.started
+    ) {
+      return;
     }
-    pendingRunUntilGeometryRef.current = false;
-    pendingRunRetryCountRef.current = 0;
+
+    const runtimeMeta = emulatorRef.current.getTerminalMeta?.();
+    if (runtimeMeta?.columns === terminalColumns && runtimeMeta?.rows === terminalRows) {
+      return;
+    }
+
     handleRunRef.current();
-  }, [terminalGeometryVersion]);
+  }, [activeFileId, terminalColumns, terminalRows, terminalGeometryVersion]);
 
   useEffect(() => {
     if (runtimeIntents.resume === previousResumeIntentRef.current) {

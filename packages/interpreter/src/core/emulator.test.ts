@@ -69,6 +69,22 @@ function readSymbolLong(emulator: Emulator, symbol: string): number {
   );
 }
 
+function readSymbolWord(emulator: Emulator, symbol: string): number {
+  const address = emulator.getSymbolAddress(symbol);
+  if (typeof address !== 'number') {
+    throw new Error(`Missing symbol: ${symbol}`);
+  }
+
+  const bytes = emulator.readMemoryRange(address, 2);
+  return ((bytes[0] ?? 0) << 8) | (bytes[1] ?? 0);
+}
+
+function expectCenteredLine(lines: string[], columns: number, marker: string): void {
+  const row = lines.findIndex((line) => line.includes(marker));
+  expect(row).toBeGreaterThanOrEqual(0);
+  expect(lines[row]?.indexOf(marker)).toBe(Math.floor((columns - marker.length) / 2));
+}
+
 function writeSymbolByte(emulator: Emulator, symbol: string, value: number): void {
   const address = emulator.getSymbolAddress(symbol);
   if (typeof address !== 'number') {
@@ -88,6 +104,18 @@ function readArenaWord(emulator: Emulator, x: number, y: number): number {
   const offset = boardAddress + ((y * columns + x) * 2);
   const bytes = emulator.readMemoryRange(offset, 2);
   return ((bytes[0] ?? 0) << 8) | (bytes[1] ?? 0);
+}
+
+function writeArenaWord(emulator: Emulator, x: number, y: number, value: number): void {
+  const boardAddress = emulator.getSymbolAddress('SNK_SCR');
+  const columns = readSymbolByte(emulator, 'BOARD_COLS');
+  if (typeof boardAddress !== 'number') {
+    throw new Error('Missing symbol: SNK_SCR');
+  }
+
+  const offset = boardAddress + ((y * columns + x) * 2);
+  emulator.writeMemoryByte(offset, (value >> 8) & 0xff);
+  emulator.writeMemoryByte(offset + 1, value & 0xff);
 }
 
 function seedNibblesHostLayout(
@@ -585,29 +613,37 @@ _SGETCH
 
   it('renders the real Nibbles splash and menu text into the terminal', () => {
     const sourceBytes = new Uint8Array(readFileSync(nibblesPath));
-    const emulator = new Emulator(sourceBytes);
+    const emulator = new Emulator(sourceBytes, { columns: 80, rows: 25 });
 
-    runUntil(
-      emulator,
-      (instance) => {
-        const renderedText = instance.getTerminalText();
-        return (
-          renderedText.includes('Difficulty') &&
-          renderedText.includes('Joshua Bellamy') &&
-          renderedText.includes('smysnk.com')
-        );
-      },
-      40000
-    );
+    seedNibblesHostLayout(emulator, {
+      columns: 80,
+      rows: 25,
+      layoutProfile: 0,
+    });
+
+    runUntil(emulator, (instance) => instance.isWaitingForInput(), 200000);
     const terminalMeta = emulator.getTerminalMeta();
     const renderedText = emulator.getTerminalText();
+    const renderedLines = renderedText.split('\n');
 
     expect(emulator.getException()).toBeUndefined();
     expect(emulator.getErrors()).toEqual([]);
     expect(terminalMeta.output.includes('\u001b[2J')).toBe(true);
-    expect(renderedText.includes('Difficulty')).toBe(true);
+    expect(renderedText.includes('DIFFICULTY')).toBe(true);
+    expect(renderedText.includes('NEON SERPENT ARCADE')).toBe(true);
     expect(renderedText.includes('Joshua Bellamy')).toBe(true);
     expect(renderedText.includes('smysnk.com')).toBe(true);
+    expect(renderedLines[0]).toBe(`┌${'─'.repeat(78)}┐`);
+    expect(renderedLines[24]).toBe(`└${'─'.repeat(78)}┘`);
+    expectCenteredLine(renderedLines, 80, 'NIBBLES');
+    expectCenteredLine(renderedLines, 80, 'NEON SERPENT ARCADE');
+    expectCenteredLine(renderedLines, 80, 'SELECT DIFFICULTY');
+    expect(renderedLines.findIndex((line) => line.includes('EASY'))).toBeGreaterThan(
+      renderedLines.findIndex((line) => line.includes('SELECT DIFFICULTY'))
+    );
+    expect(renderedLines.findIndex((line) => line.includes('MEDIUM'))).toBe(
+      renderedLines.findIndex((line) => line.includes('EASY')) + 2
+    );
   }, 15000);
 
   it('renders the portrait intro when the host seeds a portrait layout profile', () => {
@@ -620,23 +656,59 @@ _SGETCH
       layoutProfile: 2,
     });
 
-    runUntil(
-      emulator,
-      (instance) => {
-        const renderedText = instance.getTerminalText();
-        return renderedText.includes('Tap difficulty') && renderedText.includes('Difficulty');
-      },
-      40000
-    );
+    runUntil(emulator, (instance) => instance.isWaitingForInput(), 200000);
 
     const renderedText = emulator.getTerminalText();
 
     expect(emulator.getException()).toBeUndefined();
     expect(emulator.getErrors()).toEqual([]);
     expect(readSymbolByte(emulator, 'LAYOUT_PROFILE')).toBe(2);
+    expect(renderedText).toContain('NEON SERPENT');
+    expect(renderedText).toContain('DIFFICULTY');
     expect(renderedText).toContain('Tap difficulty');
     expect(renderedText).not.toContain('Touch the rows or use');
+    const portraitLines = renderedText.split('\n');
+    expectCenteredLine(portraitLines, 38, 'NIBBLES');
+    expectCenteredLine(portraitLines, 38, 'SELECT DIFFICULTY');
+    expect(portraitLines[8]?.includes('┌────────────┐')).toBe(true);
+    expect(portraitLines[19]?.includes('└────────────┘')).toBe(true);
   }, 15000);
+
+  it('renders a stylized desktop border with a bottom-row HUD', () => {
+    const sourceBytes = new Uint8Array(readFileSync(nibblesPath));
+    const emulator = new Emulator(sourceBytes, { columns: 80, rows: 25 });
+
+    seedNibblesHostLayout(emulator, {
+      columns: 80,
+      rows: 25,
+      layoutProfile: 0,
+    });
+
+    runUntil(emulator, (instance) => instance.isWaitingForInput(), 40000);
+    dispatchNibblesTouch(emulator, {
+      row: 14,
+      col: 8,
+    });
+
+    runUntil(
+      emulator,
+      (instance) => instance.getTerminalText().includes('LEVEL:') && instance.getTerminalText().includes('█'),
+      500000
+    );
+
+    const renderedLines = emulator.getTerminalText().split('\n');
+
+    expect(readSymbolByte(emulator, 'VIEWPORT_COLS')).toBe(80);
+    expect(readSymbolByte(emulator, 'VIEWPORT_ROWS')).toBe(24);
+    expect(readArenaWord(emulator, 0, 0)).toBe(0xfffe);
+    expect(readArenaWord(emulator, 79, 23)).toBe(0xfffe);
+    expect(renderedLines[0]).toBe(`┌${'─'.repeat(78)}┐`);
+    expect(renderedLines[1]).toBe(`│${' '.repeat(78)}│`);
+    expect(renderedLines[23]).toBe(`└${'─'.repeat(78)}┘`);
+    expect(renderedLines[24]).toContain('SCORE:');
+    expect(renderedLines[24]).toContain('LIVES:');
+    expect(renderedLines[24]).toContain('LEVEL:');
+  }, 20000);
 
   it('renders a compact portrait gameplay HUD and can steer by screen direction', () => {
     const sourceBytes = new Uint8Array(readFileSync(nibblesPath));
@@ -650,8 +722,8 @@ _SGETCH
 
     runUntil(emulator, (instance) => instance.isWaitingForInput(), 40000);
     dispatchNibblesTouch(emulator, {
-      row: 8,
-      col: 4,
+      row: 14,
+      col: 12,
     });
 
     runUntil(
@@ -675,10 +747,11 @@ _SGETCH
     expect(readArenaWord(emulator, 29, 18)).toBe(0xfffe);
     expect(readSymbolByte(emulator, 'POS_X')).toBe(15);
     expect(readSymbolByte(emulator, 'POS_Y')).toBe(9);
-    expect(renderedLines[1]).toBe('##############################');
-    expect(renderedLines[2]).toBe('#                            #');
-    expect(renderedLines[10]).toContain('█');
-    expect(renderedLines[19]).toBe('##############################');
+    expect(renderedLines[0]).toBe(`┌${'─'.repeat(28)}┐`);
+    expect(renderedLines[1]).toBe(`│${' '.repeat(28)}│`);
+    expect(renderedLines.some((line) => line.includes('█'))).toBe(true);
+    expect(renderedLines[18]).toBe(`└${'─'.repeat(28)}┘`);
+    expect(renderedLines[19]).toContain('S:0  L:5  Lv:1');
 
     dispatchNibblesTouch(emulator, {
       row: 18,
@@ -711,8 +784,8 @@ _SGETCH
 
     runUntil(emulator, (instance) => instance.isWaitingForInput(), 40000);
     dispatchNibblesTouch(emulator, {
-      row: 11,
-      col: 4,
+      row: 14,
+      col: 12,
     });
 
     runUntil(
@@ -744,6 +817,62 @@ _SGETCH
     expect(readSymbolByte(emulator, 'MOVING')).toBe(1);
   }, 20000);
 
+  it('allows steering while growing and only grows by one segment per food', () => {
+    const sourceBytes = new Uint8Array(readFileSync(nibblesPath));
+    const emulator = new Emulator(sourceBytes, { columns: 30, rows: 20 });
+
+    seedNibblesHostLayout(emulator, {
+      columns: 30,
+      rows: 20,
+      layoutProfile: 2,
+    });
+
+    runUntil(emulator, (instance) => instance.isWaitingForInput(), 40000);
+    dispatchNibblesTouch(emulator, {
+      row: 14,
+      col: 12,
+    });
+
+    runUntil(
+      emulator,
+      (instance) => instance.getTerminalText().includes('Lv:1') && instance.getTerminalText().includes('█'),
+      500000
+    );
+
+    dispatchNibblesTouch(emulator, {
+      row: 10,
+      col: 28,
+      phase: 2,
+    });
+    runUntil(emulator, () => readSymbolByte(emulator, 'DIRECTION') === 1, 5000);
+
+    const startX = readSymbolByte(emulator, 'POS_X');
+    const startY = readSymbolByte(emulator, 'POS_Y');
+    const startLife = readSymbolWord(emulator, 'SNK_LIFE');
+
+    writeArenaWord(emulator, startX + 1, startY, 0xffff);
+    writeSymbolByte(emulator, 'FOOD_AVAIL', 1);
+
+    runUntil(emulator, () => readSymbolWord(emulator, 'SNK_LIFE') === startLife + 1, 250000);
+
+    expect(readSymbolByte(emulator, 'POS_X')).toBe(startX + 1);
+    expect(readSymbolByte(emulator, 'SCORE')).toBe(1);
+    expect(readSymbolByte(emulator, 'FOOD_NUM')).toBe(1);
+    expect(readSymbolByte(emulator, 'DELAY_DECAY')).toBe(1);
+    expect(readSymbolWord(emulator, 'SNK_LIFE')).toBe(startLife + 1);
+
+    dispatchNibblesTouch(emulator, {
+      row: 2,
+      col: 15,
+      phase: 2,
+    });
+    runUntil(emulator, () => readSymbolByte(emulator, 'DIRECTION') === 2, 5000);
+    runUntil(emulator, () => readSymbolByte(emulator, 'POS_Y') === startY - 1, 250000);
+
+    expect(readSymbolByte(emulator, 'LAST_DIR')).toBe(2);
+    expect(readSymbolByte(emulator, 'MOVING')).toBe(1);
+  }, 20000);
+
   it('treats shallow wide terminals as mobile landscape and keeps a one-line HUD', () => {
     const sourceBytes = new Uint8Array(readFileSync(nibblesPath));
     const emulator = new Emulator(sourceBytes, { columns: 52, rows: 14 });
@@ -756,13 +885,13 @@ _SGETCH
 
     runUntil(emulator, (instance) => instance.isWaitingForInput(), 40000);
     dispatchNibblesTouch(emulator, {
-      row: 8,
-      col: 7,
+      row: 7,
+      col: 26,
     });
 
     runUntil(
       emulator,
-      (instance) => instance.getTerminalText().includes('Touch'),
+      (instance) => instance.getTerminalText().includes('Lv:1'),
       500000
     );
 
@@ -773,7 +902,7 @@ _SGETCH
     expect(readSymbolByte(emulator, 'VIEWPORT_ROWS')).toBe(13);
     expect(readArenaWord(emulator, 0, 0)).toBe(0xfffe);
     expect(readArenaWord(emulator, 51, 12)).toBe(0xfffe);
-    expect(renderedText).toContain('Touch');
+    expect(renderedText).toContain('S:0  L:5  Lv:1');
     expect(renderedText).not.toContain('Touch to steer');
   }, 20000);
 });

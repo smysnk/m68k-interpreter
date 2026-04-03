@@ -8,7 +8,14 @@ import {
 } from '@/runtime/idePerformanceTelemetry';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { useEmulatorStore } from '@/stores/emulatorStore';
-import { ideStore, requestFocusTerminal, resetSettingsState, setEditorTheme, setTerminalInputMode } from '@/store';
+import {
+  ideStore,
+  requestFocusTerminal,
+  resetSettingsState,
+  setActiveFile,
+  setEditorTheme,
+  setTerminalInputMode,
+} from '@/store';
 import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
 
@@ -26,6 +33,7 @@ describe('Terminal', () => {
   beforeEach(() => {
     useEmulatorStore.getState().reset();
     ideStore.dispatch(resetSettingsState());
+    ideStore.dispatch(setActiveFile('workspace:scratch.asm'));
     setViewportWidth(1280);
     resetIdePerformanceTelemetry();
     (
@@ -398,6 +406,22 @@ describe('Terminal', () => {
     expect(terminalScreen).toHaveAttribute('data-terminal-input-mode', 'touch-only');
     expect(screen.getByTestId('terminal-touch-overlay')).toBeInTheDocument();
     expect(queueInput).not.toHaveBeenCalled();
+  });
+
+  it('marks the terminal as a game screen when Nibbles is the active file', () => {
+    ideStore.dispatch(setActiveFile('example:nibbles.asm'));
+
+    renderWithIdeProviders(<Terminal />);
+
+    expect(screen.getByTestId('terminal-screen')).toHaveAttribute('data-terminal-game-screen', 'true');
+  });
+
+  it('does not mark the terminal as a game screen for non-Nibbles files', () => {
+    ideStore.dispatch(setActiveFile('workspace:scratch.asm'));
+
+    renderWithIdeProviders(<Terminal />);
+
+    expect(screen.getByTestId('terminal-screen')).toHaveAttribute('data-terminal-game-screen', 'false');
   });
 
   it('maps pointer presses to terminal cells and publishes touch mailbox bytes in touch-only mode', async () => {
