@@ -647,6 +647,144 @@ describe('Terminal', () => {
     expect(ideStore.getState().emulator.runtimeIntents.resume).toBeGreaterThan(0);
   });
 
+  it('treats a long press as a single touch until the pointer is released', async () => {
+    const frameBuffer = createTerminalFrameBuffer(10, 5);
+    const terminalMeta = {
+      columns: 10,
+      rows: 5,
+      cursorRow: 0,
+      cursorColumn: 0,
+      output: '',
+      version: frameBuffer.version,
+      geometryVersion: frameBuffer.geometryVersion,
+    };
+    const requestDispatchTouchPacket = vi.fn(async () => true);
+
+    useEmulatorStore.getState().setTerminalSnapshot({
+      columns: 10,
+      rows: 5,
+      cursorRow: 0,
+      cursorColumn: 0,
+      output: 'NIBBLES',
+      lines: ['NIBBLES   ', '          ', '          ', '          ', '          '],
+      cells: Array.from({ length: 5 }, (_, rowIndex) =>
+        Array.from({ length: 10 }, (_, columnIndex) => ({
+          char: rowIndex === 0 ? 'NIBBLES   '[columnIndex] ?? ' ' : ' ',
+          foreground: null,
+          background: null,
+          bold: false,
+          inverse: false,
+        }))
+      ),
+    });
+    useEmulatorStore.getState().setExecutionState({
+      started: true,
+      ended: false,
+      stopped: false,
+    });
+    useEmulatorStore.getState().setEmulatorInstance({
+      controller: {
+        requestDispatchTouchPacket,
+        requestResizeTerminal: vi.fn(async () => undefined),
+      },
+      getRuntimeTransport() {
+        return 'worker';
+      },
+      getSymbolAddress(symbol: string) {
+        switch (symbol) {
+          case 'TOUCH_PENDING':
+            return 0x2010;
+          case 'TOUCH_PHASE':
+            return 0x2011;
+          case 'TOUCH_ROW':
+            return 0x2012;
+          case 'TOUCH_COL':
+            return 0x2013;
+          case 'TOUCH_FLAGS':
+            return 0x2014;
+          case 'TOUCH_ISR':
+            return 0x3000;
+          default:
+            return undefined;
+        }
+      },
+      getTerminalFrameBuffer() {
+        return frameBuffer;
+      },
+      getTerminalMeta() {
+        return terminalMeta;
+      },
+    } as unknown as Emulator);
+
+    ideStore.dispatch(setTerminalInputMode('touch-only'));
+    setViewportWidth(600);
+    renderWithIdeProviders(<Terminal />);
+
+    const gridElement = document.querySelector('.retro-lcd__grid') as HTMLElement | null;
+    expect(gridElement).not.toBeNull();
+    vi.spyOn(gridElement as HTMLElement, 'getBoundingClientRect').mockReturnValue({
+      x: 10,
+      y: 20,
+      top: 20,
+      left: 10,
+      right: 110,
+      bottom: 70,
+      width: 100,
+      height: 50,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    const overlay = screen.getByTestId('terminal-touch-overlay');
+
+    fireEvent.pointerDown(overlay, {
+      clientX: 56,
+      clientY: 46,
+      pointerId: 1,
+      pointerType: 'touch',
+      buttons: 1,
+    });
+
+    await waitFor(() => {
+      expect(requestDispatchTouchPacket).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.pointerMove(overlay, {
+      clientX: 86,
+      clientY: 46,
+      pointerId: 1,
+      pointerType: 'touch',
+      buttons: 1,
+    });
+    fireEvent.pointerDown(overlay, {
+      clientX: 86,
+      clientY: 46,
+      pointerId: 2,
+      pointerType: 'touch',
+      buttons: 1,
+    });
+
+    expect(requestDispatchTouchPacket).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerUp(overlay, {
+      clientX: 56,
+      clientY: 46,
+      pointerId: 1,
+      pointerType: 'touch',
+      buttons: 0,
+    });
+    fireEvent.pointerDown(overlay, {
+      clientX: 86,
+      clientY: 46,
+      pointerId: 2,
+      pointerType: 'touch',
+      buttons: 1,
+    });
+
+    await waitFor(() => {
+      expect(requestDispatchTouchPacket).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('forwards page-level keyboard input into the emulator queue when the page is active', () => {
     const queueInput = vi.fn();
     const hasFocusSpy = vi.spyOn(document, 'hasFocus').mockReturnValue(true);

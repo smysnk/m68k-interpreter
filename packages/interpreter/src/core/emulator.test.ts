@@ -79,10 +79,44 @@ function readSymbolWord(emulator: Emulator, symbol: string): number {
   return ((bytes[0] ?? 0) << 8) | (bytes[1] ?? 0);
 }
 
+function writeSymbolLong(emulator: Emulator, symbol: string, value: number): void {
+  const address = emulator.getSymbolAddress(symbol);
+  if (typeof address !== 'number') {
+    throw new Error(`Missing symbol: ${symbol}`);
+  }
+
+  emulator.writeMemoryByte(address, (value >>> 24) & 0xff);
+  emulator.writeMemoryByte(address + 1, (value >>> 16) & 0xff);
+  emulator.writeMemoryByte(address + 2, (value >>> 8) & 0xff);
+  emulator.writeMemoryByte(address + 3, value & 0xff);
+}
+
 function expectCenteredLine(lines: string[], columns: number, marker: string): void {
   const row = lines.findIndex((line) => line.includes(marker));
   expect(row).toBeGreaterThanOrEqual(0);
   expect(lines[row]?.indexOf(marker)).toBe(Math.floor((columns - marker.length) / 2));
+}
+
+function expectBoxedButton(lines: string[], marker: string): {
+  row: number;
+  leftBorder: number;
+  rightBorder: number;
+} {
+  const row = lines.findIndex((line) => line.includes(marker));
+  expect(row).toBeGreaterThanOrEqual(0);
+  const labelCol = lines[row]?.indexOf(marker) ?? -1;
+  expect(labelCol).toBeGreaterThanOrEqual(0);
+  const leftBorder = lines[row]?.lastIndexOf('│', labelCol) ?? -1;
+  const rightBorder = lines[row]?.indexOf('│', labelCol + marker.length) ?? -1;
+  expect(leftBorder).toBeGreaterThanOrEqual(0);
+  expect(rightBorder).toBeGreaterThan(leftBorder);
+  expect(lines[row - 1]?.slice(leftBorder, rightBorder + 1)).toBe(
+    `┌${'─'.repeat(rightBorder - leftBorder - 1)}┐`
+  );
+  expect(lines[row + 1]?.slice(leftBorder, rightBorder + 1)).toBe(
+    `└${'─'.repeat(rightBorder - leftBorder - 1)}┘`
+  );
+  return { row, leftBorder, rightBorder };
 }
 
 function writeSymbolByte(emulator: Emulator, symbol: string, value: number): void {
@@ -104,6 +138,21 @@ function readArenaWord(emulator: Emulator, x: number, y: number): number {
   const offset = boardAddress + ((y * columns + x) * 2);
   const bytes = emulator.readMemoryRange(offset, 2);
   return ((bytes[0] ?? 0) << 8) | (bytes[1] ?? 0);
+}
+
+function findArenaWord(emulator: Emulator, value: number): { x: number; y: number } | null {
+  const columns = readSymbolByte(emulator, 'BOARD_COLS');
+  const rows = readSymbolByte(emulator, 'BOARD_ROWS');
+
+  for (let y = 0; y < rows; y += 1) {
+    for (let x = 0; x < columns; x += 1) {
+      if (readArenaWord(emulator, x, y) === value) {
+        return { x, y };
+      }
+    }
+  }
+
+  return null;
 }
 
 function writeArenaWord(emulator: Emulator, x: number, y: number, value: number): void {
@@ -670,8 +719,13 @@ _SGETCH
     const portraitLines = renderedText.split('\n');
     expectCenteredLine(portraitLines, 38, 'NIBBLES');
     expectCenteredLine(portraitLines, 38, 'SELECT DIFFICULTY');
-    expect(portraitLines[8]?.includes('┌────────────┐')).toBe(true);
-    expect(portraitLines[19]?.includes('└────────────┘')).toBe(true);
+    const easyButton = expectBoxedButton(portraitLines, 'EASY');
+    const mediumButton = expectBoxedButton(portraitLines, 'MEDIUM');
+    const hardButton = expectBoxedButton(portraitLines, 'HARD');
+    const insaneButton = expectBoxedButton(portraitLines, 'INSANE');
+    expect(mediumButton.leftBorder - easyButton.rightBorder).toBeGreaterThan(1);
+    expect(hardButton.row - easyButton.row).toBeGreaterThan(1);
+    expect(insaneButton.leftBorder - hardButton.rightBorder).toBeGreaterThan(1);
   }, 15000);
 
   it('renders a stylized desktop border with a bottom-row HUD', () => {
@@ -722,8 +776,8 @@ _SGETCH
 
     runUntil(emulator, (instance) => instance.isWaitingForInput(), 40000);
     dispatchNibblesTouch(emulator, {
-      row: 14,
-      col: 12,
+      row: 10,
+      col: 20,
     });
 
     runUntil(
@@ -754,22 +808,41 @@ _SGETCH
     expect(renderedLines[19]).toContain('S:0  L:5  Lv:1');
 
     dispatchNibblesTouch(emulator, {
-      row: 18,
-      col: 28,
+      row: 11,
+      col: 24,
       phase: 2,
     });
     runUntil(emulator, () => readSymbolByte(emulator, 'DIRECTION') === 1, 5000);
     expect(readSymbolByte(emulator, 'MOVING')).toBe(1);
     expect(readSymbolByte(emulator, 'DIRECTION')).toBe(1);
 
-    writeSymbolByte(emulator, 'LAST_DIR', 1);
     dispatchNibblesTouch(emulator, {
-      row: 18,
-      col: 2,
+      row: 4,
+      col: 15,
       phase: 2,
     });
-    runUntil(emulator, () => readSymbolByte(emulator, 'TOUCH_PENDING') === 0, 100);
-    expect(readSymbolByte(emulator, 'DIRECTION')).toBe(1);
+    runUntil(emulator, () => readSymbolByte(emulator, 'DIRECTION') === 2, 5000);
+    expect(readSymbolByte(emulator, 'DIRECTION')).toBe(2);
+
+    writeSymbolByte(emulator, 'LAST_DIR', 1);
+    writeSymbolByte(emulator, 'DIRECTION', 1);
+    dispatchNibblesTouch(emulator, {
+      row: 4,
+      col: 3,
+      phase: 2,
+    });
+    runUntil(emulator, () => readSymbolByte(emulator, 'DIRECTION') === 2, 5000);
+    expect(readSymbolByte(emulator, 'DIRECTION')).toBe(2);
+
+    writeSymbolByte(emulator, 'LAST_DIR', 1);
+    writeSymbolByte(emulator, 'DIRECTION', 1);
+    dispatchNibblesTouch(emulator, {
+      row: 11,
+      col: 7,
+      phase: 2,
+    });
+    runUntil(emulator, () => readSymbolByte(emulator, 'DIRECTION') === 3, 5000);
+    expect(readSymbolByte(emulator, 'DIRECTION')).toBe(3);
   }, 20000);
 
   it('advances through several consecutive gameplay moves within a browser-sized step budget', () => {
@@ -784,8 +857,8 @@ _SGETCH
 
     runUntil(emulator, (instance) => instance.isWaitingForInput(), 40000);
     dispatchNibblesTouch(emulator, {
-      row: 14,
-      col: 12,
+      row: 10,
+      col: 20,
     });
 
     runUntil(
@@ -829,8 +902,8 @@ _SGETCH
 
     runUntil(emulator, (instance) => instance.isWaitingForInput(), 40000);
     dispatchNibblesTouch(emulator, {
-      row: 14,
-      col: 12,
+      row: 10,
+      col: 20,
     });
 
     runUntil(
@@ -873,6 +946,54 @@ _SGETCH
     expect(readSymbolByte(emulator, 'MOVING')).toBe(1);
   }, 20000);
 
+  it('spawns and renders the next food immediately after losing a life', () => {
+    const sourceBytes = new Uint8Array(readFileSync(nibblesPath));
+    const emulator = new Emulator(sourceBytes, { columns: 30, rows: 20 });
+
+    seedNibblesHostLayout(emulator, {
+      columns: 30,
+      rows: 20,
+      layoutProfile: 2,
+    });
+
+    runUntil(emulator, (instance) => instance.isWaitingForInput(), 40000);
+    dispatchNibblesTouch(emulator, {
+      row: 10,
+      col: 20,
+    });
+
+    runUntil(
+      emulator,
+      (instance) => instance.getTerminalText().includes('Lv:1') && instance.getTerminalText().includes('█'),
+      500000
+    );
+
+    const boardCols = readSymbolByte(emulator, 'BOARD_COLS');
+    writeSymbolByte(emulator, 'POS_X', boardCols - 1);
+    writeSymbolByte(emulator, 'DIRECTION', 1);
+    writeSymbolByte(emulator, 'LAST_DIR', 1);
+    writeSymbolByte(emulator, 'MOVING', 1);
+    writeSymbolLong(emulator, 'TIMER', readSymbolLong(emulator, 'SNK_SPEED') - 1);
+
+    runUntil(
+      emulator,
+      (instance) =>
+        readSymbolByte(instance, 'LIVES') === 4 &&
+        readSymbolByte(instance, 'POS_X') === Math.floor(readSymbolByte(instance, 'BOARD_COLS') / 2) &&
+        readSymbolByte(instance, 'POS_Y') === Math.floor(readSymbolByte(instance, 'BOARD_ROWS') / 2) &&
+        readSymbolByte(instance, 'FOOD_AVAIL') === 1,
+      500000
+    );
+
+    expect(readSymbolByte(emulator, 'FOOD_AVAIL')).toBe(1);
+    const foodPosition = findArenaWord(emulator, 0xffff);
+    expect(foodPosition).not.toBeNull();
+
+    const renderedLines = emulator.getTerminalText().split('\n');
+    const foodDigit = String.fromCharCode(0x30 + readSymbolByte(emulator, 'FOOD_NUM'));
+    expect(renderedLines[foodPosition!.y]?.[foodPosition!.x]).toBe(foodDigit);
+  }, 20000);
+
   it('treats shallow wide terminals as mobile landscape and keeps a one-line HUD', () => {
     const sourceBytes = new Uint8Array(readFileSync(nibblesPath));
     const emulator = new Emulator(sourceBytes, { columns: 52, rows: 14 });
@@ -886,7 +1007,7 @@ _SGETCH
     runUntil(emulator, (instance) => instance.isWaitingForInput(), 40000);
     dispatchNibblesTouch(emulator, {
       row: 7,
-      col: 26,
+      col: 30,
     });
 
     runUntil(

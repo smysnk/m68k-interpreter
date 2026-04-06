@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { ExecutionState } from '@m68k/interpreter';
 import {
   RetroLcd,
@@ -37,6 +37,7 @@ import { useCompactShell } from '@/hooks/useCompactShell';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import { NIBBLES_FILE_ID, selectActiveFileId } from '@/store/filesSlice';
 import {
+  ideStore,
   requestResume,
   requestPulseResume,
   setTerminalState as setTerminalStateAction,
@@ -216,6 +217,7 @@ const Terminal: React.FC = () => {
   const geometryCommitTimeoutRef = useRef<number | null>(null);
   const lastMeasuredGeometrySignatureRef = useRef('');
   const hasCommittedMeasuredGeometryRef = useRef(false);
+  const activeTouchPointerIdRef = useRef<number | null>(null);
   const [focused, setFocused] = useState(false);
   const emulatorInstance = useSelector((state: RootState) => state.emulator.emulatorInstance);
   const executionState = useSelector((state: RootState) => state.emulator.executionState);
@@ -223,7 +225,8 @@ const Terminal: React.FC = () => {
   const focusTerminalIntent = useSelector(
     (state: RootState) => state.emulator.runtimeIntents.focusTerminal
   );
-  const terminalState = useSelector((state: RootState) => state.emulator.terminal);
+  const terminalColumns = useSelector((state: RootState) => state.emulator.terminal.columns);
+  const terminalRows = useSelector((state: RootState) => state.emulator.terminal.rows);
   const activeFileId = useSelector((state: RootState) => selectActiveFileId(state));
   const terminalInputModePreference = useSelector(
     (state: RootState) => state.settings.terminalInputMode
@@ -238,6 +241,8 @@ const Terminal: React.FC = () => {
   });
   const isTouchOnlyMode = effectiveTerminalInputMode === 'touch-only';
   const isNibblesScreen = activeFileId === NIBBLES_FILE_ID;
+  const emulatorInstanceRef = useRef(emulatorInstance);
+  const isNibblesScreenRef = useRef(isNibblesScreen);
 
   if (controllerRef.current === null) {
     controllerRef.current = createRetroLcdController({
@@ -247,6 +252,14 @@ const Terminal: React.FC = () => {
       cursorMode: 'hollow',
     });
   }
+
+  useEffect(() => {
+    emulatorInstanceRef.current = emulatorInstance;
+  }, [emulatorInstance]);
+
+  useEffect(() => {
+    isNibblesScreenRef.current = isNibblesScreen;
+  }, [isNibblesScreen]);
 
   useEffect(() => {
     const controller = controllerRef.current;
@@ -462,10 +475,10 @@ const Terminal: React.FC = () => {
 
   useEffect(() => {
     lastMeasuredGeometrySignatureRef.current = createTerminalGeometrySignature(
-      terminalState.columns,
-      terminalState.rows
+      terminalColumns,
+      terminalRows
     );
-  }, [terminalState.columns, terminalState.rows]);
+  }, [terminalColumns, terminalRows]);
 
   useEffect(() => {
     return () => {
@@ -477,11 +490,13 @@ const Terminal: React.FC = () => {
 
   const applyMeasuredGeometry = React.useCallback(
     async (columns: number, rows: number): Promise<void> => {
-      if (terminalState.columns === columns && terminalState.rows === rows) {
+      const currentTerminalState = ideStore.getState().emulator.terminal;
+      if (currentTerminalState.columns === columns && currentTerminalState.rows === rows) {
         return;
       }
 
-      if (isNibblesScreen) {
+      const runtime = emulatorInstanceRef.current;
+      if (isNibblesScreenRef.current) {
         terminalSurfaceStore.reset(columns, rows);
         dispatch(
           setTerminalStateAction({
@@ -489,35 +504,35 @@ const Terminal: React.FC = () => {
             rows,
             cursorRow: 0,
             cursorColumn: 0,
-            version: terminalState.version + 1,
-            geometryVersion: terminalState.geometryVersion + 1,
+            version: currentTerminalState.version,
+            geometryVersion: currentTerminalState.geometryVersion + 1,
           })
         );
         return;
       }
 
       if (
-        emulatorInstance?.getRuntimeTransport?.() === 'worker' &&
-        emulatorInstance.controller !== undefined
+        runtime?.getRuntimeTransport?.() === 'worker' &&
+        runtime.controller !== undefined
       ) {
         try {
-          await emulatorInstance.controller.requestResizeTerminal(columns, rows);
+          await runtime.controller.requestResizeTerminal(columns, rows);
         } catch (error) {
           if (!isDisposedWorkerRuntimeError(error)) {
             throw error;
           }
           return;
         }
-        terminalSurfaceStore.replaceFromRuntime(emulatorInstance);
-        dispatch(setTerminalStateAction(emulatorInstance.getTerminalMeta()));
+        terminalSurfaceStore.replaceFromRuntime(runtime);
+        dispatch(setTerminalStateAction(runtime.getTerminalMeta()));
         return;
       }
 
-      if (typeof emulatorInstance?.resizeTerminal === 'function') {
-        emulatorInstance.resizeTerminal(columns, rows);
-        syncRuntimeGeometryBridge(emulatorInstance, columns, rows);
-        terminalSurfaceStore.replaceFromRuntime(emulatorInstance);
-        dispatch(setTerminalStateAction(emulatorInstance.getTerminalMeta()));
+      if (typeof runtime?.resizeTerminal === 'function') {
+        runtime.resizeTerminal(columns, rows);
+        syncRuntimeGeometryBridge(runtime, columns, rows);
+        terminalSurfaceStore.replaceFromRuntime(runtime);
+        dispatch(setTerminalStateAction(runtime.getTerminalMeta()));
         return;
       }
 
@@ -528,20 +543,12 @@ const Terminal: React.FC = () => {
           rows,
           cursorRow: 0,
           cursorColumn: 0,
-          version: terminalState.version + 1,
-          geometryVersion: terminalState.geometryVersion + 1,
+          version: currentTerminalState.version,
+          geometryVersion: currentTerminalState.geometryVersion + 1,
         })
       );
     },
-    [
-      dispatch,
-      emulatorInstance,
-      isNibblesScreen,
-      terminalState.columns,
-      terminalState.geometryVersion,
-      terminalState.rows,
-      terminalState.version,
-    ]
+    [dispatch]
   );
 
   const handleGeometryChange = React.useCallback(
@@ -590,6 +597,21 @@ const Terminal: React.FC = () => {
         return;
       }
 
+      if (phase === 'up') {
+        if (activeTouchPointerIdRef.current === event.pointerId) {
+          activeTouchPointerIdRef.current = null;
+        }
+
+        try {
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+        } catch {
+          // Ignore capture release failures.
+        }
+        return;
+      }
+
       if (
         !shouldHandleTerminalPointer({
           isTouchOnlyMode,
@@ -597,6 +619,13 @@ const Terminal: React.FC = () => {
           pointerType: event.pointerType,
           buttons: event.buttons,
         })
+      ) {
+        return;
+      }
+
+      if (
+        activeTouchPointerIdRef.current !== null &&
+        activeTouchPointerIdRef.current !== event.pointerId
       ) {
         return;
       }
@@ -617,20 +646,11 @@ const Terminal: React.FC = () => {
       }
 
       if (phase === 'down') {
+        activeTouchPointerIdRef.current = event.pointerId;
         try {
           event.currentTarget.setPointerCapture(event.pointerId);
         } catch {
           // Ignore capture failures from unsupported pointer types in tests/browsers.
-        }
-      }
-
-      if (phase === 'up') {
-        try {
-          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-            event.currentTarget.releasePointerCapture(event.pointerId);
-          }
-        } catch {
-          // Ignore capture release failures.
         }
       }
 
@@ -685,6 +705,14 @@ const Terminal: React.FC = () => {
     ]
   );
 
+  const displayPadding = useMemo(
+    () =>
+      isCompactShell
+        ? { top: 3, right: 5, bottom: 3, left: 5 }
+        : { top: 4, right: 6, bottom: 4, left: 6 },
+    [isCompactShell]
+  );
+
   return (
     <section className="terminal-container" data-terminal-theme={theme.surfaceMode}>
       <div
@@ -735,11 +763,7 @@ const Terminal: React.FC = () => {
           controller={controllerRef.current}
           cursorMode="hollow"
           displayColorMode="ansi-extended"
-          displayPadding={
-            isCompactShell
-              ? { top: 3, right: 5, bottom: 3, left: 5 }
-              : { top: 4, right: 6, bottom: 4, left: 6 }
-          }
+          displayPadding={displayPadding}
           displaySurfaceMode={theme.surfaceMode}
           gridMode="auto"
           mode="terminal"

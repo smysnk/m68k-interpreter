@@ -8,6 +8,7 @@ import {
   touchTerminalRelativeDirection,
   waitForGameplay,
   waitForIntro,
+  waitForMotionAfterInput,
 } from './nibblesE2eHelpers';
 
 const viewportCases = [
@@ -51,6 +52,18 @@ function findLineIndex(lines: string[], marker: string): number {
   return lines.findIndex((line) => line.includes(marker));
 }
 
+function axisForDirection(direction: number): 'horizontal' | 'vertical' {
+  return direction === 0 || direction === 1 ? 'horizontal' : 'vertical';
+}
+
+function clampGameplayRow(value: number, rows: number): number {
+  return Math.max(2, Math.min(Math.max(rows - 1, 2), value));
+}
+
+function clampGameplayCol(value: number, cols: number): number {
+  return Math.max(2, Math.min(Math.max(cols - 1, 2), value));
+}
+
 function expectMarkerCentered(lines: string[], columns: number, marker: string): void {
   const row = findLineIndex(lines, marker);
   expect(row).toBeGreaterThanOrEqual(0);
@@ -66,10 +79,40 @@ function getMenuTouchTarget(
   const labelCol = lines[labelRow]!.indexOf(label);
   expect(labelCol).toBeGreaterThanOrEqual(0);
   return {
-    row: labelRow + 1,
+    row: labelRow,
     col: Math.max(2, labelCol - 1),
     labelRow,
     labelCol,
+  };
+}
+
+function getButtonBounds(lines: string[], label: string): {
+  row: number;
+  leftBorder: number;
+  rightBorder: number;
+  topRow: number;
+  bottomRow: number;
+} {
+  const row = findLineIndex(lines, label);
+  expect(row).toBeGreaterThanOrEqual(0);
+  const labelCol = lines[row]!.indexOf(label);
+  expect(labelCol).toBeGreaterThanOrEqual(0);
+  const leftBorder = lines[row]!.lastIndexOf('│', labelCol);
+  const rightBorder = lines[row]!.indexOf('│', labelCol + label.length);
+  expect(leftBorder).toBeGreaterThanOrEqual(0);
+  expect(rightBorder).toBeGreaterThan(leftBorder);
+  expect(lines[row - 1]?.slice(leftBorder, rightBorder + 1)).toBe(
+    `┌${'─'.repeat(rightBorder - leftBorder - 1)}┐`
+  );
+  expect(lines[row + 1]?.slice(leftBorder, rightBorder + 1)).toBe(
+    `└${'─'.repeat(rightBorder - leftBorder - 1)}┘`
+  );
+  return {
+    row,
+    leftBorder,
+    rightBorder,
+    topRow: row - 1,
+    bottomRow: row + 1,
   };
 }
 
@@ -100,12 +143,11 @@ test.describe('browser e2e nibbles mobile layouts', () => {
       const selectedDifficultyRow = safeIntroSnapshot.lines.findIndex((line) =>
         line.includes('MEDIUM')
       );
-      const easyRow = findLineIndex(safeIntroSnapshot.lines, 'EASY');
-      const easyCol = easyRow >= 0 ? safeIntroSnapshot.lines[easyRow]!.indexOf('EASY') : -1;
+      const easyButton = getButtonBounds(safeIntroSnapshot.lines, 'EASY');
+      const mediumButton = getButtonBounds(safeIntroSnapshot.lines, 'MEDIUM');
+      const hardButton = getButtonBounds(safeIntroSnapshot.lines, 'HARD');
+      const insaneButton = getButtonBounds(safeIntroSnapshot.lines, 'INSANE');
       const selectLabelRow = findLineIndex(safeIntroSnapshot.lines, 'SELECT DIFFICULTY');
-      const mediumRow = findLineIndex(safeIntroSnapshot.lines, 'MEDIUM');
-      const hardRow = findLineIndex(safeIntroSnapshot.lines, 'HARD');
-      const insaneRow = findLineIndex(safeIntroSnapshot.lines, 'INSANE');
       const introBackgroundRows = safeIntroSnapshot.cells
         .map((row, index) => (lineHasAnyBackground(row) ? index : -1))
         .filter((index) => index >= 0);
@@ -127,17 +169,22 @@ test.describe('browser e2e nibbles mobile layouts', () => {
         'SELECT DIFFICULTY'
       );
       if (viewportCase.expectedInputMode === 'touch-only') {
-        expect(safeIntroSnapshot.lines[easyRow - 1]?.includes('┌────────────┐')).toBe(true);
-        expect(safeIntroSnapshot.lines[insaneRow + 1]?.includes('└────────────┘')).toBe(true);
-        expect(easyCol).toBeGreaterThanOrEqual(0);
-        expect(safeIntroSnapshot.lines[easyRow]?.[easyCol - 3]).toBe('│');
-        expect(safeIntroSnapshot.lines[easyRow]?.[easyCol + 10]).toBe('│');
+        expect(easyButton.leftBorder - 1).toBeLessThan(mediumButton.leftBorder);
+        expect(mediumButton.leftBorder - easyButton.rightBorder).toBeGreaterThan(1);
+        expect(hardButton.topRow - easyButton.bottomRow).toBeGreaterThan(1);
+        expect(insaneButton.leftBorder - hardButton.rightBorder).toBeGreaterThan(1);
+        expect(easyButton.topRow - selectLabelRow).toBeGreaterThan(1);
+      } else {
+        const easyRow = findLineIndex(safeIntroSnapshot.lines, 'EASY');
+        const mediumRow = findLineIndex(safeIntroSnapshot.lines, 'MEDIUM');
+        const hardRow = findLineIndex(safeIntroSnapshot.lines, 'HARD');
+        const insaneRow = findLineIndex(safeIntroSnapshot.lines, 'INSANE');
+        expect(easyRow).toBeGreaterThanOrEqual(0);
+        expect(easyRow - selectLabelRow).toBeGreaterThan(1);
+        expect(mediumRow - easyRow).toBeGreaterThan(1);
+        expect(hardRow - mediumRow).toBeGreaterThan(1);
+        expect(insaneRow - hardRow).toBeGreaterThan(1);
       }
-      expect(easyRow).toBeGreaterThanOrEqual(0);
-      expect(easyRow - selectLabelRow).toBeGreaterThan(1);
-      expect(mediumRow - easyRow).toBeGreaterThan(1);
-      expect(hardRow - mediumRow).toBeGreaterThan(1);
-      expect(insaneRow - hardRow).toBeGreaterThan(1);
       expect(introBackgroundRows).toEqual([selectedDifficultyRow]);
       expect(safeIntroSnapshot.cursorVisible).toBe(false);
     });
@@ -166,7 +213,8 @@ test.describe('browser e2e nibbles mobile layouts', () => {
     const introSnapshot = await readTerminalSnapshot(page);
     expect(introSnapshot).not.toBeNull();
     const easyTarget = getMenuTouchTarget(introSnapshot!.lines, 'EASY');
-    expect(introSnapshot!.lines[easyTarget.labelRow - 1]?.includes('┌────────────┐')).toBe(true);
+    const easyBounds = getButtonBounds(introSnapshot!.lines, 'EASY');
+    expect(easyTarget.row).toBe(easyBounds.row);
 
     const gameplayState = await startGameplayFromIntroTouch(page, {
       row: easyTarget.row,
@@ -300,6 +348,75 @@ test.describe('browser e2e nibbles mobile layouts', () => {
     expect(rightActivity.ack.touchVisualCount).toBeGreaterThan(0);
   });
 
+  test('phone portrait steers from varied touch positions and alternates axis on each tap', async ({
+    page,
+  }) => {
+    test.slow();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loadNibbles(page);
+    await waitForIntro(page, { expectTouchCopy: true });
+
+    const introSnapshot = await readTerminalSnapshot(page);
+    expect(introSnapshot).not.toBeNull();
+    const easyTarget = getMenuTouchTarget(introSnapshot!.lines, 'EASY');
+
+    const gameplayState = await startGameplayFromIntroTouch(page, {
+      row: easyTarget.row,
+      col: easyTarget.col,
+      hudMarker: 'Lv:',
+      maxAttempts: 3,
+      gameplayTimeoutMs: 8_000,
+    });
+
+    const rows = gameplayState.rows ?? 0;
+    const cols = gameplayState.columns ?? 0;
+    const variedTargets = [
+      {
+        name: 'broad right lane',
+        row: clampGameplayRow(Math.ceil(rows * 0.58), rows),
+        col: clampGameplayCol(Math.ceil(cols * 0.82), cols),
+        expectedDirection: 1,
+      },
+      {
+        name: 'upper-left rebound lane',
+        row: clampGameplayRow(Math.ceil(rows * 0.22), rows),
+        col: clampGameplayCol(Math.ceil(cols * 0.18), cols),
+        expectedDirection: 2,
+      },
+      {
+        name: 'lower-right lane',
+        row: clampGameplayRow(Math.ceil(rows * 0.67), rows),
+        col: clampGameplayCol(Math.ceil(cols * 0.76), cols),
+        expectedDirection: 1,
+      },
+      {
+        name: 'lower-left rebound lane',
+        row: clampGameplayRow(Math.ceil(rows * 0.82), rows),
+        col: clampGameplayCol(Math.ceil(cols * 0.22), cols),
+        expectedDirection: 3,
+      },
+    ] as const;
+
+    let previousAxis: 'horizontal' | 'vertical' | null = null;
+
+    for (const target of variedTargets) {
+      const motion = await waitForMotionAfterInput(page, {
+        trigger: () => touchTerminalCell(page, target.row, target.col),
+        expectedDirection: target.expectedDirection,
+        timeoutMs: 8_000,
+      });
+
+      expect(motion.latencyMs).toBeLessThan(8_000);
+      const observedDirection = motion.after.lastDirection ?? motion.after.direction;
+      expect(observedDirection).toBe(target.expectedDirection);
+      const nextAxis = axisForDirection(observedDirection ?? target.expectedDirection);
+      if (previousAxis !== null) {
+        expect(nextAxis).not.toBe(previousAxis);
+      }
+      previousAxis = nextAxis;
+    }
+  });
+
   test('resizing after gameplay returns mobile players to the intro with a recalculated border', async ({
     page,
   }) => {
@@ -308,9 +425,13 @@ test.describe('browser e2e nibbles mobile layouts', () => {
     await loadNibbles(page);
     await waitForIntro(page, { expectTouchCopy: true });
 
+    const introSnapshot = await readTerminalSnapshot(page);
+    expect(introSnapshot).not.toBeNull();
+    const mediumTarget = getMenuTouchTarget(introSnapshot!.lines, 'MEDIUM');
+
     await startGameplayFromIntroTouch(page, {
-      row: 11,
-      col: 17,
+      row: mediumTarget.row,
+      col: mediumTarget.col,
       hudMarker: 'Lv:',
       maxAttempts: 3,
       gameplayTimeoutMs: 8_000,

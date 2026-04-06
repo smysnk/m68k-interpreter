@@ -109,6 +109,7 @@ loadlevel
         BSR     _DRAW_MOBILE_BORDER_ARENA
         BSR     _DRAW_HUD
         BSR     _DRAWSNK
+        BSR     _DRAWFOOD
 
 start
         TRAP	#15 ; check if we have a character waiting for us
@@ -191,6 +192,74 @@ _REQUEST_DIR_RIGHT
         MOVE.B #1, MOVING
         MOVE.B #DIR_RIGHT, DIRECTION
 req_dir_done_right
+        RTS
+
+***************************************************************
+; Function _APPLY_TOUCH_DIRECTION
+; Purpose  Apply a direction request and report whether it was legal
+; Input    D4 = direction id
+; Returns  D0 = 1 when applied, 0 when rejected/unknown
+***************************************************************
+
+_APPLY_TOUCH_DIRECTION
+        CLR.B  D0
+        CMP.B  #DIR_UP,D4
+        BEQ    touch_dir_apply_up
+        CMP.B  #DIR_DOWN,D4
+        BEQ    touch_dir_apply_down
+        CMP.B  #DIR_LEFT,D4
+        BEQ    touch_dir_apply_left
+        CMP.B  #DIR_RIGHT,D4
+        BEQ    touch_dir_apply_right
+        RTS
+touch_dir_apply_up
+        CMP.B  #DIR_DOWN,LAST_DIR
+        BEQ    touch_dir_apply_done
+        MOVE.B #1,MOVING
+        MOVE.B #DIR_UP,DIRECTION
+        MOVE.B #1,D0
+touch_dir_apply_done
+        RTS
+touch_dir_apply_down
+        CMP.B  #DIR_UP,LAST_DIR
+        BEQ    touch_dir_apply_done_down
+        MOVE.B #1,MOVING
+        MOVE.B #DIR_DOWN,DIRECTION
+        MOVE.B #1,D0
+touch_dir_apply_done_down
+        RTS
+touch_dir_apply_left
+        CMP.B  #DIR_RIGHT,LAST_DIR
+        BEQ    touch_dir_apply_done_left
+        MOVE.B #1,MOVING
+        MOVE.B #DIR_LEFT,DIRECTION
+        MOVE.B #1,D0
+touch_dir_apply_done_left
+        RTS
+touch_dir_apply_right
+        CMP.B  #DIR_LEFT,LAST_DIR
+        BEQ    touch_dir_apply_done_right
+        MOVE.B #1,MOVING
+        MOVE.B #DIR_RIGHT,DIRECTION
+        MOVE.B #1,D0
+touch_dir_apply_done_right
+        RTS
+
+***************************************************************
+; Function _APPLY_TOUCH_DIRECTION_WITH_FALLBACK
+; Purpose  Try the primary touch direction, then fall back to the
+;          secondary axis when the primary direction is illegal.
+; Input    D6 = primary direction, D7 = secondary direction or $FF
+***************************************************************
+
+_APPLY_TOUCH_DIRECTION_WITH_FALLBACK
+        MOVE.B D6,D4
+        BSR    _APPLY_TOUCH_DIRECTION
+        TST.B  D0
+        BNE    touch_dir_fallback_done
+        MOVE.B D7,D4
+        BSR    _APPLY_TOUCH_DIRECTION
+touch_dir_fallback_done
         RTS
 
 
@@ -1595,83 +1664,102 @@ diff_layout_portrait
         RTS
 
 ***************************************************************
+; Function _GET_MOBILE_DIFF_BUTTON_RECT
+; Purpose  Get the bounds for one boxed mobile difficulty button
+; Input    D7 = button index (0=easy,1=medium,2=hard,3=insane)
+; Returns  D1 = left, D2 = top, D3 = right, D6 = bottom
+***************************************************************
+
+_GET_MOBILE_DIFF_BUTTON_RECT
+        MOVE.B #26,D0
+        BSR    _GET_CENTERED_X
+        CMP.B  #LAYOUT_MOBILE_PORTRAIT,LAYOUT_PROFILE
+        BEQ    get_mobile_diff_button_rect_portrait
+        MOVE.B #6,D2
+        BRA    get_mobile_diff_button_rect_row
+get_mobile_diff_button_rect_portrait
+        MOVE.B #9,D2
+get_mobile_diff_button_rect_row
+        MOVE.B D7,D0
+        ANDI.B #1,D0
+        BEQ    get_mobile_diff_button_rect_col
+        ADDI.B #14,D1
+get_mobile_diff_button_rect_col
+        CMP.B  #2,D7
+        BLT    get_mobile_diff_button_rect_done
+        ADDI.B #4,D2
+get_mobile_diff_button_rect_done
+        MOVE.B D1,D3
+        ADDI.B #11,D3
+        MOVE.B D2,D6
+        ADDI.B #2,D6
+        RTS
+
+***************************************************************
 ; Function _DRAW_MOBILE_DIFF_BOX
-; Purpose  Draw a boxed mobile difficulty button group
+; Purpose  Draw bordered mobile difficulty buttons
 ***************************************************************
 
 _DRAW_MOBILE_DIFF_BOX
         CMP.B  #LAYOUT_DESKTOP,LAYOUT_PROFILE
         BEQ    draw_mobile_diff_box_done
         MOVEM.L D0-D7/A1,-(SP)
-        BSR    _GET_DIFF_LAYOUT
+        CLR.B  D7
+draw_mobile_diff_box_loop
+        BSR    _GET_MOBILE_DIFF_BUTTON_RECT
 
         MOVE.B D1,D4
-        SUBI.B #3,D4
-        MOVE.B D1,D5
-        ADDI.B #10,D5
-        MOVE.B D2,D6
-        SUBI.B #1,D6
-        MOVE.B D2,D7
-        MOVE.B D3,D0
-        ADD.B  D0,D7
-        ADD.B  D0,D7
-        ADD.B  D0,D7
-        ADDI.B #1,D7
+        MOVE.B D2,D5
+        MOVE.B D3,D6
 
         MOVE.B D4,D1
-        MOVE.B D6,D2
+        MOVE.B D5,D2
         BSR    _GOTOXY
         MOVEA.L #STR_COL_MAGENTA,A1
         BSR    _DISPSTR
         MOVE.B #WALL_CHAR_TOP_LEFT,D0
         BSR    _SPUTCH
-        MOVE.B D5,D1
-        SUB.B  D4,D1
-        SUBI.B #1,D1
-draw_mobile_diff_box_top
+        MOVE.B #10,D1
+draw_mobile_diff_box_top_loop
         CMP.B  #0,D1
         BEQ    draw_mobile_diff_box_top_right
         MOVE.B #WALL_CHAR_HORIZONTAL,D0
         BSR    _SPUTCH
         SUBI.B #1,D1
-        BRA    draw_mobile_diff_box_top
+        BRA    draw_mobile_diff_box_top_loop
 draw_mobile_diff_box_top_right
         MOVE.B #WALL_CHAR_TOP_RIGHT,D0
         BSR    _SPUTCH
 
-        MOVE.B D6,D0
-        ADDI.B #1,D0
-draw_mobile_diff_box_sides
-        CMP.B  D7,D0
-        BGE    draw_mobile_diff_box_bottom
         MOVE.B D4,D1
-        MOVE.B D0,D2
+        MOVE.B D5,D2
+        ADDI.B #1,D2
         BSR    _GOTOXY
         MOVEA.L #STR_COL_MAGENTA,A1
         BSR    _DISPSTR
         MOVE.B #WALL_CHAR_VERTICAL,D0
         BSR    _SPUTCH
-        MOVE.B D5,D1
-        BSR    _GOTOXY
-        MOVEA.L #STR_COL_MAGENTA,A1
-        BSR    _DISPSTR
+        MOVE.B #10,D1
+draw_mobile_diff_box_middle_loop
+        CMP.B  #0,D1
+        BEQ    draw_mobile_diff_box_middle_right
+        MOVE.B #' ',D0
+        BSR    _SPUTCH
+        SUBI.B #1,D1
+        BRA    draw_mobile_diff_box_middle_loop
+draw_mobile_diff_box_middle_right
         MOVE.B #WALL_CHAR_VERTICAL,D0
         BSR    _SPUTCH
-        MOVE.B D2,D0
-        ADDI.B #1,D0
-        BRA    draw_mobile_diff_box_sides
 
-draw_mobile_diff_box_bottom
         MOVE.B D4,D1
-        MOVE.B D7,D2
+        MOVE.B D5,D2
+        ADDI.B #2,D2
         BSR    _GOTOXY
         MOVEA.L #STR_COL_MAGENTA,A1
         BSR    _DISPSTR
         MOVE.B #WALL_CHAR_BOTTOM_LEFT,D0
         BSR    _SPUTCH
-        MOVE.B D5,D1
-        SUB.B  D4,D1
-        SUBI.B #1,D1
+        MOVE.B #10,D1
 draw_mobile_diff_box_bottom_loop
         CMP.B  #0,D1
         BEQ    draw_mobile_diff_box_bottom_right
@@ -1682,6 +1770,10 @@ draw_mobile_diff_box_bottom_loop
 draw_mobile_diff_box_bottom_right
         MOVE.B #WALL_CHAR_BOTTOM_RIGHT,D0
         BSR    _SPUTCH
+
+        ADDI.B #1,D7
+        CMP.B  #4,D7
+        BLT    draw_mobile_diff_box_loop
         MOVEA.L #STR_COL_DEFAULT,A1
         BSR    _DISPSTR
         MOVEM.L (SP)+,D0-D7/A1
@@ -1718,19 +1810,9 @@ apply_diff_hard
 ***************************************************************
 
 _HANDLE_INTRO_TOUCH
-        BSR    _GET_DIFF_LAYOUT
         CMP.B  #LAYOUT_DESKTOP,LAYOUT_PROFILE
-        BEQ    intro_touch_rows
-        MOVE.B TOUCH_COL,D6
-        MOVE.B D1,D0
-        SUBI.B #3,D0
-        CMP.B  D0,D6
-        BLT    intro_touch_done
-        MOVE.B D1,D0
-        ADDI.B #10,D0
-        CMP.B  D0,D6
-        BGT    intro_touch_done
-intro_touch_rows
+        BNE    intro_touch_mobile
+        BSR    _GET_DIFF_LAYOUT
         MOVE.B TOUCH_ROW,D4
         CMP.B  D2,D4
         BLT    intro_touch_done
@@ -1752,6 +1834,27 @@ intro_touch_rows
         CMP.B  D5,D4
         BLT    intro_touch_insane
         RTS
+intro_touch_mobile
+        MOVE.B TOUCH_ROW,D4
+        MOVE.B TOUCH_COL,D5
+        CLR.B  D7
+intro_touch_mobile_loop
+        BSR    _GET_MOBILE_DIFF_BUTTON_RECT
+        CMP.B  D2,D4
+        BLT    intro_touch_mobile_next
+        CMP.B  D6,D4
+        BGT    intro_touch_mobile_next
+        CMP.B  D1,D5
+        BLT    intro_touch_mobile_next
+        CMP.B  D3,D5
+        BGT    intro_touch_mobile_next
+        MOVE.B D7,DIFFICULTY
+        BRA    intro_touch_confirm
+intro_touch_mobile_next
+        ADDI.B #1,D7
+        CMP.B  #4,D7
+        BLT    intro_touch_mobile_loop
+        BRA    intro_touch_done
 intro_touch_easy
         MOVE.B #0,DIFFICULTY
         BRA    intro_touch_confirm
@@ -1776,18 +1879,43 @@ intro_touch_done
 
 _HANDLE_PLAY_TOUCH
         MOVE.B TOUCH_COL,D0
+        CMP.B  #1,D0
+        BGE    play_touch_col_min_ok
+        MOVE.B #1,D0
+play_touch_col_min_ok
         MOVE.B VIEWPORT_COLS,D1
-        LSR.B  #1,D1
-        SUB.B  D1,D0
-
+        CMP.B  D1,D0
+        BLE    play_touch_col_max_ok
+        MOVE.B D1,D0
+play_touch_col_max_ok
         MOVE.B TOUCH_ROW,D2
         CMP.B  VIEWPORT_SCREEN_Y,D2
-        BLT    play_touch_done
+        BGE    play_touch_row_visible
+        MOVE.B #1,D2
+        BRA    play_touch_row_clamped
+play_touch_row_visible
         SUB.B  VIEWPORT_SCREEN_Y,D2
+        ADDI.B #1,D2
+play_touch_row_clamped
         MOVE.B VIEWPORT_ROWS,D3
-        LSR.B  #1,D3
-        SUB.B  D3,D2
-
+        CMP.B  D3,D2
+        BLE    play_touch_row_max_ok
+        MOVE.B D3,D2
+play_touch_row_max_ok
+        MOVE.B POS_X,D4
+        SUB.B  VIEWPORT_ORIGIN_X,D4
+        ADDI.B #1,D4
+        MOVE.B POS_Y,D5
+        SUB.B  VIEWPORT_ORIGIN_Y,D5
+        ADDI.B #1,D5
+        SUB.B  D4,D0
+        SUB.B  D5,D2
+        TST.B  D0
+        BNE    play_touch_vector_ready
+        TST.B  D2
+        BNE    play_touch_vector_ready
+        RTS
+play_touch_vector_ready
         MOVE.B D0,D4
         CMP.B  #0,D4
         BGE    play_touch_dx_abs_done
@@ -1798,33 +1926,119 @@ play_touch_dx_abs_done
         BGE    play_touch_dy_abs_done
         NEG.B  D5
 play_touch_dy_abs_done
-        CMP.B  #1,D4
-        BGT    play_touch_pick_axis
-        CMP.B  #1,D5
-        BLE    play_touch_done
-play_touch_pick_axis
+        MOVE.B #$FF,D6
+        MOVE.B #$FF,D7
         CMP.B  D5,D4
-        BGE    play_touch_horizontal
+        BGT    play_touch_primary_horizontal
+        BLT    play_touch_primary_vertical
+        CMP.B  #DIR_LEFT,LAST_DIR
+        BEQ    play_touch_primary_vertical
+        CMP.B  #DIR_RIGHT,LAST_DIR
+        BEQ    play_touch_primary_vertical
+        BRA    play_touch_primary_horizontal
+play_touch_primary_vertical
         CMP.B  #0,D2
-        BLT    play_touch_up
-        BGT    play_touch_down
-        RTS
-play_touch_horizontal
+        BLT    play_touch_primary_up
+        BGT    play_touch_primary_down
+        BRA    play_touch_primary_horizontal
+play_touch_primary_up
+        CMP.B  #DIR_DOWN,LAST_DIR
+        BNE    play_touch_primary_up_ready
         CMP.B  #0,D0
-        BLT    play_touch_left
-        BGT    play_touch_right
+        BLT    play_touch_force_left
+        BGT    play_touch_force_right
         RTS
-play_touch_up
-        BSR _REQUEST_DIR_UP
+play_touch_primary_up_ready
+        MOVE.B #DIR_UP,D6
+        CMP.B  #0,D0
+        BLT    play_touch_secondary_left_from_up
+        BGT    play_touch_secondary_right_from_up
+        BRA    play_touch_apply
+play_touch_secondary_left_from_up
+        MOVE.B #DIR_LEFT,D7
+        BRA    play_touch_apply
+play_touch_secondary_right_from_up
+        MOVE.B #DIR_RIGHT,D7
+        BRA    play_touch_apply
+play_touch_primary_down
+        CMP.B  #DIR_UP,LAST_DIR
+        BNE    play_touch_primary_down_ready
+        CMP.B  #0,D0
+        BLT    play_touch_force_left
+        BGT    play_touch_force_right
         RTS
-play_touch_down
-        BSR _REQUEST_DIR_DOWN
+play_touch_primary_down_ready
+        MOVE.B #DIR_DOWN,D6
+        CMP.B  #0,D0
+        BLT    play_touch_secondary_left_from_down
+        BGT    play_touch_secondary_right_from_down
+        BRA    play_touch_apply
+play_touch_secondary_left_from_down
+        MOVE.B #DIR_LEFT,D7
+        BRA    play_touch_apply
+play_touch_secondary_right_from_down
+        MOVE.B #DIR_RIGHT,D7
+        BRA    play_touch_apply
+play_touch_primary_horizontal
+        CMP.B  #0,D0
+        BLT    play_touch_primary_left
+        BGT    play_touch_primary_right
+        BRA    play_touch_primary_vertical
+play_touch_primary_left
+        CMP.B  #DIR_RIGHT,LAST_DIR
+        BNE    play_touch_primary_left_ready
+        CMP.B  #0,D2
+        BLT    play_touch_force_up
+        BGT    play_touch_force_down
         RTS
-play_touch_left
-        BSR _REQUEST_DIR_LEFT
+play_touch_primary_left_ready
+        MOVE.B #DIR_LEFT,D6
+        CMP.B  #0,D2
+        BLT    play_touch_secondary_up_from_left
+        BGT    play_touch_secondary_down_from_left
+        BRA    play_touch_apply
+play_touch_secondary_up_from_left
+        MOVE.B #DIR_UP,D7
+        BRA    play_touch_apply
+play_touch_secondary_down_from_left
+        MOVE.B #DIR_DOWN,D7
+        BRA    play_touch_apply
+play_touch_primary_right
+        CMP.B  #DIR_LEFT,LAST_DIR
+        BNE    play_touch_primary_right_ready
+        CMP.B  #0,D2
+        BLT    play_touch_force_up
+        BGT    play_touch_force_down
         RTS
-play_touch_right
-        BSR _REQUEST_DIR_RIGHT
+play_touch_primary_right_ready
+        MOVE.B #DIR_RIGHT,D6
+        CMP.B  #0,D2
+        BLT    play_touch_secondary_up_from_right
+        BGT    play_touch_secondary_down_from_right
+        BRA    play_touch_apply
+play_touch_secondary_up_from_right
+        MOVE.B #DIR_UP,D7
+        BRA    play_touch_apply
+play_touch_secondary_down_from_right
+        MOVE.B #DIR_DOWN,D7
+        BRA    play_touch_apply
+play_touch_force_up
+        MOVE.B #DIR_UP,D6
+        MOVE.B #$FF,D7
+        BRA    play_touch_apply
+play_touch_force_down
+        MOVE.B #DIR_DOWN,D6
+        MOVE.B #$FF,D7
+        BRA    play_touch_apply
+play_touch_force_left
+        MOVE.B #DIR_LEFT,D6
+        MOVE.B #$FF,D7
+        BRA    play_touch_apply
+play_touch_force_right
+        MOVE.B #DIR_RIGHT,D6
+        MOVE.B #$FF,D7
+play_touch_apply
+        BSR    _APPLY_TOUCH_DIRECTION_WITH_FALLBACK
 play_touch_done
         RTS
 
@@ -1862,8 +2076,19 @@ _SELECT_DIFF
         MOVEM.L D0-D3,-(SP)
         ; Select Difficulty
 draw_select
+        CMP.B     #LAYOUT_DESKTOP,LAYOUT_PROFILE
+        BEQ       draw_select_desktop
+        BSR       _DRAW_MOBILE_DIFF_BOX
+        CMP.B     #0,DIFFICULTY
+        BEQ       draw_mobile_easy_select
+        CMP.B     #1,DIFFICULTY
+        BEQ       draw_mobile_medium_select
+        CMP.B     #2,DIFFICULTY
+        BEQ       draw_mobile_hard_select
+        BRA       draw_mobile_insane_select
+
+draw_select_desktop
         BSR      _GET_DIFF_LAYOUT
-        BSR      _DRAW_MOBILE_DIFF_BOX
         CMP.B     #0,DIFFICULTY  ; 
         BEQ     draw_easy_select        
         CMP.B     #1,DIFFICULTY  ; 
@@ -1949,6 +2174,134 @@ draw_insane_select
         MOVEA.L  #STR_SINSANE,A1 ; draw splash screen
         BSR _DISPSTR
         BRA get_select
+
+draw_mobile_easy_select
+        MOVE.L  #SNK_SPEED_EASY,SNK_SPEED
+        MOVE.B  #0,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_SEASY,A1
+        BSR     _DISPSTR
+        MOVE.B  #1,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_MEDIUM,A1
+        BSR     _DISPSTR
+        MOVE.B  #2,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_HARD,A1
+        BSR     _DISPSTR
+        MOVE.B  #3,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_INSANE,A1
+        BSR     _DISPSTR
+        BRA     get_select
+
+draw_mobile_medium_select
+        MOVE.L  #SNK_SPEED_MEDIUM,SNK_SPEED
+        MOVE.B  #0,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_EASY,A1
+        BSR     _DISPSTR
+        MOVE.B  #1,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_SMEDIUM,A1
+        BSR     _DISPSTR
+        MOVE.B  #2,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_HARD,A1
+        BSR     _DISPSTR
+        MOVE.B  #3,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_INSANE,A1
+        BSR     _DISPSTR
+        BRA     get_select
+
+draw_mobile_hard_select
+        MOVE.L  #SNK_SPEED_HARD,SNK_SPEED
+        MOVE.B  #0,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_EASY,A1
+        BSR     _DISPSTR
+        MOVE.B  #1,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_MEDIUM,A1
+        BSR     _DISPSTR
+        MOVE.B  #2,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_SHARD,A1
+        BSR     _DISPSTR
+        MOVE.B  #3,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_INSANE,A1
+        BSR     _DISPSTR
+        BRA     get_select
+
+draw_mobile_insane_select
+        MOVE.L  #SNK_SPEED_INSANE,SNK_SPEED
+        MOVE.B  #0,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_EASY,A1
+        BSR     _DISPSTR
+        MOVE.B  #1,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_MEDIUM,A1
+        BSR     _DISPSTR
+        MOVE.B  #2,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_HARD,A1
+        BSR     _DISPSTR
+        MOVE.B  #3,D7
+        BSR     _GET_MOBILE_DIFF_BUTTON_RECT
+        ADDI.B  #2,D1
+        ADDI.B  #1,D2
+        BSR     _GOTOXY
+        MOVEA.L #STR_SINSANE,A1
+        BSR     _DISPSTR
+        BRA     get_select
 
 get_select
         MOVE.B   #0,D1    

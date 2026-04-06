@@ -4,12 +4,11 @@ import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { chromium, devices, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import {
-  captureTerminalTelemetryAfterInput,
   loadNibbles as loadNibblesFixture,
   scheduleDeferredGameplayInput,
   startGameplayFromIntroTouch,
   touchTerminalRelativeDirection,
-  waitForTerminalText,
+  waitForIntro,
 } from '../tests/e2e/nibblesE2eHelpers';
 
 interface ProfileIdeRuntimeOptions {
@@ -142,6 +141,14 @@ interface IdePerformanceSnapshot {
     maxVisualLatencyMs: number;
     lastVisualLatencyMs: number;
   };
+  inputProgressAck: {
+    requestCount: number;
+    acceptedCount: number;
+    ackCount: number;
+    totalLatencyMs: number;
+    maxLatencyMs: number;
+    lastLatencyMs: number;
+  };
 }
 
 const HOST = '127.0.0.1';
@@ -155,6 +162,120 @@ function parseArgs(argv: string[]): ProfileIdeRuntimeOptions {
 
 function round(value: number): number {
   return Number(value.toFixed(2));
+}
+
+async function readIdePerformanceSnapshotFromPage(page: Page): Promise<IdePerformanceSnapshot> {
+  return page.evaluate(() => {
+    return (
+      (window as typeof window & {
+        __M68K_IDE_PERF__?: { snapshot?: () => IdePerformanceSnapshot };
+      }).__M68K_IDE_PERF__?.snapshot?.() ?? {
+        renderStats: [],
+        runtimeSync: {
+          callCount: 0,
+          totalDurationMs: 0,
+          maxDurationMs: 0,
+          reusedRegisters: 0,
+          reusedFlags: 0,
+          reusedMemory: 0,
+          reusedTerminal: 0,
+          publishedMemory: 0,
+          publishedTerminal: 0,
+        },
+        workerTransport: {
+          commandsSent: 0,
+          eventsReceived: 0,
+          readyEventsReceived: 0,
+          repliesReceived: 0,
+          frameEventsReceived: 0,
+          stoppedEventsReceived: 0,
+          faultEventsReceived: 0,
+          framesWithMemoryImage: 0,
+          framesWithTerminalFrameBuffer: 0,
+          framesWithTerminalSnapshot: 0,
+        },
+        terminalRepaint: {
+          repaintCount: 0,
+          fullRedrawCount: 0,
+          rowPatchCount: 0,
+          totalDurationMs: 0,
+          maxDurationMs: 0,
+          totalAnsiBytes: 0,
+          totalRowsPatched: 0,
+        },
+        touchLatency: {
+          dispatchCount: 0,
+          totalDispatchDurationMs: 0,
+          maxDispatchDurationMs: 0,
+          lastDispatchDurationMs: 0,
+          visualLatencyCount: 0,
+          totalVisualLatencyMs: 0,
+          maxVisualLatencyMs: 0,
+          lastVisualLatencyMs: 0,
+        },
+        inputProgressAck: {
+          requestCount: 0,
+          acceptedCount: 0,
+          ackCount: 0,
+          totalLatencyMs: 0,
+          maxLatencyMs: 0,
+          lastLatencyMs: 0,
+        },
+      }
+    );
+  });
+}
+
+async function waitForTelemetryAdvanceAfterInput(
+  page: Page,
+  options: {
+    trigger: () => Promise<void> | void;
+    timeoutMs?: number;
+    activeRunMs?: number;
+    requireTouchDispatch?: boolean;
+    requireTouchVisual?: boolean;
+  }
+): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? 8_000;
+  const before = await readIdePerformanceSnapshotFromPage(page);
+  const startedAt = performance.now();
+
+  await Promise.resolve(options.trigger());
+
+  while (performance.now() - startedAt < timeoutMs) {
+    const after = await readIdePerformanceSnapshotFromPage(page);
+    const acceptedAdvanced =
+      after.inputProgressAck.acceptedCount > before.inputProgressAck.acceptedCount;
+    const ackAdvanced = after.inputProgressAck.ackCount > before.inputProgressAck.ackCount;
+    const frameAdvanced =
+      after.workerTransport.frameEventsReceived > before.workerTransport.frameEventsReceived;
+    const repaintAdvanced =
+      after.terminalRepaint.repaintCount > before.terminalRepaint.repaintCount;
+    const touchDispatchAdvanced =
+      !options.requireTouchDispatch ||
+      after.touchLatency.dispatchCount > before.touchLatency.dispatchCount;
+    const touchVisualAdvanced =
+      !options.requireTouchVisual ||
+      after.touchLatency.visualLatencyCount > before.touchLatency.visualLatencyCount;
+
+    if (
+      acceptedAdvanced &&
+      ackAdvanced &&
+      frameAdvanced &&
+      repaintAdvanced &&
+      touchDispatchAdvanced &&
+      touchVisualAdvanced
+    ) {
+      if ((options.activeRunMs ?? 0) > 0) {
+        await page.waitForTimeout(options.activeRunMs!);
+      }
+      return;
+    }
+
+    await page.waitForTimeout(100);
+  }
+
+  throw new Error(`Timed out waiting for IDE telemetry to advance after input after ${timeoutMs}ms`);
 }
 
 async function main(): Promise<void> {
@@ -225,13 +346,13 @@ async function profileDesktopScenario(
   try {
     const page = await prepareInstrumentedPage(context, baseUrl);
     const introStartedAt = performance.now();
-    await loadNibblesFixture(page, { useFileExplorer: true, speed: '8', navigate: false });
-    await waitForTerminalText(page, ['Difficulty', 'EASY', 'INSANE'], 60_000);
+    await loadNibblesFixture(page, { useFileExplorer: true, speed: '1', navigate: false });
+    await waitForIntro(page, { expectTouchCopy: false, timeoutMs: 60_000 });
     const introElapsedMs = performance.now() - introStartedAt;
 
     const gameplayStartedAt = performance.now();
     await scheduleDeferredGameplayInput(page, ['ArrowDown'], ['SCORE:', 'S:']);
-    await captureTerminalTelemetryAfterInput(page, {
+    await waitForTelemetryAdvanceAfterInput(page, {
       trigger: () =>
         startGameplayFromIntroTouch(page, {
           row: 10,
@@ -272,7 +393,7 @@ async function profileMobileScenario(
     const page = await prepareInstrumentedPage(context, baseUrl);
     const introStartedAt = performance.now();
     await loadNibblesFixture(page, { useFileExplorer: false, speed: '8', navigate: false });
-    await waitForTerminalText(page, ['Difficulty', 'Joshua Bellamy'], 60_000);
+    await waitForIntro(page, { expectTouchCopy: true, timeoutMs: 60_000 });
     const introElapsedMs = performance.now() - introStartedAt;
 
     const gameplayStartedAt = performance.now();
@@ -283,7 +404,7 @@ async function profileMobileScenario(
       maxAttempts: 3,
       gameplayTimeoutMs: 8_000,
     });
-    await captureTerminalTelemetryAfterInput(page, {
+    await waitForTelemetryAdvanceAfterInput(page, {
       trigger: () => touchTerminalRelativeDirection(page, 'right'),
       timeoutMs: 8_000,
       activeRunMs: 1_200,
@@ -357,57 +478,7 @@ async function buildScenarioSummary(
   }
 ): Promise<IdeRuntimeScenarioSummary> {
   const runtimeState = await readRuntimeState(page);
-  const performanceSnapshot = await page.evaluate(() => {
-    return (
-      (window as typeof window & {
-        __M68K_IDE_PERF__?: { snapshot?: () => IdePerformanceSnapshot };
-      }).__M68K_IDE_PERF__?.snapshot?.() ?? {
-        renderStats: [],
-        runtimeSync: {
-          callCount: 0,
-          totalDurationMs: 0,
-          maxDurationMs: 0,
-          reusedRegisters: 0,
-          reusedFlags: 0,
-          reusedMemory: 0,
-          reusedTerminal: 0,
-          publishedMemory: 0,
-          publishedTerminal: 0,
-        },
-        workerTransport: {
-          commandsSent: 0,
-          eventsReceived: 0,
-          readyEventsReceived: 0,
-          repliesReceived: 0,
-          frameEventsReceived: 0,
-          stoppedEventsReceived: 0,
-          faultEventsReceived: 0,
-          framesWithMemoryImage: 0,
-          framesWithTerminalFrameBuffer: 0,
-          framesWithTerminalSnapshot: 0,
-        },
-        terminalRepaint: {
-          repaintCount: 0,
-          fullRedrawCount: 0,
-          rowPatchCount: 0,
-          totalDurationMs: 0,
-          maxDurationMs: 0,
-          totalAnsiBytes: 0,
-          totalRowsPatched: 0,
-        },
-        touchLatency: {
-          dispatchCount: 0,
-          totalDispatchDurationMs: 0,
-          maxDispatchDurationMs: 0,
-          lastDispatchDurationMs: 0,
-          visualLatencyCount: 0,
-          totalVisualLatencyMs: 0,
-          maxVisualLatencyMs: 0,
-          lastVisualLatencyMs: 0,
-        },
-      }
-    );
-  });
+  const performanceSnapshot = await readIdePerformanceSnapshotFromPage(page);
 
   return {
     ...base,

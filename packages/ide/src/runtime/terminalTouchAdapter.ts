@@ -51,17 +51,13 @@ export function shouldHandleTerminalPointer(options: {
   pointerType: string;
   buttons: number;
 }): boolean {
-  const { isTouchOnlyMode, phase, pointerType, buttons } = options;
+  const { isTouchOnlyMode, phase } = options;
 
   if (!isTouchOnlyMode) {
     return false;
   }
 
-  if (phase === 'up') {
-    return false;
-  }
-
-  if (phase === 'move' && buttons === 0 && pointerType !== 'touch') {
+  if (phase !== 'down') {
     return false;
   }
 

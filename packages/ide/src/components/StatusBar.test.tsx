@@ -37,4 +37,20 @@ describe('StatusBar', () => {
 
     expect(screen.queryByText(/Program:/)).not.toBeInTheDocument();
   });
+
+  it('renders the bottom panel inline in compact mobile shells', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 390,
+    });
+
+    renderWithIdeProviders(<StatusBar />);
+
+    expect(screen.getByLabelText('IDE status bar')).toHaveAttribute('data-compact', 'true');
+    expect(screen.getByTestId('status-bar-inline')).toBeInTheDocument();
+    expect(screen.getByText('Ready')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'smysnk.com' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /buy me a coffee/i })).toBeInTheDocument();
+  });
 });

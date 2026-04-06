@@ -478,6 +478,13 @@ pre {
   border-color: color-mix(in srgb, var(--ide-accent) 28%, var(--ide-border));
 }
 
+.status-bar-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .main-shell,
 .inspector-panel-group {
   width: 100%;
@@ -2197,16 +2204,43 @@ input.register-segment-input[type='text'] {
   }
 
   .status-bar {
-    flex-wrap: wrap;
-    align-items: flex-start;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 10px;
+    scrollbar-width: none;
+  }
+
+  .status-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .status-bar[data-compact='true'] .status-bar-inline {
+    flex-wrap: nowrap;
+    width: max-content;
+  }
+
+  .status-bar[data-compact='true'] .status-pill,
+  .status-bar[data-compact='true'] .status-bar-link {
+    flex: 0 0 auto;
+  }
+
+  .status-bar[data-compact='true'] .status-pill {
+    padding: 0 8px;
+  }
+
+  .status-bar[data-compact='true'] .status-bar-link {
+    padding: 0 8px;
+    font-size: 10px;
   }
 
   .status-bar-section-left,
   .status-bar-section-center,
   .status-bar-section-right {
-    width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    min-width: 0;
   }
 
   .memory-controls {

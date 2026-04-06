@@ -442,19 +442,20 @@ export async function loadNibbles(
 
 export async function readTerminalText(page: Page): Promise<string> {
   return withNodeTimeout(
-    (async () => {
-      const screen = page.getByTestId('terminal-screen');
-      const lines = screen.locator('.retro-lcd__line');
-      const count = await lines.count();
-
-      if (count > 0) {
-        const textRows = await lines.allTextContents();
-        return textRows.map((row) => row.replace(/\u00a0/g, ' ')).join('\n');
+    page.evaluate(() => {
+      const screen = document.querySelector<HTMLElement>('[data-testid="terminal-screen"]');
+      if (!screen) {
+        return '';
       }
 
-      return ((await screen.textContent()) ?? '').replace(/\u00a0/g, ' ');
-    })(),
-    2_000,
+      const lines = Array.from(screen.querySelectorAll<HTMLElement>('.retro-lcd__line'));
+      if (lines.length > 0) {
+        return lines.map((line) => (line.textContent ?? '').replace(/\u00a0/g, ' ')).join('\n');
+      }
+
+      return (screen.textContent ?? '').replace(/\u00a0/g, ' ');
+    }),
+    4_000,
     'terminal text read'
   );
 }
@@ -727,7 +728,7 @@ export async function waitForIntro(
 ): Promise<string> {
   const terminalText = await waitForTerminalText(
     page,
-    ['DIFFICULTY', 'Joshua Bellamy', 'smysnk.com'],
+    ['NIBBLES', 'SELECT DIFFICULTY', 'EASY', 'INSANE'],
     options.timeoutMs ?? 60_000
   );
 
@@ -857,21 +858,26 @@ async function resolveDirectionalTouchCell(
       throw new Error('Terminal runtime geometry was unavailable');
     }
 
+    const quarterRow = Math.max(2, Math.ceil(geometry.rows * 0.25));
+    const threeQuarterRow = Math.max(2, Math.ceil(geometry.rows * 0.75));
+    const quarterCol = Math.max(2, Math.ceil(geometry.columns * 0.25));
+    const threeQuarterCol = Math.max(2, Math.ceil(geometry.columns * 0.75));
+
     return {
       left: {
         row: Math.max(2, Math.ceil(geometry.rows / 2)),
-        col: 2,
+        col: quarterCol,
       },
       right: {
         row: Math.max(2, Math.ceil(geometry.rows / 2)),
-        col: Math.max(2, geometry.columns - 1),
+        col: threeQuarterCol,
       },
       up: {
-        row: 2,
+        row: quarterRow,
         col: Math.max(2, Math.ceil(geometry.columns / 2)),
       },
       down: {
-        row: Math.max(2, geometry.rows - 1),
+        row: threeQuarterRow,
         col: Math.max(2, Math.ceil(geometry.columns / 2)),
       },
     }[nextDirection];

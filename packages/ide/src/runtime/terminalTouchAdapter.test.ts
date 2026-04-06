@@ -68,7 +68,7 @@ describe('terminalTouchAdapter', () => {
     });
   });
 
-  it('filters out non-active hover moves while preserving touch drags in touch mode', () => {
+  it('only accepts a fresh pointer-down in touch-only mode', () => {
     expect(
       shouldHandleTerminalPointer({
         isTouchOnlyMode: false,
@@ -97,6 +97,14 @@ describe('terminalTouchAdapter', () => {
       shouldHandleTerminalPointer({
         isTouchOnlyMode: true,
         phase: 'move',
+        pointerType: 'touch',
+        buttons: 0,
+      })
+    ).toBe(false);
+    expect(
+      shouldHandleTerminalPointer({
+        isTouchOnlyMode: true,
+        phase: 'down',
         pointerType: 'touch',
         buttons: 0,
       })

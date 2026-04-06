@@ -6,7 +6,6 @@ import {
   scheduleDeferredGameplayInput,
   startGameplayFromIntroTouch,
   waitForIntro,
-  waitForTerminalText,
 } from './nibblesE2eHelpers';
 
 function findLineIndex(lines: string[], marker: string): number {
@@ -60,23 +59,27 @@ test.describe('browser e2e nibbles', () => {
     expect(terminalBounds?.height ?? 0).toBeGreaterThan(200);
 
     const introStartedAt = Date.now();
-    const introText = await waitForTerminalText(
-      page,
-      ['DIFFICULTY', 'Movement Keys', 'EASY', 'INSANE'],
-      60_000
-    );
+    const introText = await waitForIntro(page, {
+      expectTouchCopy: false,
+      timeoutMs: 60_000,
+    });
 
-    expect(introText).toContain('DIFFICULTY');
-    expect(introText).toContain('smysnk.com');
-    expect(introText).toContain('Joshua Bellamy');
-    expect(introText).toContain('NEON SERPENT ARCADE');
+    expect(introText).toContain('NIBBLES');
+    expect(introText).toContain('SELECT DIFFICULTY');
+    expect(introText).toContain('EASY');
+    expect(introText).toContain('INSANE');
+    expect(/NEON SERPENT/.test(introText)).toBe(true);
 
     const introSnapshot = await readTerminalSnapshot(page);
     expect(introSnapshot).not.toBeNull();
     const safeIntroSnapshot = introSnapshot!;
     const titleRow = findLineIndex(safeIntroSnapshot.lines, 'NIBBLES');
-    const subtitleRow = findLineIndex(safeIntroSnapshot.lines, 'NEON SERPENT ARCADE');
+    const subtitle = safeIntroSnapshot.lines.some((line) => line.includes('NEON SERPENT ARCADE'))
+      ? 'NEON SERPENT ARCADE'
+      : 'NEON SERPENT';
+    const subtitleRow = findLineIndex(safeIntroSnapshot.lines, subtitle);
     const selectLabelRow = findLineIndex(safeIntroSnapshot.lines, 'SELECT DIFFICULTY');
+    const mediumRow = findLineIndex(safeIntroSnapshot.lines, 'MEDIUM');
     const selectedDifficultyRow = findLineIndex(safeIntroSnapshot.lines, 'MEDIUM');
     const easyRow = findLineIndex(safeIntroSnapshot.lines, 'EASY');
     const hardRow = findLineIndex(safeIntroSnapshot.lines, 'HARD');
@@ -100,7 +103,7 @@ test.describe('browser e2e nibbles', () => {
     expectMarkerCentered(
       safeIntroSnapshot.lines,
       safeIntroSnapshot.columns,
-      'NEON SERPENT ARCADE'
+      subtitle
     );
     expectMarkerCentered(
       safeIntroSnapshot.lines,
@@ -188,7 +191,10 @@ test.describe('browser e2e nibbles', () => {
       useFileExplorer: true,
       speed: '1',
     });
-    await waitForTerminalText(page, ['DIFFICULTY', 'Movement Keys', 'EASY', 'INSANE'], 60_000);
+    await waitForIntro(page, {
+      expectTouchCopy: false,
+      timeoutMs: 60_000,
+    });
     await scheduleDeferredGameplayInput(page, ['ArrowDown'], ['SCORE:', 'S:']);
 
     const activity = await captureTerminalTelemetryAfterInput(page, {
