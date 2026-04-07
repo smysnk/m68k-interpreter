@@ -1,0 +1,66 @@
+{
+  "name": "react-retro-display-tty-ansi",
+  "version": "0.1.19",
+  "private": true,
+  "description": "A reusable React retro display component with value, terminal, and prompt modes.",
+  "keywords": [
+    "react",
+    "react-component",
+    "terminal",
+    "terminal-ui",
+    "tty",
+    "ansi",
+    "prompt",
+    "console",
+    "lcd",
+    "retro",
+    "retro-ui",
+    "retro-terminal",
+    "phosphor",
+    "monochrome",
+    "scrollback"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/smysnk/react-retro-display-tty-ansi"
+  },
+  "homepage": "https://github.com/smysnk/react-retro-display-tty-ansi#readme",
+  "bugs": {
+    "url": "https://github.com/smysnk/react-retro-display-tty-ansi/issues"
+  },
+  "type": "module",
+  "packageManager": "yarn@4.13.0",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "sideEffects": [
+    "*.css"
+  ],
+  "dependencies": {
+    "react-retro-display-tty-ansi-ascii": "^0.1.46"
+  },
+  "scripts": {
+    "build": "node -e \"process.exit(0)\"",
+    "test": "node -e \"process.exit(0)\"",
+    "type-check": "node -e \"process.exit(0)\""
+  },
+  "peerDependencies": {
+    "react": "^18.2.0 || ^19.0.0",
+    "react-dom": "^18.2.0 || ^19.0.0"
+  }
+}

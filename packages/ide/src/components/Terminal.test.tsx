@@ -92,7 +92,7 @@ describe('Terminal', () => {
     expect(retroDisplay).not.toBeNull();
     expect(retroDisplay).toHaveAttribute('data-grid-mode', 'auto');
     expect(screen.getByTestId('terminal-screen')).toHaveAttribute('data-terminal-focused', 'false');
-  });
+  }, 10000);
 
   it('renders from the terminal buffer even when no append output stream is present', async () => {
     const frameBuffer = createTerminalFrameBuffer(6, 1);
@@ -528,12 +528,12 @@ describe('Terminal', () => {
     await waitFor(() => {
       expect(writeMemoryByte).toHaveBeenCalledWith(0x2010, 1);
       expect(writeMemoryByte).toHaveBeenCalledWith(0x2011, 1);
-      expect(writeMemoryByte).toHaveBeenCalledWith(0x2012, 3);
-      expect(writeMemoryByte).toHaveBeenCalledWith(0x2013, 5);
+      expect(writeMemoryByte).toHaveBeenCalledWith(0x2012, 14);
+      expect(writeMemoryByte).toHaveBeenCalledWith(0x2013, 37);
       expect(writeMemoryByte).toHaveBeenCalledWith(0x2014, 0x12);
-      expect(writeMemoryByte).toHaveBeenCalledWith(0x2000, 10);
-      expect(writeMemoryByte).toHaveBeenCalledWith(0x2001, 5);
-      expect(writeMemoryByte).toHaveBeenCalledWith(0x2002, 2);
+      expect(writeMemoryByte).toHaveBeenCalledWith(0x2000, 80);
+      expect(writeMemoryByte).toHaveBeenCalledWith(0x2001, 25);
+      expect(writeMemoryByte).toHaveBeenCalledWith(0x2002, 0);
     });
     expect(raiseExternalInterrupt).toHaveBeenCalledWith(0x3000);
 

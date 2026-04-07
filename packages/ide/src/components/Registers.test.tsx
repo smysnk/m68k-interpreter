@@ -48,7 +48,6 @@ describe('Registers', () => {
     expect(screen.getByRole('button', { name: /address registers \(a0-a7\)/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /control registers/i })).toBeInTheDocument();
     expect(document.querySelector('.registers-group-indicator')).toBeInTheDocument();
-    expect(document.querySelector('.register-card-toggle-indicator')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /data registers \(d0-d7\)/i })).toHaveAttribute(
       'data-register-group',
       'data'

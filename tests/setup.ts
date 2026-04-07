@@ -30,11 +30,17 @@ Object.defineProperty(window, 'ResizeObserver', {
 Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
   configurable: true,
   value: function getBoundingClientRect(this: HTMLElement): DOMRect {
-    if (this.classList.contains('retro-lcd__grid')) {
+    if (
+      this.classList.contains('retro-lcd__grid') ||
+      this.classList.contains('retro-screen__grid')
+    ) {
       return createRect(960, 600);
     }
 
-    if (this.classList.contains('retro-lcd__probe')) {
+    if (
+      this.classList.contains('retro-lcd__probe') ||
+      this.classList.contains('retro-screen__probe')
+    ) {
       return createRect(12, 24);
     }
 

@@ -1143,7 +1143,7 @@ __metadata:
     react-dom: "npm:^18.3.1"
     react-redux: "npm:^9.2.0"
     react-resizable-panels: "npm:^2.1.7"
-    react-retro-display-tty-ansi: "npm:0.1.19"
+    react-retro-display-tty-ansi: "workspace:*"
     styled-components: "npm:^6.3.11"
     typescript: "npm:^5.3.3"
     vite: "npm:^7.3.1"
@@ -5267,15 +5267,26 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-retro-display-tty-ansi@npm:0.1.19":
-  version: 0.1.19
-  resolution: "react-retro-display-tty-ansi@npm:0.1.19"
+"react-retro-display-tty-ansi-ascii@npm:^0.1.46":
+  version: 0.1.46
+  resolution: "react-retro-display-tty-ansi-ascii@npm:0.1.46"
   peerDependencies:
     react: ^18.2.0 || ^19.0.0
     react-dom: ^18.2.0 || ^19.0.0
-  checksum: 10c0/9e515a958fc4d70f9675b929f0d0ebf089debf1c9d59a4465f693535cc7e5695f4371ee9ed2609fe718511581fc3e364f812dd7702c414c590ada9dfb9295dfd
+  checksum: 10c0/280e8228b870fa1a25b767bf4c8097dc04d2bd6d54904e65c1e8dcc190d9f0948c50a5fc37d62cdc9c448143d529901bed2f96c42847e2cf7790049410f5cf97
   languageName: node
   linkType: hard
+
+"react-retro-display-tty-ansi@workspace:*, react-retro-display-tty-ansi@workspace:packages/react-retro-display-tty-ansi":
+  version: 0.0.0-use.local
+  resolution: "react-retro-display-tty-ansi@workspace:packages/react-retro-display-tty-ansi"
+  dependencies:
+    react-retro-display-tty-ansi-ascii: "npm:^0.1.46"
+  peerDependencies:
+    react: ^18.2.0 || ^19.0.0
+    react-dom: ^18.2.0 || ^19.0.0
+  languageName: unknown
+  linkType: soft
 
 "react@npm:^18.3.1":
   version: 18.3.1

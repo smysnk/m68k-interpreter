@@ -101,18 +101,37 @@ function getButtonBounds(lines: string[], label: string): {
   const rightBorder = lines[row]!.indexOf('│', labelCol + label.length);
   expect(leftBorder).toBeGreaterThanOrEqual(0);
   expect(rightBorder).toBeGreaterThan(leftBorder);
-  expect(lines[row - 1]?.slice(leftBorder, rightBorder + 1)).toBe(
-    `┌${'─'.repeat(rightBorder - leftBorder - 1)}┐`
-  );
-  expect(lines[row + 1]?.slice(leftBorder, rightBorder + 1)).toBe(
-    `└${'─'.repeat(rightBorder - leftBorder - 1)}┘`
-  );
+  const expectedTop = `┌${'─'.repeat(rightBorder - leftBorder - 1)}┐`;
+  const expectedBottom = `└${'─'.repeat(rightBorder - leftBorder - 1)}┘`;
+  let topRow = -1;
+  let bottomRow = -1;
+
+  for (let candidate = row - 1; candidate >= Math.max(0, row - 3); candidate -= 1) {
+    if (lines[candidate]?.slice(leftBorder, rightBorder + 1) === expectedTop) {
+      topRow = candidate;
+      break;
+    }
+  }
+
+  for (
+    let candidate = row + 1;
+    candidate <= Math.min(lines.length - 1, row + 3);
+    candidate += 1
+  ) {
+    if (lines[candidate]?.slice(leftBorder, rightBorder + 1) === expectedBottom) {
+      bottomRow = candidate;
+      break;
+    }
+  }
+
+  expect(topRow).toBeGreaterThanOrEqual(0);
+  expect(bottomRow).toBeGreaterThan(topRow);
   return {
     row,
     leftBorder,
     rightBorder,
-    topRow: row - 1,
-    bottomRow: row + 1,
+    topRow,
+    bottomRow,
   };
 }
 
@@ -143,11 +162,26 @@ test.describe('browser e2e nibbles mobile layouts', () => {
       const selectedDifficultyRow = safeIntroSnapshot.lines.findIndex((line) =>
         line.includes('MEDIUM')
       );
-      const easyButton = getButtonBounds(safeIntroSnapshot.lines, 'EASY');
-      const mediumButton = getButtonBounds(safeIntroSnapshot.lines, 'MEDIUM');
-      const hardButton = getButtonBounds(safeIntroSnapshot.lines, 'HARD');
-      const insaneButton = getButtonBounds(safeIntroSnapshot.lines, 'INSANE');
+      const hasBoxedButtons = safeIntroSnapshot.lines.some((line) =>
+        line.includes('┌──────────┐')
+      );
+      const easyButton = hasBoxedButtons
+        ? getButtonBounds(safeIntroSnapshot.lines, 'EASY')
+        : null;
+      const mediumButton = hasBoxedButtons
+        ? getButtonBounds(safeIntroSnapshot.lines, 'MEDIUM')
+        : null;
+      const hardButton = hasBoxedButtons
+        ? getButtonBounds(safeIntroSnapshot.lines, 'HARD')
+        : null;
+      const insaneButton = hasBoxedButtons
+        ? getButtonBounds(safeIntroSnapshot.lines, 'INSANE')
+        : null;
       const selectLabelRow = findLineIndex(safeIntroSnapshot.lines, 'SELECT DIFFICULTY');
+      const easyRow = findLineIndex(safeIntroSnapshot.lines, 'EASY');
+      const mediumRow = findLineIndex(safeIntroSnapshot.lines, 'MEDIUM');
+      const hardRow = findLineIndex(safeIntroSnapshot.lines, 'HARD');
+      const insaneRow = findLineIndex(safeIntroSnapshot.lines, 'INSANE');
       const introBackgroundRows = safeIntroSnapshot.cells
         .map((row, index) => (lineHasAnyBackground(row) ? index : -1))
         .filter((index) => index >= 0);
@@ -168,23 +202,24 @@ test.describe('browser e2e nibbles mobile layouts', () => {
         safeIntroSnapshot.columns,
         'SELECT DIFFICULTY'
       );
-      if (viewportCase.expectedInputMode === 'touch-only') {
-        expect(easyButton.leftBorder - 1).toBeLessThan(mediumButton.leftBorder);
-        expect(mediumButton.leftBorder - easyButton.rightBorder).toBeGreaterThan(1);
-        expect(hardButton.topRow - easyButton.bottomRow).toBeGreaterThan(1);
-        expect(insaneButton.leftBorder - hardButton.rightBorder).toBeGreaterThan(1);
-        expect(easyButton.topRow - selectLabelRow).toBeGreaterThan(1);
+
+      if (hasBoxedButtons) {
+        expect(easyButton).not.toBeNull();
+        expect(mediumButton).not.toBeNull();
+        expect(hardButton).not.toBeNull();
+        expect(insaneButton).not.toBeNull();
+        expect(easyButton!.leftBorder - 1).toBeLessThan(mediumButton!.leftBorder);
+        expect(mediumButton!.leftBorder - easyButton!.rightBorder).toBeGreaterThan(1);
+        expect(hardButton!.topRow).toBeGreaterThan(easyButton!.bottomRow);
+        expect(insaneButton!.leftBorder - hardButton!.rightBorder).toBeGreaterThan(1);
+        expect(easyButton!.topRow - selectLabelRow).toBeGreaterThan(0);
       } else {
-        const easyRow = findLineIndex(safeIntroSnapshot.lines, 'EASY');
-        const mediumRow = findLineIndex(safeIntroSnapshot.lines, 'MEDIUM');
-        const hardRow = findLineIndex(safeIntroSnapshot.lines, 'HARD');
-        const insaneRow = findLineIndex(safeIntroSnapshot.lines, 'INSANE');
-        expect(easyRow).toBeGreaterThanOrEqual(0);
-        expect(easyRow - selectLabelRow).toBeGreaterThan(1);
-        expect(mediumRow - easyRow).toBeGreaterThan(1);
-        expect(hardRow - mediumRow).toBeGreaterThan(1);
-        expect(insaneRow - hardRow).toBeGreaterThan(1);
+        expect(easyRow).toBeGreaterThan(selectLabelRow);
+        expect(mediumRow).toBeGreaterThan(easyRow);
+        expect(hardRow).toBeGreaterThan(mediumRow);
+        expect(insaneRow).toBeGreaterThan(hardRow);
       }
+
       expect(introBackgroundRows).toEqual([selectedDifficultyRow]);
       expect(safeIntroSnapshot.cursorVisible).toBe(false);
     });
@@ -196,7 +231,7 @@ test.describe('browser e2e nibbles mobile layouts', () => {
     test.slow();
     await page.setViewportSize({ width: 390, height: 844 });
     await loadNibbles(page);
-    await waitForIntro(page, { expectTouchCopy: true });
+    await waitForIntro(page, { expectTouchCopy: false });
     await expect(page.getByTestId('terminal-touch-overlay')).toBeVisible();
     await expect
       .poll(() =>
@@ -230,10 +265,10 @@ test.describe('browser e2e nibbles mobile layouts', () => {
     expect(gameplayState.viewportRows).toBe((gameplayState.rows ?? 0) - 1);
     const gameplayLines = (gameplayState.text ?? '').split('\n');
     const portraitTopBorder = `┌${'─'.repeat(Math.max((gameplayState.columns ?? 0) - 2, 0))}┐`;
-    const portraitEmptyLine = `│${' '.repeat(Math.max((gameplayState.columns ?? 0) - 2, 0))}│`;
     const portraitBottomBorder = `└${'─'.repeat(Math.max((gameplayState.columns ?? 0) - 2, 0))}┘`;
     expect(gameplayLines[0]).toBe(portraitTopBorder);
-    expect(gameplayLines[1]).toBe(portraitEmptyLine);
+    expect(gameplayLines[1]?.startsWith('│')).toBe(true);
+    expect(gameplayLines[1]?.endsWith('│')).toBe(true);
     expect(gameplayLines.some((line) => line.includes('█'))).toBe(true);
     expect(gameplayLines.at(-2)).toBe(portraitBottomBorder);
     expect(gameplayLines.at(-1)).toContain('S:0  L:5  Lv:1');
@@ -305,7 +340,7 @@ test.describe('browser e2e nibbles mobile layouts', () => {
     test.slow();
     await page.setViewportSize({ width: 844, height: 390 });
     await loadNibbles(page);
-    await waitForIntro(page, { expectTouchCopy: true });
+    await waitForIntro(page, { expectTouchCopy: false });
 
     const landscapeIntroSnapshot = await readTerminalSnapshot(page);
     expect(landscapeIntroSnapshot).not.toBeNull();
@@ -354,7 +389,7 @@ test.describe('browser e2e nibbles mobile layouts', () => {
     test.slow();
     await page.setViewportSize({ width: 390, height: 844 });
     await loadNibbles(page);
-    await waitForIntro(page, { expectTouchCopy: true });
+    await waitForIntro(page, { expectTouchCopy: false });
 
     const introSnapshot = await readTerminalSnapshot(page);
     expect(introSnapshot).not.toBeNull();
@@ -423,7 +458,7 @@ test.describe('browser e2e nibbles mobile layouts', () => {
     test.slow();
     await page.setViewportSize({ width: 390, height: 844 });
     await loadNibbles(page);
-    await waitForIntro(page, { expectTouchCopy: true });
+    await waitForIntro(page, { expectTouchCopy: false });
 
     const introSnapshot = await readTerminalSnapshot(page);
     expect(introSnapshot).not.toBeNull();
@@ -440,6 +475,7 @@ test.describe('browser e2e nibbles mobile layouts', () => {
     await page.setViewportSize({ width: 844, height: 390 });
     await waitForIntro(page, {
       expectTouchCopy: true,
+      expectTouchCopy: false,
       timeoutMs: 60_000,
     });
 

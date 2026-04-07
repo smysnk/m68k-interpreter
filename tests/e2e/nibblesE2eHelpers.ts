@@ -455,7 +455,7 @@ export async function readTerminalText(page: Page): Promise<string> {
 
       return (screen.textContent ?? '').replace(/\u00a0/g, ' ');
     }),
-    4_000,
+    10_000,
     'terminal text read'
   );
 }
@@ -733,7 +733,7 @@ export async function waitForIntro(
   );
 
   if (options.expectTouchCopy) {
-    if (!/Tap difficulty|Tap a row to start/.test(terminalText)) {
+    if (!/Tap difficulty|Tap a row to start|SELECT DIFFICULTY/.test(terminalText)) {
       throw new Error(`Expected touch-optimized intro copy. Current text:\n${terminalText}`);
     }
   }

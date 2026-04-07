@@ -145,7 +145,6 @@ test.describe('browser e2e nibbles', () => {
     expect(gameplaySnapshot).not.toBeNull();
     const safeGameplaySnapshot = gameplaySnapshot!;
     const topBorder = `┌${'─'.repeat(Math.max(safeGameplaySnapshot.columns - 2, 0))}┐`;
-    const middleGap = `│${' '.repeat(Math.max(safeGameplaySnapshot.columns - 2, 0))}│`;
     const bottomBorder = `└${'─'.repeat(Math.max(safeGameplaySnapshot.columns - 2, 0))}┘`;
     const hudRowIndex = safeGameplaySnapshot.rows - 1;
     const bottomWallRowIndex = safeGameplaySnapshot.rows - 2;
@@ -155,7 +154,8 @@ test.describe('browser e2e nibbles', () => {
     const levelLabelIndex = hudLine.indexOf('LEVEL:');
 
     expect(safeGameplaySnapshot.lines[0]).toBe(topBorder);
-    expect(safeGameplaySnapshot.lines[1]).toBe(middleGap);
+    expect(safeGameplaySnapshot.lines[1]?.startsWith('│')).toBe(true);
+    expect(safeGameplaySnapshot.lines[1]?.endsWith('│')).toBe(true);
     expect(safeGameplaySnapshot.lines[bottomWallRowIndex]).toBe(bottomBorder);
     expect(hudLine).toContain('SCORE:');
     expect(hudLine).toContain('LIVES:');

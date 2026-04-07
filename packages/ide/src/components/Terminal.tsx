@@ -18,9 +18,7 @@ import {
   resolveTerminalInputMode,
   syncRuntimeGeometryBridge,
 } from '@/runtime/terminalProgramBridge';
-import { buildTerminalTouchCellEvent, shouldHandleTerminalPointer } from '@/runtime/terminalTouchAdapter';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
-import type { TerminalTouchPhase } from '@/runtime/terminalTouchProtocol';
 import {
   createTerminalGeometrySignature,
   normalizeTerminalGeometry,
@@ -215,9 +213,9 @@ const Terminal: React.FC = () => {
   const previousVersionRef = useRef<number | null>(null);
   const previousCursorPositionRef = useRef<string>('');
   const geometryCommitTimeoutRef = useRef<number | null>(null);
+  const pendingGeometrySignatureRef = useRef('');
   const lastMeasuredGeometrySignatureRef = useRef('');
   const hasCommittedMeasuredGeometryRef = useRef(false);
-  const activeTouchPointerIdRef = useRef<number | null>(null);
   const [focused, setFocused] = useState(false);
   const emulatorInstance = useSelector((state: RootState) => state.emulator.emulatorInstance);
   const executionState = useSelector((state: RootState) => state.emulator.executionState);
@@ -485,6 +483,7 @@ const Terminal: React.FC = () => {
       if (geometryCommitTimeoutRef.current !== null) {
         window.clearTimeout(geometryCommitTimeoutRef.current);
       }
+      pendingGeometrySignatureRef.current = '';
     };
   }, []);
 
@@ -571,13 +570,20 @@ const Terminal: React.FC = () => {
         return;
       }
 
-      if (geometryCommitTimeoutRef.current !== null) {
-        window.clearTimeout(geometryCommitTimeoutRef.current);
+      if (pendingGeometrySignatureRef.current === nextSignature) {
+        return;
       }
 
+      if (geometryCommitTimeoutRef.current !== null) {
+        window.clearTimeout(geometryCommitTimeoutRef.current);
+        pendingGeometrySignatureRef.current = '';
+      }
+
+      pendingGeometrySignatureRef.current = nextSignature;
       geometryCommitTimeoutRef.current = window.setTimeout(
         () => {
           geometryCommitTimeoutRef.current = null;
+          pendingGeometrySignatureRef.current = '';
           hasCommittedMeasuredGeometryRef.current = true;
           lastMeasuredGeometrySignatureRef.current = nextSignature;
           void applyMeasuredGeometry(normalizedGeometry.columns, normalizedGeometry.rows);
@@ -588,73 +594,20 @@ const Terminal: React.FC = () => {
     [applyMeasuredGeometry, isCompactShell]
   );
 
-  const handleTouchPointer = React.useCallback(
-    async (
-      event: React.PointerEvent<HTMLDivElement>,
-      phase: TerminalTouchPhase
-    ): Promise<void> => {
+  const handleTouchCell = React.useCallback(
+    async (touchEvent: {
+      row: number;
+      col: number;
+      rows: number;
+      cols: number;
+      phase: 'down' | 'move' | 'up';
+      pointerType: string;
+      buttons: number;
+    }): Promise<void> => {
       if (!emulatorInstance) {
         return;
       }
 
-      if (phase === 'up') {
-        if (activeTouchPointerIdRef.current === event.pointerId) {
-          activeTouchPointerIdRef.current = null;
-        }
-
-        try {
-          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-            event.currentTarget.releasePointerCapture(event.pointerId);
-          }
-        } catch {
-          // Ignore capture release failures.
-        }
-        return;
-      }
-
-      if (
-        !shouldHandleTerminalPointer({
-          isTouchOnlyMode,
-          phase,
-          pointerType: event.pointerType,
-          buttons: event.buttons,
-        })
-      ) {
-        return;
-      }
-
-      if (
-        activeTouchPointerIdRef.current !== null &&
-        activeTouchPointerIdRef.current !== event.pointerId
-      ) {
-        return;
-      }
-
-      const touchEvent = buildTerminalTouchCellEvent({
-        root: terminalRef.current,
-        clientX: event.clientX,
-        clientY: event.clientY,
-        columns: meta.columns,
-        rows: meta.rows,
-        phase,
-        pointerType: event.pointerType,
-        buttons: event.buttons,
-      });
-
-      if (!touchEvent) {
-        return;
-      }
-
-      if (phase === 'down') {
-        activeTouchPointerIdRef.current = event.pointerId;
-        try {
-          event.currentTarget.setPointerCapture(event.pointerId);
-        } catch {
-          // Ignore capture failures from unsupported pointer types in tests/browsers.
-        }
-      }
-
-      event.preventDefault();
       const touchDispatchStartedAt =
         typeof performance !== 'undefined' && typeof performance.now === 'function'
           ? performance.now()
@@ -681,7 +634,7 @@ const Terminal: React.FC = () => {
         });
         const isWorkerRuntime = emulatorInstance.getRuntimeTransport?.() === 'worker';
         if (!isWorkerRuntime) {
-          syncRuntimeGeometryBridge(emulatorInstance, meta.columns, meta.rows);
+          syncRuntimeGeometryBridge(emulatorInstance, touchEvent.cols, touchEvent.rows);
           terminalSurfaceStore.replaceFromRuntime(emulatorInstance);
           dispatch(setTerminalStateAction(emulatorInstance.getTerminalMeta()));
         }
@@ -699,9 +652,6 @@ const Terminal: React.FC = () => {
       dispatch,
       emulatorInstance,
       executionState,
-      isTouchOnlyMode,
-      meta.columns,
-      meta.rows,
     ]
   );
 
@@ -723,18 +673,6 @@ const Terminal: React.FC = () => {
         data-terminal-input-mode={effectiveTerminalInputMode}
         data-testid="terminal-screen"
         onClick={focusTerminal}
-        onPointerCancel={(event) => {
-          void handleTouchPointer(event, 'up');
-        }}
-        onPointerDown={(event) => {
-          void handleTouchPointer(event, 'down');
-        }}
-        onPointerMove={(event) => {
-          void handleTouchPointer(event, 'move');
-        }}
-        onPointerUp={(event) => {
-          void handleTouchPointer(event, 'up');
-        }}
         onFocusCapture={() => {
           setFocused(true);
         }}
@@ -749,13 +687,6 @@ const Terminal: React.FC = () => {
         role="application"
         aria-label="M68K terminal"
       >
-        {isTouchOnlyMode ? (
-          <div
-            className="terminal-touch-overlay"
-            data-testid="terminal-touch-overlay"
-            aria-hidden="true"
-          />
-        ) : null}
         <RetroLcd
           captureKeyboard={!isTouchOnlyMode}
           captureMouse={false}
@@ -768,6 +699,11 @@ const Terminal: React.FC = () => {
           gridMode="auto"
           mode="terminal"
           onGeometryChange={handleGeometryChange}
+          touchInput={{
+            enabled: isTouchOnlyMode,
+            overlayTestId: 'terminal-touch-overlay',
+            onTouchCell: handleTouchCell,
+          }}
         />
       </div>
     </section>

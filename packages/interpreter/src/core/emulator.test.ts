@@ -994,6 +994,54 @@ _SGETCH
     expect(renderedLines[foodPosition!.y]?.[foodPosition!.x]).toBe(foodDigit);
   }, 20000);
 
+  it('spawns and renders the next food immediately after losing a life on desktop', () => {
+    const sourceBytes = new Uint8Array(readFileSync(nibblesPath));
+    const emulator = new Emulator(sourceBytes, { columns: 80, rows: 25 });
+
+    seedNibblesHostLayout(emulator, {
+      columns: 80,
+      rows: 25,
+      layoutProfile: 0,
+    });
+
+    runUntil(emulator, (instance) => instance.isWaitingForInput(), 40000);
+    dispatchNibblesTouch(emulator, {
+      row: 14,
+      col: 8,
+    });
+
+    runUntil(
+      emulator,
+      (instance) => instance.getTerminalText().includes('LEVEL:') && instance.getTerminalText().includes('█'),
+      500000
+    );
+
+    const boardCols = readSymbolByte(emulator, 'BOARD_COLS');
+    writeSymbolByte(emulator, 'POS_X', boardCols - 1);
+    writeSymbolByte(emulator, 'DIRECTION', 1);
+    writeSymbolByte(emulator, 'LAST_DIR', 1);
+    writeSymbolByte(emulator, 'MOVING', 1);
+    writeSymbolLong(emulator, 'TIMER', readSymbolLong(emulator, 'SNK_SPEED') - 1);
+
+    runUntil(
+      emulator,
+      (instance) =>
+        readSymbolByte(instance, 'LIVES') === 4 &&
+        readSymbolByte(instance, 'POS_X') === Math.floor(readSymbolByte(instance, 'BOARD_COLS') / 2) &&
+        readSymbolByte(instance, 'POS_Y') === Math.floor(readSymbolByte(instance, 'BOARD_ROWS') / 2) &&
+        readSymbolByte(instance, 'FOOD_AVAIL') === 1,
+      500000
+    );
+
+    expect(readSymbolByte(emulator, 'FOOD_AVAIL')).toBe(1);
+    const foodPosition = findArenaWord(emulator, 0xffff);
+    expect(foodPosition).not.toBeNull();
+
+    const renderedLines = emulator.getTerminalText().split('\n');
+    const foodDigit = String.fromCharCode(0x30 + readSymbolByte(emulator, 'FOOD_NUM'));
+    expect(renderedLines[foodPosition!.y]?.[foodPosition!.x]).toBe(foodDigit);
+  }, 20000);
+
   it('treats shallow wide terminals as mobile landscape and keeps a one-line HUD', () => {
     const sourceBytes = new Uint8Array(readFileSync(nibblesPath));
     const emulator = new Emulator(sourceBytes, { columns: 52, rows: 14 });

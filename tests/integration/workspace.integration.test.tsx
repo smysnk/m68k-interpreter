@@ -92,7 +92,7 @@ describe('workspace integration', () => {
 
     await waitFor(
       () => {
-        expect(getEmulatorTerminalText()).toContain('Difficulty');
+        expect(getEmulatorTerminalText()).toContain('SELECT DIFFICULTY');
         expect(getEmulatorTerminalText()).toContain('Joshua Bellamy');
         expect(getEmulatorTerminalText()).toContain('smysnk.com');
         expect(document.querySelector('.terminal-container')).toHaveAttribute('data-terminal-theme', 'light');
@@ -160,7 +160,7 @@ describe('workspace integration', () => {
 
     await waitFor(
       () => {
-        expect(getEmulatorTerminalText()).toContain('Difficulty');
+        expect(getEmulatorTerminalText()).toContain('SELECT DIFFICULTY');
       },
       { timeout: 30000 }
     );
@@ -188,7 +188,7 @@ describe('workspace integration', () => {
 
     await waitFor(
       () => {
-        expect(getEmulatorTerminalText()).toContain('Difficulty');
+        expect(getEmulatorTerminalText()).toContain('SELECT DIFFICULTY');
         expect(getEmulatorTerminalText()).toContain('Joshua Bellamy');
         expect(getEmulatorTerminalText()).toContain('smysnk.com');
       },
