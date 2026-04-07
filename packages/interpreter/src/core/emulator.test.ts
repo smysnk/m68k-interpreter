@@ -97,6 +97,16 @@ function expectCenteredLine(lines: string[], columns: number, marker: string): v
   expect(lines[row]?.indexOf(marker)).toBe(Math.floor((columns - marker.length) / 2));
 }
 
+function expectFixedLinePosition(
+  lines: string[],
+  marker: string,
+  row: number,
+  column: number
+): void {
+  expect(lines[row]).toContain(marker);
+  expect(lines[row]?.indexOf(marker)).toBe(column);
+}
+
 function expectBoxedButton(lines: string[], marker: string): {
   row: number;
   leftBorder: number;
@@ -684,11 +694,14 @@ _SGETCH
     expect(renderedText.includes('smysnk.com')).toBe(true);
     expect(renderedLines[0]).toBe(`┌${'─'.repeat(78)}┐`);
     expect(renderedLines[24]).toBe(`└${'─'.repeat(78)}┘`);
-    expectCenteredLine(renderedLines, 80, 'NIBBLES');
-    expectCenteredLine(renderedLines, 80, 'NEON SERPENT ARCADE');
-    expectCenteredLine(renderedLines, 80, 'SELECT DIFFICULTY');
+    expectFixedLinePosition(renderedLines, 'NIBBLES', 1, 26);
+    expectFixedLinePosition(renderedLines, 'NEON SERPENT ARCADE', 2, 21);
+    expectFixedLinePosition(renderedLines, 'Touch a row or use W / S + Enter', 4, 13);
+    expectFixedLinePosition(renderedLines, 'SELECT DIFFICULTY', 6, 10);
+    expectFixedLinePosition(renderedLines, 'smysnk.com', 21, 3);
+    expectFixedLinePosition(renderedLines, 'Joshua Bellamy', 22, 3);
     expect(renderedLines.findIndex((line) => line.includes('EASY'))).toBeGreaterThan(
-      renderedLines.findIndex((line) => line.includes('SELECT DIFFICULTY'))
+      6
     );
     expect(renderedLines.findIndex((line) => line.includes('MEDIUM'))).toBe(
       renderedLines.findIndex((line) => line.includes('EASY')) + 2

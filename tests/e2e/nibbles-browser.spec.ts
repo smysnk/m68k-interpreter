@@ -32,10 +32,14 @@ function lineHasAnyBackground(
   return cells.some((cell) => cell.background !== null);
 }
 
-function expectMarkerCentered(lines: string[], columns: number, marker: string): void {
-  const row = findLineIndex(lines, marker);
-  expect(row).toBeGreaterThanOrEqual(0);
-  expect(lines[row]?.indexOf(marker)).toBe(Math.floor((columns - marker.length) / 2));
+function expectMarkerAtPosition(
+  lines: string[],
+  marker: string,
+  row: number,
+  column: number
+): void {
+  expect(lines[row]).toContain(marker);
+  expect(lines[row]?.indexOf(marker)).toBe(column);
 }
 
 test.describe('browser e2e nibbles', () => {
@@ -78,6 +82,10 @@ test.describe('browser e2e nibbles', () => {
       ? 'NEON SERPENT ARCADE'
       : 'NEON SERPENT';
     const subtitleRow = findLineIndex(safeIntroSnapshot.lines, subtitle);
+    const touchHintRow = findLineIndex(
+      safeIntroSnapshot.lines,
+      'Touch a row or use W / S + Enter'
+    );
     const selectLabelRow = findLineIndex(safeIntroSnapshot.lines, 'SELECT DIFFICULTY');
     const mediumRow = findLineIndex(safeIntroSnapshot.lines, 'MEDIUM');
     const selectedDifficultyRow = findLineIndex(safeIntroSnapshot.lines, 'MEDIUM');
@@ -99,17 +107,21 @@ test.describe('browser e2e nibbles', () => {
     expect(safeIntroSnapshot.lines[safeIntroSnapshot.rows - 1]).toBe(introBottomBorder);
     expect(safeIntroSnapshot.lines[1]?.[0]).toBe('│');
     expect(safeIntroSnapshot.lines[1]?.[safeIntroSnapshot.columns - 1]).toBe('│');
-    expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'NIBBLES');
-    expectMarkerCentered(
+    expect(titleRow).toBe(1);
+    expect(subtitleRow).toBe(2);
+    expect(touchHintRow).toBe(4);
+    expect(selectLabelRow).toBe(6);
+    expectMarkerAtPosition(safeIntroSnapshot.lines, 'NIBBLES', 1, 26);
+    expectMarkerAtPosition(safeIntroSnapshot.lines, subtitle, 2, 21);
+    expectMarkerAtPosition(
       safeIntroSnapshot.lines,
-      safeIntroSnapshot.columns,
-      subtitle
+      'Touch a row or use W / S + Enter',
+      4,
+      13
     );
-    expectMarkerCentered(
-      safeIntroSnapshot.lines,
-      safeIntroSnapshot.columns,
-      'SELECT DIFFICULTY'
-    );
+    expectMarkerAtPosition(safeIntroSnapshot.lines, 'SELECT DIFFICULTY', 6, 10);
+    expectMarkerAtPosition(safeIntroSnapshot.lines, 'smysnk.com', 21, 3);
+    expectMarkerAtPosition(safeIntroSnapshot.lines, 'Joshua Bellamy', 22, 3);
     expect(easyRow - selectLabelRow).toBeGreaterThan(1);
     expect(mediumRow - easyRow).toBeGreaterThan(1);
     expect(hardRow - mediumRow).toBeGreaterThan(1);

@@ -38,7 +38,7 @@ export const NIBBLES_INTRO_BENCHMARK_SCENARIO: BenchmarkScenario = {
   mode: 'load-and-run',
   maxSteps: 200000,
   stopCondition: 'waiting-for-input',
-  terminalMarkers: ['Difficulty', 'Joshua Bellamy', 'smysnk.com'],
+  terminalMarkers: ['DIFFICULTY', 'Joshua Bellamy', 'smysnk.com'],
 };
 
 function buildColdLoadProgram(entryCount = 96): string {

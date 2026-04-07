@@ -1523,43 +1523,8 @@ _DRAW_CENTERED_LINE
 ***************************************************************
 
 _DRAW_DESKTOP_INTRO
-        MOVE.B #7,D0
-        MOVE.B #3,D2
-        MOVEA.L #STR_INTRO_TITLE,A1
-        BSR    _DRAW_CENTERED_LINE
-
-        MOVE.B #19,D0
-        MOVE.B #4,D2
-        MOVEA.L #STR_INTRO_SUBTITLE,A1
-        BSR    _DRAW_CENTERED_LINE
-
-        MOVE.B #32,D0
-        MOVE.B #6,D2
-        MOVEA.L #STR_INTRO_TOUCH_HINT,A1
-        BSR    _DRAW_CENTERED_LINE
-
-        MOVE.B #17,D0
-        MOVE.B #8,D2
-        MOVEA.L #STR_INTRO_SELECT_LABEL,A1
-        BSR    _DRAW_CENTERED_LINE
-
-        MOVE.B #22,D0
-        MOVE.B TERM_ROWS,D2
-        SUBI.B #4,D2
-        MOVEA.L #STR_INTRO_MOVE_HINT,A1
-        BSR    _DRAW_CENTERED_LINE
-
-        MOVE.B #10,D0
-        MOVE.B TERM_ROWS,D2
-        SUBI.B #3,D2
-        MOVEA.L #STR_INTRO_SITE,A1
-        BSR    _DRAW_CENTERED_LINE
-
-        MOVE.B #14,D0
-        MOVE.B TERM_ROWS,D2
-        SUBI.B #2,D2
-        MOVEA.L #STR_INTRO_AUTHOR,A1
-        BSR    _DRAW_CENTERED_LINE
+        MOVEA.L #STR_SPLASH_SCR,A1
+        BSR    _DISPSTR
         RTS
 
 ***************************************************************

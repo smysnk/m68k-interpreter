@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 export interface NibblesRuntimeState {
   waitingForInput: boolean | null;
@@ -125,6 +125,33 @@ async function focusTerminalViewport(page: Page): Promise<void> {
   const viewport = page.locator('[data-testid="terminal-screen"] .retro-lcd__viewport').first();
   await viewport.waitFor({ state: 'visible', timeout: 30_000 });
   await viewport.focus();
+}
+
+async function clickLocatorDirect(locator: Locator): Promise<void> {
+  await locator.waitFor({ state: 'attached', timeout: 30_000 });
+  await locator.evaluate((element) => {
+    (element as HTMLElement).click();
+  });
+}
+
+async function setInputValueDirect(
+  locator: Locator,
+  value: string
+): Promise<void> {
+  await locator.waitFor({ state: 'attached', timeout: 30_000 });
+  await locator.evaluate((element, nextValue) => {
+    const input = element as HTMLInputElement;
+    input.value = nextValue;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+}
+
+async function isNibblesSourceActive(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const editorCode = (window as typeof window & { editorCode?: string }).editorCode;
+    return typeof editorCode === 'string' && editorCode.includes('END NIBBLES');
+  });
 }
 
 function mapKeyToAssemblerInput(key: string): string | number | null {
@@ -420,19 +447,25 @@ export async function loadNibbles(
   const speedInput = page.getByLabel('Speed (x)');
 
   await terminalTab.waitFor({ state: 'visible', timeout: 30_000 });
-  if (options.useFileExplorer) {
-    await fileExplorerButton.waitFor({ state: 'visible', timeout: 30_000 });
-    await fileExplorerButton.hover();
-    await page.getByRole('button', { name: /nibbles\.asm/i }).click();
-  } else if (await codeTab.isVisible().catch(() => false)) {
-    await codeTab.click();
+  if (!(await isNibblesSourceActive(page))) {
+    if (options.useFileExplorer) {
+      await fileExplorerButton.waitFor({ state: 'visible', timeout: 30_000 });
+      await clickLocatorDirect(fileExplorerButton);
+      await clickLocatorDirect(page.getByRole('button', { name: /nibbles\.asm/i }));
+    } else if (await codeTab.isVisible().catch(() => false)) {
+      await clickLocatorDirect(codeTab);
+    }
   }
 
   if (await speedInput.isVisible()) {
-    await speedInput.fill(options.speed ?? '8');
+    const desiredSpeed = options.speed ?? '8';
+    const currentSpeed = await speedInput.evaluate((element) => (element as HTMLInputElement).value);
+    if (currentSpeed !== desiredSpeed) {
+      await setInputValueDirect(speedInput, desiredSpeed);
+    }
   }
 
-  await runButton.click();
+  await clickLocatorDirect(runButton);
   await page.getByTestId('terminal-screen').waitFor({ state: 'visible', timeout: 30_000 });
   await page.waitForFunction(
     () => Boolean((window as typeof window & { emulatorInstance?: unknown }).emulatorInstance),
