@@ -22,11 +22,32 @@ import {
   setRootHorizontalLayout,
   setRootHorizontalWithContextLayout,
   setInspectorView,
+  NIBBLES_FILE_ID,
+  requestFocusTerminal,
+  requestRun,
+  setEditorCode,
+  setActiveFile,
+  setSpeedMultiplier,
   setWorkspaceTab,
   selectRootPanelLayoutModel,
+  ideStore,
   type AppDispatch,
   type RootState,
 } from '@/store';
+
+declare global {
+  interface Window {
+    __M68K_IDE_TEST_CONTROLS__?: {
+      activateNibblesSource: () => void;
+      focusTerminal: () => void;
+      runProgram: () => void;
+      setSpeedMultiplier: (value: number) => void;
+      setWorkspaceTab: (
+        value: 'terminal' | 'code' | 'registers' | 'memory'
+      ) => void;
+    };
+  }
+}
 
 function RuntimeDriver(): null {
   useEmulatorEvents();
@@ -34,7 +55,17 @@ function RuntimeDriver(): null {
 }
 
 function IdePerformanceProbe(): React.ReactElement | null {
-  const [enabled, setEnabled] = React.useState(false);
+  const [enabled, setEnabled] = React.useState(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    return (
+      window.__M68K_IDE_PERF_ENABLED__ === true ||
+      new URLSearchParams(window.location.search).get('ide_perf') === '1'
+    );
+  });
+  const [controlsReady, setControlsReady] = React.useState(false);
   const [snapshot, setSnapshot] = React.useState(() => getIdePerformanceSnapshot());
 
   React.useEffect(() => {
@@ -46,10 +77,46 @@ function IdePerformanceProbe(): React.ReactElement | null {
       window.__M68K_IDE_PERF_ENABLED__ === true ||
       new URLSearchParams(window.location.search).get('ide_perf') === '1';
     setEnabled(nextEnabled);
+  }, []);
 
-    if (!nextEnabled) {
+  React.useEffect(() => {
+    if (typeof window === 'undefined') {
       return;
     }
+
+    if (!enabled) {
+      delete window.__M68K_IDE_TEST_CONTROLS__;
+      setControlsReady(false);
+      return;
+    }
+
+    window.__M68K_IDE_TEST_CONTROLS__ = {
+      activateNibblesSource: () => {
+        const state = ideStore.getState();
+        const nibblesFile = state.files.items.find((item) => item.id === NIBBLES_FILE_ID);
+        ideStore.dispatch(setWorkspaceTab('code'));
+        ideStore.dispatch(setActiveFile(NIBBLES_FILE_ID));
+        if (nibblesFile) {
+          ideStore.dispatch(setEditorCode(nibblesFile.content));
+          window.editorCode = nibblesFile.content;
+        }
+      },
+      focusTerminal: () => {
+        ideStore.dispatch(requestFocusTerminal());
+      },
+      runProgram: () => {
+        ideStore.dispatch(setWorkspaceTab('terminal'));
+        ideStore.dispatch(requestFocusTerminal());
+        ideStore.dispatch(requestRun());
+      },
+      setSpeedMultiplier: (value: number) => {
+        ideStore.dispatch(setSpeedMultiplier(value));
+      },
+      setWorkspaceTab: (value) => {
+        ideStore.dispatch(setWorkspaceTab(value));
+      },
+    };
+    setControlsReady(true);
 
     const updateSnapshot = (): void => {
       setSnapshot(getIdePerformanceSnapshot());
@@ -60,8 +127,10 @@ function IdePerformanceProbe(): React.ReactElement | null {
 
     return () => {
       window.clearInterval(intervalId);
+      delete window.__M68K_IDE_TEST_CONTROLS__;
+      setControlsReady(false);
     };
-  }, []);
+  }, [enabled]);
 
   return (
     <output
@@ -69,6 +138,7 @@ function IdePerformanceProbe(): React.ReactElement | null {
       aria-hidden="true"
       data-testid="ide-perf-probe"
       data-ide-perf-enabled={enabled ? 'true' : 'false'}
+      data-ide-test-controls-ready={controlsReady ? 'true' : 'false'}
       data-worker-frame-events={snapshot.workerTransport.frameEventsReceived}
       data-terminal-repaints={snapshot.terminalRepaint.repaintCount}
       data-touch-dispatches={snapshot.touchLatency.dispatchCount}

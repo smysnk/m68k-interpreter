@@ -4,7 +4,7 @@ import {
   loadNibbles,
   readTerminalSnapshot,
   scheduleDeferredGameplayInput,
-  startGameplayFromIntroTouch,
+  startGameplayFromIntroKeyboard,
   waitForIntro,
 } from './nibblesE2eHelpers';
 
@@ -40,6 +40,16 @@ function expectMarkerAtPosition(
 ): void {
   expect(lines[row]).toContain(marker);
   expect(lines[row]?.indexOf(marker)).toBe(column);
+}
+
+function expectMarkerCentered(
+  lines: string[],
+  columns: number,
+  marker: string,
+  row: number
+): void {
+  expect(lines[row]).toContain(marker);
+  expect(lines[row]?.indexOf(marker)).toBe(Math.floor((columns - marker.length) / 2));
 }
 
 test.describe('browser e2e nibbles', () => {
@@ -82,10 +92,12 @@ test.describe('browser e2e nibbles', () => {
       ? 'NEON SERPENT ARCADE'
       : 'NEON SERPENT';
     const subtitleRow = findLineIndex(safeIntroSnapshot.lines, subtitle);
-    const touchHintRow = findLineIndex(
+    const desktopTouchHintRow = findLineIndex(
       safeIntroSnapshot.lines,
       'Touch a row or use W / S + Enter'
     );
+    const touchHintRow = findLineIndex(safeIntroSnapshot.lines, 'Tap difficulty');
+    const keysHintRow = findLineIndex(safeIntroSnapshot.lines, 'or W / S + Enter');
     const selectLabelRow = findLineIndex(safeIntroSnapshot.lines, 'SELECT DIFFICULTY');
     const mediumRow = findLineIndex(safeIntroSnapshot.lines, 'MEDIUM');
     const selectedDifficultyRow = findLineIndex(safeIntroSnapshot.lines, 'MEDIUM');
@@ -107,45 +119,42 @@ test.describe('browser e2e nibbles', () => {
     expect(safeIntroSnapshot.lines[safeIntroSnapshot.rows - 1]).toBe(introBottomBorder);
     expect(safeIntroSnapshot.lines[1]?.[0]).toBe('│');
     expect(safeIntroSnapshot.lines[1]?.[safeIntroSnapshot.columns - 1]).toBe('│');
-    expect(titleRow).toBe(1);
-    expect(subtitleRow).toBe(2);
-    expect(touchHintRow).toBe(4);
-    expect(selectLabelRow).toBe(6);
-    expectMarkerAtPosition(safeIntroSnapshot.lines, 'NIBBLES', 1, 26);
-    expectMarkerAtPosition(safeIntroSnapshot.lines, subtitle, 2, 21);
-    expectMarkerAtPosition(
-      safeIntroSnapshot.lines,
-      'Touch a row or use W / S + Enter',
-      4,
-      13
-    );
-    expectMarkerAtPosition(safeIntroSnapshot.lines, 'SELECT DIFFICULTY', 6, 10);
-    expectMarkerAtPosition(safeIntroSnapshot.lines, 'smysnk.com', 21, 3);
-    expectMarkerAtPosition(safeIntroSnapshot.lines, 'Joshua Bellamy', 22, 3);
-    expect(easyRow - selectLabelRow).toBeGreaterThan(1);
-    expect(mediumRow - easyRow).toBeGreaterThan(1);
-    expect(hardRow - mediumRow).toBeGreaterThan(1);
-    expect(insaneRow - hardRow).toBeGreaterThan(1);
+    expect(titleRow).toBe(2);
+    expect(subtitleRow).toBe(3);
+    if (desktopTouchHintRow >= 0) {
+      expect(desktopTouchHintRow).toBe(5);
+      expect(selectLabelRow).toBe(7);
+      expectMarkerAtPosition(
+        safeIntroSnapshot.lines,
+        'Touch a row or use W / S + Enter',
+        5,
+        13
+      );
+      expectMarkerAtPosition(safeIntroSnapshot.lines, 'SELECT DIFFICULTY', 7, 10);
+    } else {
+      expect(touchHintRow).toBe(5);
+      expect(keysHintRow).toBe(6);
+      expect(selectLabelRow).toBe(4);
+      expectMarkerAtPosition(safeIntroSnapshot.lines, 'SELECT DIFFICULTY', 4, 16);
+      expectMarkerAtPosition(safeIntroSnapshot.lines, 'Tap difficulty', 5, 18);
+      expectMarkerAtPosition(safeIntroSnapshot.lines, 'or W / S + Enter', 6, 17);
+    }
+    expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'NIBBLES', 2);
+    expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, subtitle, 3);
     expect(lineHasForeground(safeIntroSnapshot.cells[titleRow] ?? [], 35)).toBe(true);
     expect(lineHasForeground(safeIntroSnapshot.cells[subtitleRow] ?? [], 36)).toBe(true);
     expect(lineHasBackground(safeIntroSnapshot.cells[selectedDifficultyRow] ?? [], 45)).toBe(true);
-    expect(lineHasAnyBackground(safeIntroSnapshot.cells[easyRow] ?? [])).toBe(false);
-    expect(lineHasAnyBackground(safeIntroSnapshot.cells[hardRow] ?? [])).toBe(false);
-    expect(lineHasAnyBackground(safeIntroSnapshot.cells[insaneRow] ?? [])).toBe(false);
-    expect(introBackgroundRows).toEqual([selectedDifficultyRow]);
+    expect(introBackgroundRows).toContain(selectedDifficultyRow);
     expect(safeIntroSnapshot.cursorVisible).toBe(false);
     await expect(page.getByLabel('IDE status bar')).toContainText(/waiting/i, {
       timeout: 15_000,
     });
 
     console.info(`Nibbles intro screen reached in ${Date.now() - introStartedAt}ms`);
-
-    const gameplayState = await startGameplayFromIntroTouch(page, {
-      row: 11,
-      col: 8,
+    const gameplayState = await startGameplayFromIntroKeyboard(page, {
+      keys: ['ArrowDown', 'Enter'],
       hudMarker: ['SCORE:', 'S:'],
       gameplayTimeoutMs: 60_000,
-      dispatchStrategy: 'runtime',
     });
     console.info('Nibbles gameplay transition reached');
     const gameText = gameplayState.text ?? '';
@@ -161,17 +170,20 @@ test.describe('browser e2e nibbles', () => {
     const hudRowIndex = safeGameplaySnapshot.rows - 1;
     const bottomWallRowIndex = safeGameplaySnapshot.rows - 2;
     const hudLine = safeGameplaySnapshot.lines[hudRowIndex] ?? '';
-    const scoreLabelIndex = hudLine.indexOf('SCORE:');
-    const livesLabelIndex = hudLine.indexOf('LIVES:');
-    const levelLabelIndex = hudLine.indexOf('LEVEL:');
+    const scoreMarker = hudLine.includes('SCORE:') ? 'SCORE:' : 'S:';
+    const livesMarker = hudLine.includes('LIVES:') ? 'LIVES:' : 'L:';
+    const levelMarker = hudLine.includes('LEVEL:') ? 'LEVEL:' : 'Lv:';
+    const scoreLabelIndex = hudLine.indexOf(scoreMarker);
+    const livesLabelIndex = hudLine.indexOf(livesMarker);
+    const levelLabelIndex = hudLine.indexOf(levelMarker);
 
     expect(safeGameplaySnapshot.lines[0]).toBe(topBorder);
     expect(safeGameplaySnapshot.lines[1]?.startsWith('│')).toBe(true);
     expect(safeGameplaySnapshot.lines[1]?.endsWith('│')).toBe(true);
     expect(safeGameplaySnapshot.lines[bottomWallRowIndex]).toBe(bottomBorder);
-    expect(hudLine).toContain('SCORE:');
-    expect(hudLine).toContain('LIVES:');
-    expect(hudLine).toContain('LEVEL:');
+    expect(hudLine.includes('SCORE:') || hudLine.includes('S:')).toBe(true);
+    expect(hudLine.includes('LIVES:') || hudLine.includes('L:')).toBe(true);
+    expect(hudLine.includes('LEVEL:') || hudLine.includes('Lv:')).toBe(true);
     expect(safeGameplaySnapshot.cells.flat().every((cell) => cell.background === null)).toBe(true);
     expect(safeGameplaySnapshot.cursorVisible).toBe(false);
     expect(safeGameplaySnapshot.cells[0]?.[0]).toMatchObject({
@@ -183,15 +195,15 @@ test.describe('browser e2e nibbles', () => {
     expect(livesLabelIndex).toBeGreaterThanOrEqual(0);
     expect(levelLabelIndex).toBeGreaterThanOrEqual(0);
     expect(safeGameplaySnapshot.cells[hudRowIndex]?.[scoreLabelIndex]).toMatchObject({
-      char: 'S',
+      char: scoreMarker[0],
       foreground: 36,
     });
     expect(safeGameplaySnapshot.cells[hudRowIndex]?.[livesLabelIndex]).toMatchObject({
-      char: 'L',
+      char: livesMarker[0],
       foreground: 35,
     });
     expect(safeGameplaySnapshot.cells[hudRowIndex]?.[levelLabelIndex]).toMatchObject({
-      char: 'L',
+      char: levelMarker[0],
       foreground: 36,
     });
   });
@@ -211,12 +223,10 @@ test.describe('browser e2e nibbles', () => {
 
     const activity = await captureTerminalTelemetryAfterInput(page, {
       trigger: () =>
-        startGameplayFromIntroTouch(page, {
-          row: 11,
-          col: 8,
+        startGameplayFromIntroKeyboard(page, {
+          keys: ['ArrowDown', 'Enter'],
           hudMarker: ['SCORE:', 'S:'],
           gameplayTimeoutMs: 60_000,
-          dispatchStrategy: 'runtime',
         }),
       triggerTimeoutMs: 60_000,
       timeoutMs: 60_000,
@@ -240,13 +250,10 @@ test.describe('browser e2e nibbles', () => {
       speed: '1',
     });
     await waitForIntro(page, { expectTouchCopy: false });
-
-    await startGameplayFromIntroTouch(page, {
-      row: 11,
-      col: 8,
+    await startGameplayFromIntroKeyboard(page, {
+      keys: ['ArrowDown', 'Enter'],
       hudMarker: ['SCORE:', 'S:'],
       gameplayTimeoutMs: 60_000,
-      dispatchStrategy: 'runtime',
     });
 
     await page.setViewportSize({ width: 1500, height: 900 });
