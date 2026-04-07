@@ -476,6 +476,17 @@ export async function loadNibbles(
 export async function readTerminalText(page: Page): Promise<string> {
   return withNodeTimeout(
     page.evaluate(() => {
+      const runtime = (window as typeof window & { emulatorInstance?: any }).emulatorInstance;
+      const runtimeLines = runtime?.getTerminalLines?.();
+      if (Array.isArray(runtimeLines) && runtimeLines.length > 0) {
+        return runtimeLines.join('\n');
+      }
+
+      const runtimeText = runtime?.getTerminalText?.();
+      if (typeof runtimeText === 'string' && runtimeText.length > 0) {
+        return runtimeText;
+      }
+
       const screen = document.querySelector<HTMLElement>('[data-testid="terminal-screen"]');
       if (!screen) {
         return '';
