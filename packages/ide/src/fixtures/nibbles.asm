@@ -1,7 +1,6 @@
 ;=============================================================================
 ;        File: nibbles.asm
-;      Author: Joshua Bellamy-Henn
-;             � 2015 Psidox
+;      Author: Joshua Bellamy
 ;
 ; Description: Remake of Nibbles game for the Motorola 68000.
 ;

@@ -35,27 +35,16 @@ function applyLegacyClassAliases(host) {
 }
 
 function useLegacyRetroLcdClassAliases(hostRef) {
-  React.useEffect(() => {
+  const useIsomorphicLayoutEffect =
+    typeof window === "undefined" ? React.useEffect : React.useLayoutEffect;
+
+  useIsomorphicLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) {
       return;
     }
 
     applyLegacyClassAliases(host);
-    const observer = new MutationObserver(() => {
-      applyLegacyClassAliases(host);
-    });
-
-    observer.observe(host, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ["class"]
-    });
-
-    return () => {
-      observer.disconnect();
-    };
   }, []);
 }
 
@@ -78,4 +67,3 @@ module.exports = {
   RetroLcd,
   createRetroLcdController: retro.createRetroScreenController
 };
-

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useRef } from "react";
 import {
   RetroScreen,
   createRetroScreenController
@@ -37,28 +37,17 @@ function applyLegacyClassAliases(host) {
   }
 }
 
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
+
 function useLegacyRetroLcdClassAliases(hostRef) {
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) {
       return;
     }
 
     applyLegacyClassAliases(host);
-    const observer = new MutationObserver(() => {
-      applyLegacyClassAliases(host);
-    });
-
-    observer.observe(host, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ["class"]
-    });
-
-    return () => {
-      observer.disconnect();
-    };
   }, []);
 }
 
@@ -77,4 +66,3 @@ export const RetroLcd = (props) => {
 };
 
 export const createRetroLcdController = createRetroScreenController;
-
