@@ -56,7 +56,7 @@ describe('filesSlice', () => {
 
     expect(getActiveFile(normalized).id).toBe(NIBBLES_FILE_ID);
     expect(getActiveFile(normalized).content).not.toBe('stale local example content');
-    expect(getActiveFile(normalized).content).toContain('Joshua Bellamy-Henn');
+    expect(getActiveFile(normalized).content).toContain('Author: Joshua Bellamy');
   });
 
   it('updates the active file content and can reset to defaults', () => {
