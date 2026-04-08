@@ -75,7 +75,9 @@ describe('workspace integration', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'true');
-      expect(screen.getByTestId('terminal-screen')).toHaveTextContent('H');
+      expect(window.emulatorInstance).not.toBeNull();
+      expect(getEmulatorTerminalText()).toContain('H');
+      expect(terminalSurfaceStore.getText()).toContain('H');
     });
   });
 
