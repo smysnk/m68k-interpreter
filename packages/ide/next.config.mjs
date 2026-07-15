@@ -4,8 +4,9 @@ import path from 'node:path';
 
 const isGithubPagesExport = process.env.NEXT_OUTPUT_MODE === 'export';
 const repositoryName = process.env.GITHUB_REPOSITORY?.split('/')[1] ?? '';
+const configuredBasePath = process.env.NEXT_BASE_PATH?.trim().replace(/\/$/, '') ?? '';
 const githubPagesBasePath =
-  isGithubPagesExport && repositoryName ? `/${repositoryName}` : '';
+  isGithubPagesExport ? configuredBasePath || (repositoryName ? `/${repositoryName}` : '') : '';
 
 const nextConfig = {
   compiler: {
