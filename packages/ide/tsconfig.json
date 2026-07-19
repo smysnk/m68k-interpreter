@@ -1,37 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": [
-      "ES2020",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "baseUrl": ".",
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
     "paths": {
-      "@/*": [
-        "src/*"
-      ]
+      "@/*": ["./src/*"]
     },
-    "allowJs": true,
-    "incremental": true
+    "allowJs": true
   },
-  "include": [
-    "next-env.d.ts",
-    ".next/types/**/*.ts",
-    "pages",
-    "src",
-    "next.config.mjs"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["build", "src", "vite.config.ts", "vite-env.d.ts"],
+  "exclude": ["node_modules"]
 }

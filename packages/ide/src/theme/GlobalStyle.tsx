@@ -202,8 +202,7 @@ export const GlobalStyle = createGlobalStyle`
     font-family: var(--font-family);
   }
 
-  #root,
-  #__next {
+  #root {
     min-height: 100%;
     background: var(--ide-bg);
   }

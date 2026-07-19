@@ -210,9 +210,11 @@ function round(value: number): number {
 async function readIdePerformanceSnapshotFromPage(page: Page): Promise<IdePerformanceSnapshot> {
   return page.evaluate(() => {
     return (
-      (window as typeof window & {
-        __M68K_IDE_PERF__?: { snapshot?: () => IdePerformanceSnapshot };
-      }).__M68K_IDE_PERF__?.snapshot?.() ?? {
+      (
+        window as typeof window & {
+          __M68K_IDE_PERF__?: { snapshot?: () => IdePerformanceSnapshot };
+        }
+      ).__M68K_IDE_PERF__?.snapshot?.() ?? {
         renderStats: [],
         runtimeSync: {
           callCount: 0,
@@ -380,7 +382,7 @@ async function main(): Promise<void> {
     cwd: repoRoot,
     env: {
       ...process.env,
-      NEXT_PUBLIC_IDE_AUTOPLAY: 'false',
+      VITE_IDE_AUTOPLAY: 'false',
       WEB_HOST: HOST,
       WEB_PORT: String(port),
     },
@@ -449,9 +451,11 @@ IRQ_COUNT DC.B 0
 
 async function readHeapSize(page: Page): Promise<number | null> {
   return page.evaluate(() => {
-    const memory = (globalThis.performance as Performance & {
-      memory?: { usedJSHeapSize?: number };
-    }).memory;
+    const memory = (
+      globalThis.performance as Performance & {
+        memory?: { usedJSHeapSize?: number };
+      }
+    ).memory;
     return typeof memory?.usedJSHeapSize === 'number' ? memory.usedJSHeapSize : null;
   });
 }
@@ -469,16 +473,20 @@ async function profileHardwareScenario(
     const page = await prepareInstrumentedPage(context, baseUrl);
     await page.waitForFunction(
       () =>
-        typeof (window as typeof window & {
-          __M68K_IDE_TEST_CONTROLS__?: { runProgram?: () => void };
-        }).__M68K_IDE_TEST_CONTROLS__?.runProgram === 'function',
+        typeof (
+          window as typeof window & {
+            __M68K_IDE_TEST_CONTROLS__?: { runProgram?: () => void };
+          }
+        ).__M68K_IDE_TEST_CONTROLS__?.runProgram === 'function',
       undefined,
       { timeout: 30_000 }
     );
     await page.evaluate(() => {
-      (window as typeof window & {
-        __M68K_IDE_TEST_CONTROLS__?: { runProgram?: () => void };
-      }).__M68K_IDE_TEST_CONTROLS__?.runProgram?.();
+      (
+        window as typeof window & {
+          __M68K_IDE_TEST_CONTROLS__?: { runProgram?: () => void };
+        }
+      ).__M68K_IDE_TEST_CONTROLS__?.runProgram?.();
     });
     await page.waitForFunction(
       () => {
@@ -495,14 +503,16 @@ async function profileHardwareScenario(
     await page.waitForFunction(
       () =>
         Object.keys(
-          (window as typeof window & { emulatorInstance?: any }).emulatorInstance?.getSymbols?.() ?? {}
+          (window as typeof window & { emulatorInstance?: any }).emulatorInstance?.getSymbols?.() ??
+            {}
         ).length > 0,
       undefined,
       { timeout: 30_000 }
     );
     await page.evaluate(() => {
-      (window as typeof window & { __M68K_IDE_PERF__?: { reset?: () => void } })
-        .__M68K_IDE_PERF__?.reset?.();
+      (
+        window as typeof window & { __M68K_IDE_PERF__?: { reset?: () => void } }
+      ).__M68K_IDE_PERF__?.reset?.();
     });
     const introStartedAt = performance.now();
     const hardwareTab = page.getByRole('tab', { name: /hardware/i }).last();
@@ -665,7 +675,7 @@ async function resolveMenuTouchTarget(
 ): Promise<{ row: number; col: number }> {
   const snapshot = await readTerminalSnapshot(page);
   const row = snapshot?.lines.findIndex((line) => line.includes(label)) ?? -1;
-  const labelColumn = row >= 0 ? snapshot?.lines[row]?.indexOf(label) ?? -1 : -1;
+  const labelColumn = row >= 0 ? (snapshot?.lines[row]?.indexOf(label) ?? -1) : -1;
 
   if (row < 0 || labelColumn < 0) {
     throw new Error(`Unable to resolve the ${label} menu target from the terminal snapshot`);
@@ -677,13 +687,11 @@ async function resolveMenuTouchTarget(
   };
 }
 
-async function prepareInstrumentedPage(
-  context: BrowserContext,
-  baseUrl: string
-): Promise<Page> {
+async function prepareInstrumentedPage(context: BrowserContext, baseUrl: string): Promise<Page> {
   const page = await context.newPage();
   await page.addInitScript(() => {
-    (window as typeof window & { __M68K_IDE_PERF_ENABLED__?: boolean }).__M68K_IDE_PERF_ENABLED__ = true;
+    (window as typeof window & { __M68K_IDE_PERF_ENABLED__?: boolean }).__M68K_IDE_PERF_ENABLED__ =
+      true;
   });
   await page.goto(`${baseUrl}/?ide_perf=1`, {
     waitUntil: 'networkidle',
@@ -691,9 +699,11 @@ async function prepareInstrumentedPage(
   });
   await page.getByTestId('app-container').waitFor({ state: 'visible', timeout: 30_000 });
   await page.evaluate(() => {
-    (window as typeof window & {
-      __M68K_IDE_PERF__?: { reset?: () => void };
-    }).__M68K_IDE_PERF__?.reset?.();
+    (
+      window as typeof window & {
+        __M68K_IDE_PERF__?: { reset?: () => void };
+      }
+    ).__M68K_IDE_PERF__?.reset?.();
   });
   return page;
 }
@@ -780,8 +790,7 @@ async function buildScenarioSummary(
       framesWithTerminalFrameBuffer:
         performanceSnapshot.workerTransport.framesWithTerminalFrameBuffer,
       framesWithTerminalSnapshot: performanceSnapshot.workerTransport.framesWithTerminalSnapshot,
-      framesWithHardwareSnapshot:
-        performanceSnapshot.workerTransport.framesWithHardwareSnapshot,
+      framesWithHardwareSnapshot: performanceSnapshot.workerTransport.framesWithHardwareSnapshot,
     },
     hardwareSurface: {
       snapshotsReceived: performanceSnapshot.hardwareSurface.snapshotsReceived,
@@ -789,8 +798,7 @@ async function buildScenarioSummary(
       snapshotsReused: performanceSnapshot.hardwareSurface.snapshotsReused,
       noOpSnapshots: performanceSnapshot.hardwareSurface.noOpSnapshots,
       outputVersionChanges: performanceSnapshot.hardwareSurface.outputVersionChanges,
-      framesWithHardwareSnapshot:
-        performanceSnapshot.hardwareSurface.framesWithHardwareSnapshot,
+      framesWithHardwareSnapshot: performanceSnapshot.hardwareSurface.framesWithHardwareSnapshot,
       approximatePayloadBytes: performanceSnapshot.hardwareSurface.approximatePayloadBytes,
       commandRequests: performanceSnapshot.hardwareSurface.commandRequests,
       commandAcceptances: performanceSnapshot.hardwareSurface.commandAcceptances,
@@ -812,9 +820,7 @@ async function buildScenarioSummary(
                 performanceSnapshot.hardwareSurface.visibleStateLatencies
             )
           : 0,
-      maxVisibleStateLatencyMs: round(
-        performanceSnapshot.hardwareSurface.maxVisibleStateLatencyMs
-      ),
+      maxVisibleStateLatencyMs: round(performanceSnapshot.hardwareSurface.maxVisibleStateLatencyMs),
     },
     terminalRepaint: {
       repaintCount: performanceSnapshot.terminalRepaint.repaintCount,

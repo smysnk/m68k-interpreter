@@ -32,8 +32,7 @@ body {
   color: var(--text-color);
 }
 
-#root,
-#__next {
+#root {
   height: 100%;
 }
 

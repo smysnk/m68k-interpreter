@@ -28,8 +28,8 @@ function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean 
 
 export function getIdeBootConfig(): IdeBootConfig {
   return {
-    preloadFile: process.env.NEXT_PUBLIC_IDE_PRELOAD_FILE?.trim() || DEFAULT_PRELOAD_FILE,
-    autoPlay: parseBooleanEnv(process.env.NEXT_PUBLIC_IDE_AUTOPLAY, DEFAULT_AUTOPLAY),
+    preloadFile: import.meta.env.VITE_IDE_PRELOAD_FILE?.trim() || DEFAULT_PRELOAD_FILE,
+    autoPlay: parseBooleanEnv(import.meta.env.VITE_IDE_AUTOPLAY, DEFAULT_AUTOPLAY),
   };
 }
 

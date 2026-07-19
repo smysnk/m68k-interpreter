@@ -27,8 +27,8 @@ describe('ideBootConfig', () => {
   });
 
   it('reads explicit env overrides', () => {
-    vi.stubEnv('NEXT_PUBLIC_IDE_PRELOAD_FILE', 'workspace/scratch.asm');
-    vi.stubEnv('NEXT_PUBLIC_IDE_AUTOPLAY', 'false');
+    vi.stubEnv('VITE_IDE_PRELOAD_FILE', 'workspace/scratch.asm');
+    vi.stubEnv('VITE_IDE_AUTOPLAY', 'false');
 
     const files = createDefaultFilesState();
 

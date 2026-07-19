@@ -25,7 +25,7 @@ export default defineConfig({
     command: 'yarn preview:e2e',
     env: {
       ...process.env,
-      NEXT_PUBLIC_IDE_AUTOPLAY: 'false',
+      VITE_IDE_AUTOPLAY: 'false',
       WEB_HOST: '127.0.0.1',
       WEB_PORT: String(PORT),
     },

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Analytics } from '@vercel/analytics/react';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { Group, Panel, Separator, type Layout } from 'react-resizable-panels';
 import { useTheme } from 'styled-components';
 import Navbar from './Navbar';
 import WorkspacePanel from './WorkspacePanel';
@@ -171,15 +171,21 @@ function AppShell(): React.ReactElement {
     }
   }, [activeWorkspaceTab, dispatch, isCompactShell]);
 
-  const handleRootLayout = (sizes: number[]): void => {
-    if (sizes.length === 3) {
-      dispatch(setRootHorizontalWithContextLayout(sizes as [number, number, number]));
+  const handleRootLayout = (layout: Layout): void => {
+    const workspaceSize = layout.workspace;
+    const inspectorSize = layout.inspector;
+    const contextSize = layout.context;
+
+    if (typeof workspaceSize !== 'number' || typeof inspectorSize !== 'number') {
       return;
     }
 
-    if (sizes.length === 2) {
-      dispatch(setRootHorizontalLayout(sizes as [number, number]));
+    if (typeof contextSize === 'number') {
+      dispatch(setRootHorizontalWithContextLayout([workspaceSize, inspectorSize, contextSize]));
+      return;
     }
+
+    dispatch(setRootHorizontalLayout([workspaceSize, inspectorSize]));
   };
 
   return (
@@ -205,46 +211,51 @@ function AppShell(): React.ReactElement {
             <WorkspacePanel />
           </div>
         ) : (
-          <PanelGroup
+          <Group
             className="main-shell"
-            direction="horizontal"
             key={panelLayout.shellKey}
-            onLayout={handleRootLayout}
+            onLayoutChanged={handleRootLayout}
+            orientation="horizontal"
           >
             <Panel
               className="panel-slot"
-              defaultSize={panelLayout.workspaceDefaultSize}
-              minSize={34}
-              order={1}
+              defaultSize={`${panelLayout.workspaceDefaultSize}`}
+              id="workspace"
+              minSize="34"
             >
               <WorkspacePanel />
             </Panel>
-            <PanelResizeHandle
+            <Separator
               className="panel-resize-handle panel-resize-handle-horizontal"
               data-testid="resize-handle-root"
             />
             <Panel
               className="panel-slot"
-              defaultSize={panelLayout.inspectorDefaultSize}
-              minSize={24}
-              order={2}
+              defaultSize={`${panelLayout.inspectorDefaultSize}`}
+              id="inspector"
+              minSize="24"
             >
               <InspectorPanel />
             </Panel>
             {panelLayout.hasContextPanel ? (
               <>
-                <PanelResizeHandle
+                <Separator
                   className="panel-resize-handle panel-resize-handle-horizontal"
                   data-testid="resize-handle-context"
                 />
-                <Panel className="panel-slot" defaultSize={panelLayout.contextDefaultSize ?? 18} minSize={14} order={3}>
+                <Panel
+                  className="panel-slot"
+                  defaultSize={`${panelLayout.contextDefaultSize ?? 18}`}
+                  id="context"
+                  minSize="14"
+                >
                   <div className="context-panel" data-testid="context-panel">
                     <HelpPanel />
                   </div>
                 </Panel>
               </>
             ) : null}
-          </PanelGroup>
+          </Group>
         )}
       </main>
       {!isFocusedMobileTerminal ? (

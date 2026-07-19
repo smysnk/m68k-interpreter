@@ -208,7 +208,7 @@ function isTelemetryEnabled(): boolean {
     return true;
   }
 
-  if (process.env.NEXT_PUBLIC_IDE_PROFILE_RENDERS === 'true') {
+  if (import.meta.env.VITE_IDE_PROFILE_RENDERS === 'true') {
     return true;
   }
 
@@ -221,8 +221,8 @@ function isTelemetryEnabled(): boolean {
 
 function buildSnapshot(): IdePerformanceSnapshot {
   return {
-    renderStats: Array.from(renderStats.values()).sort((left, right) =>
-      right.actualDurationMs - left.actualDurationMs
+    renderStats: Array.from(renderStats.values()).sort(
+      (left, right) => right.actualDurationMs - left.actualDurationMs
     ),
     runtimeSync: {
       ...runtimeSyncStat,
@@ -422,7 +422,9 @@ export function recordWorkerEventReceived(metric: {
     case 'frame':
       workerTransportStat.frameEventsReceived += 1;
       workerTransportStat.framesWithMemoryImage += metric.includesMemoryImage ? 1 : 0;
-      workerTransportStat.framesWithTerminalFrameBuffer += metric.includesTerminalFrameBuffer ? 1 : 0;
+      workerTransportStat.framesWithTerminalFrameBuffer += metric.includesTerminalFrameBuffer
+        ? 1
+        : 0;
       workerTransportStat.framesWithTerminalSnapshot += metric.includesTerminalSnapshot ? 1 : 0;
       workerTransportStat.framesWithHardwareSnapshot += metric.includesHardwareSnapshot ? 1 : 0;
       hardwareSurfaceStat.framesWithHardwareSnapshot += metric.includesHardwareSnapshot ? 1 : 0;
@@ -554,9 +556,7 @@ export function recordTerminalRepaint(metric: {
   }
 }
 
-export function recordInputProgressRequest(metric?: {
-  startedAtMs?: number;
-}): void {
+export function recordInputProgressRequest(metric?: { startedAtMs?: number }): void {
   const controller = ensureTelemetryController();
   if (!controller?.enabled) {
     return;
@@ -584,10 +584,7 @@ export function recordInputAccepted(): void {
   }
 }
 
-export function recordTouchDispatch(metric: {
-  startedAtMs: number;
-  durationMs: number;
-}): void {
+export function recordTouchDispatch(metric: { startedAtMs: number; durationMs: number }): void {
   const controller = ensureTelemetryController();
   if (!controller?.enabled) {
     return;

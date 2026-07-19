@@ -63,7 +63,8 @@ The current build includes the Easy68K subset needed by `nibbles.asm`, two-pass 
 See [docs/VIEW_CONTROLLER_REDUX_CONVENTIONS.md](docs/VIEW_CONTROLLER_REDUX_CONVENTIONS.md) for the current architecture rules.
 
 ---
-<!-- 
+
+<!--
 ## Examples
 
 The [`packages/ide/src/fixtures/`](./packages/ide/src/fixtures) folder contains bundled example programs to get started:
@@ -78,7 +79,7 @@ The [`packages/ide/src/fixtures/`](./packages/ide/src/fixtures) folder contains 
 | `loop_counter.asm` | DBRA countdown loop |
 
 Each file is commented line by line — useful if you are following a computer architecture course.
---- 
+---
 -->
 
 ## Built with
@@ -105,8 +106,9 @@ yarn type-check      # workspace type-check
 ```
 
 Boot-time IDE env vars:
-- `NEXT_PUBLIC_IDE_PRELOAD_FILE=nibbles.asm` selects which known file should be loaded on startup. You can use the file id, name, or path, for example `example:nibbles.asm`, `nibbles.asm`, or `fixtures/nibbles.asm`.
-- `NEXT_PUBLIC_IDE_AUTOPLAY=true` runs the loaded program automatically on boot.
+
+- `VITE_IDE_PRELOAD_FILE=nibbles.asm` selects which known file should be loaded on startup. You can use the file id, name, or path, for example `example:nibbles.asm`, `nibbles.asm`, or `fixtures/nibbles.asm`.
+- `VITE_IDE_AUTOPLAY=true` runs the loaded program automatically on boot.
 
 ---
 

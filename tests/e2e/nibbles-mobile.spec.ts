@@ -42,9 +42,7 @@ const viewportCases = [
   },
 ] as const;
 
-function lineHasAnyBackground(
-  cells: Array<{ background: number | null }>
-): boolean {
+function lineHasAnyBackground(cells: Array<{ background: number | null }>): boolean {
   return cells.some((cell) => cell.background !== null);
 }
 
@@ -113,9 +111,7 @@ test.describe('browser e2e nibbles mobile layouts', () => {
       const selectedDifficultyRow = safeIntroSnapshot.lines.findIndex((line) =>
         line.includes('MEDIUM')
       );
-      const hasBoxedButtons = safeIntroSnapshot.lines.some((line) =>
-        line.includes('┌──────────┐')
-      );
+      const hasBoxedButtons = safeIntroSnapshot.lines.some((line) => line.includes('┌──────────┐'));
       const selectLabelRow = findLineIndex(safeIntroSnapshot.lines, 'SELECT DIFFICULTY');
       const easyRow = findLineIndex(safeIntroSnapshot.lines, 'EASY');
       const mediumRow = findLineIndex(safeIntroSnapshot.lines, 'MEDIUM');
@@ -136,11 +132,7 @@ test.describe('browser e2e nibbles mobile layouts', () => {
           ? 'NEON SERPENT ARCADE'
           : 'NEON SERPENT'
       );
-      expectMarkerCentered(
-        safeIntroSnapshot.lines,
-        safeIntroSnapshot.columns,
-        'SELECT DIFFICULTY'
-      );
+      expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'SELECT DIFFICULTY');
 
       if (hasBoxedButtons) {
         const topCornerCount = safeIntroSnapshot.lines.reduce(
@@ -416,7 +408,6 @@ test.describe('browser e2e nibbles mobile layouts', () => {
 
     await page.setViewportSize({ width: 844, height: 390 });
     await waitForIntro(page, {
-      expectTouchCopy: true,
       expectTouchCopy: false,
       timeoutMs: 60_000,
     });

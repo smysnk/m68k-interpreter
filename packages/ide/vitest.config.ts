@@ -1,24 +1,11 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import fs from 'node:fs';
+import { asmSourcePlugin } from './build/asmSourcePlugin';
 
 export default defineConfig({
   root: import.meta.dirname,
-  plugins: [
-    {
-      name: 'asm-raw-loader',
-      enforce: 'pre',
-      load(id) {
-        if (!id.endsWith('.asm')) {
-          return null;
-        }
-
-        return `export default ${JSON.stringify(fs.readFileSync(id, 'latin1'))};`;
-      },
-    },
-    react(),
-  ],
+  plugins: [asmSourcePlugin(), react()],
   test: {
     globals: true,
     environment: 'jsdom',

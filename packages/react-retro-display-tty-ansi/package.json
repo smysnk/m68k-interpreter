@@ -30,7 +30,7 @@
     "url": "https://github.com/smysnk/react-retro-display-tty-ansi/issues"
   },
   "type": "module",
-  "packageManager": "yarn@4.13.0",
+  "packageManager": "yarn@4.17.1",
   "main": "./index.cjs",
   "module": "./index.js",
   "types": "./index.d.ts",
@@ -56,7 +56,11 @@
     "*.css"
   ],
   "dependencies": {
-    "react-retro-display-tty-ansi-ascii": "^0.1.46"
+    "react-retro-display-tty-ansi-ascii": "^0.1.189"
+  },
+  "devDependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "scripts": {
     "build": "node -e \"process.exit(0)\"",
