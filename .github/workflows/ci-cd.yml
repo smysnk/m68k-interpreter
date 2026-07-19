@@ -56,7 +56,7 @@ jobs:
         run: yarn install --immutable
 
       - name: Install Test Station dependencies
-        run: yarn --cwd ./test-station install --immutable
+        run: (cd ./test-station && corepack yarn install --immutable)
 
       - name: Install Playwright browsers
         run: yarn exec playwright install --with-deps chromium
