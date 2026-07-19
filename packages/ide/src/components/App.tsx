@@ -42,9 +42,7 @@ declare global {
       focusTerminal: () => void;
       runProgram: () => void;
       setSpeedMultiplier: (value: number) => void;
-      setWorkspaceTab: (
-        value: 'terminal' | 'code' | 'registers' | 'memory'
-      ) => void;
+      setWorkspaceTab: (value: 'terminal' | 'code' | 'registers' | 'memory' | 'hardware') => void;
     };
   }
 }
@@ -163,7 +161,11 @@ function AppShell(): React.ReactElement {
       return;
     }
 
-    if (activeWorkspaceTab === 'registers' || activeWorkspaceTab === 'memory') {
+    if (
+      activeWorkspaceTab === 'registers' ||
+      activeWorkspaceTab === 'memory' ||
+      activeWorkspaceTab === 'hardware'
+    ) {
       dispatch(setInspectorView(activeWorkspaceTab));
       dispatch(setWorkspaceTab('terminal'));
     }

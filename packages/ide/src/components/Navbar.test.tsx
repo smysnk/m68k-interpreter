@@ -79,6 +79,7 @@ describe('Navbar', () => {
     expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: /registers/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /memory/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /hardware/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /open app menu/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Speed (x)')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Run program')).not.toBeInTheDocument();

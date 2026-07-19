@@ -6,9 +6,9 @@ This demo is running my old [m68k-nibbles](https://github.com/smysnk/m68k-nibble
 
 # m68k-interpreter
 
-[![tests](https://img.shields.io/endpoint?url=https%3A%2F%2Ftest-station.smysnk.com%2Fapi%2Fbadges%2Ftests.json%3FprojectKey%3Dm68k-interpreter)](https://test-station.smysnk.com/projects/m68k-interpreter)
-[![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Ftest-station.smysnk.com%2Fapi%2Fbadges%2Fcoverage.json%3FprojectKey%3Dm68k-interpreter)](https://test-station.smysnk.com/projects/m68k-interpreter)
-[![health](https://img.shields.io/endpoint?url=https%3A%2F%2Ftest-station.smysnk.com%2Fapi%2Fbadges%2Fhealth.json%3FprojectKey%3Dm68k-interpreter)](https://test-station.smysnk.com/projects/m68k-interpreter)
+[![tests](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml)
+[![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fsmysnk.github.io%2Fm68k-interpreter%2Fbadges%2Fcoverage.json)](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml)
+[![site](https://img.shields.io/website?url=https%3A%2F%2Fsmysnk.github.io%2Fm68k-interpreter%2F&label=site)](https://smysnk.github.io/m68k-interpreter/)
 
 A Motorola 68000 assembly emulator that runs entirely in the browser.  
 Write, step through, and debug m68k assembly — no installation needed.

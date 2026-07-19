@@ -59,6 +59,7 @@ describe('appShellSelectors', () => {
       codeActive: true,
       registersActive: false,
       memoryActive: false,
+      hardwareActive: false,
     });
   });
 
@@ -70,7 +71,17 @@ describe('appShellSelectors', () => {
       activeInspectorPane: 'memory',
       showRegisters: false,
       showMemory: true,
+      showHardware: false,
       activePanelComponent: 'memory',
+    });
+
+    store.dispatch(setInspectorView('hardware'));
+    expect(selectInspectorPanelModel(store.getState())).toMatchObject({
+      activeInspectorPane: 'hardware',
+      showRegisters: false,
+      showMemory: false,
+      showHardware: true,
+      activePanelComponent: 'hardware',
     });
   });
 });

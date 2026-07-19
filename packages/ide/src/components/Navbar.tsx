@@ -92,6 +92,12 @@ const Navbar: React.FC = () => {
             label: 'Mem',
             ariaLabel: 'Memory',
           },
+          {
+            id: 'hardware' as WorkspaceTab,
+            controls: 'workspace-tabpanel-hardware',
+            label: 'HW',
+            ariaLabel: 'Hardware',
+          },
         ]
       : []),
   ];

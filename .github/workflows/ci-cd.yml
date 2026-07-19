@@ -103,6 +103,7 @@ jobs:
 
       - name: Publish test-station ingest
         if: always() && hashFiles('.test-results/test-station/report.json') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+        continue-on-error: true
         env:
           TEST_STATION_INGEST_ENDPOINT: https://test-station.smysnk.com/api/ingest
           TEST_STATION_INGEST_PROJECT_KEY: m68k-interpreter
@@ -162,6 +163,7 @@ jobs:
 
       - name: Publish benchmark ingest
         if: always() && hashFiles('.test-results/test-station/report.json') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+        continue-on-error: true
         env:
           TEST_STATION_INGEST_ENDPOINT: https://test-station.smysnk.com/api/ingest
           TEST_STATION_INGEST_PROJECT_KEY: m68k-interpreter
@@ -194,21 +196,25 @@ jobs:
           retention-days: 14
 
       - name: Set up GitHub Pages
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.test_station.outputs.exit_code == '0' && steps.benchmark_report.outputs.exit_code == '0'
+        if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.test_station.outputs.exit_code == '0' && steps.benchmark_report.outputs.exit_code == '0'
         uses: actions/configure-pages@v5
 
       - name: Build GitHub Pages site
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.test_station.outputs.exit_code == '0' && steps.benchmark_report.outputs.exit_code == '0'
-        run: yarn build:pages
+        if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.test_station.outputs.exit_code == '0' && steps.benchmark_report.outputs.exit_code == '0'
+        run: |
+          yarn build:pages
+          node ./scripts/test-station/generate-pages-badges.mjs \
+            --report ./.test-results/test-station-tests/report.json \
+            --output ./packages/ide/out/badges
 
       - name: Upload GitHub Pages artifact
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.test_station.outputs.exit_code == '0' && steps.benchmark_report.outputs.exit_code == '0'
+        if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.test_station.outputs.exit_code == '0' && steps.benchmark_report.outputs.exit_code == '0'
         uses: actions/upload-pages-artifact@v4
         with:
           path: packages/ide/out
 
       - name: Deploy GitHub Pages
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.test_station.outputs.exit_code == '0' && steps.benchmark_report.outputs.exit_code == '0'
+        if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.test_station.outputs.exit_code == '0' && steps.benchmark_report.outputs.exit_code == '0'
         id: deployment
         uses: actions/deploy-pages@v4
 

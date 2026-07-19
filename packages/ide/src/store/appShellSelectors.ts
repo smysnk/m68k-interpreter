@@ -3,8 +3,8 @@ import type { RootState } from '@/store';
 import type { InspectorView } from '@/store/uiShellSlice';
 
 export type ActiveInspectorPane = InspectorView;
-export type WorkspaceTabPanel = 'terminal' | 'code' | 'registers' | 'memory';
-export type InspectorPanelKind = 'registers' | 'memory';
+export type WorkspaceTabPanel = 'terminal' | 'code' | 'registers' | 'memory' | 'hardware';
+export type InspectorPanelKind = 'registers' | 'memory' | 'hardware';
 
 export const selectShowHelp = (state: RootState) =>
   state.uiShell.contextOpen && state.uiShell.contextView === 'help';
@@ -58,6 +58,7 @@ export const selectWorkspacePanelModel = createSelector(
     codeActive: workspaceTab === 'code',
     registersActive: workspaceTab === 'registers',
     memoryActive: workspaceTab === 'memory',
+    hardwareActive: workspaceTab === 'hardware',
   })
 );
 
@@ -65,5 +66,6 @@ export const selectInspectorPanelModel = createSelector([selectActiveInspectorPa
   activeInspectorPane,
   showRegisters: activeInspectorPane === 'registers',
   showMemory: activeInspectorPane === 'memory',
+  showHardware: activeInspectorPane === 'hardware',
   activePanelComponent: activeInspectorPane as InspectorPanelKind,
 }));

@@ -64,7 +64,7 @@ export const selectNavbarPresentationModel = createSelector([selectNavbarViewMod
   ...model,
   registersMenuActive: model.activeInspectorPane === 'registers',
   memoryMenuActive: model.activeInspectorPane === 'memory',
-  flagsMenuActive: model.activeInspectorPane === 'flags',
+  hardwareMenuActive: model.activeInspectorPane === 'hardware',
   helpMenuActive: model.showHelp,
   followSystemActive: model.followSystemTheme,
   lightThemeActive: !model.followSystemTheme && model.editorTheme === EditorThemeEnum.M68K_LIGHT,

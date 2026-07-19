@@ -1,8 +1,8 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import { resetSettingsState } from '@/store/settingsSlice';
 
-export type WorkspaceTab = 'terminal' | 'code' | 'registers' | 'memory';
-export type InspectorView = 'registers' | 'memory' | 'flags';
+export type WorkspaceTab = 'terminal' | 'code' | 'registers' | 'memory' | 'hardware';
+export type InspectorView = 'registers' | 'memory' | 'hardware';
 export type ContextView = 'help' | 'none';
 export type AppSubmenu = 'style' | 'terminal-input' | null;
 
@@ -19,7 +19,7 @@ export interface UiShellChromeOffsets {
 
 export interface UiShellState {
   workspaceTab: WorkspaceTab;
-  inspectorView: Exclude<InspectorView, 'flags'>;
+  inspectorView: InspectorView;
   contextView: ContextView;
   contextOpen: boolean;
   appMenuOpen: boolean;
@@ -57,7 +57,7 @@ const uiShellSlice = createSlice({
     setWorkspaceTab(state, action: PayloadAction<WorkspaceTab>) {
       state.workspaceTab = action.payload;
     },
-    setInspectorView(state, action: PayloadAction<Exclude<InspectorView, 'flags'>>) {
+    setInspectorView(state, action: PayloadAction<InspectorView>) {
       state.inspectorView = action.payload;
     },
     toggleInspectorView(state) {

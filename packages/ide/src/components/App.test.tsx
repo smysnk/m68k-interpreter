@@ -103,7 +103,7 @@ describe('App', () => {
     expect(screen.getByTestId('assembly-editor')).toBeInTheDocument();
   });
 
-  it('activates the compact mobile shell and exposes terminal, code, registers, and memory views', () => {
+  it('activates the compact mobile shell and exposes terminal, code, registers, memory, and hardware views', () => {
     setViewportWidth(600);
 
     render(<App />);
@@ -117,6 +117,7 @@ describe('App', () => {
     expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: /registers/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /memory/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /hardware/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /registers/i }));
 
@@ -126,6 +127,10 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
 
     expect(screen.getByLabelText('Start Address')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: /hardware/i }));
+
+    expect(screen.getByTestId('hardware-panel-preview')).toBeInTheDocument();
   });
 
   it('keeps Nibbles selected in the persisted file state', () => {
@@ -145,14 +150,16 @@ describe('App', () => {
     expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('switches the right pane between registers and memory tabs', () => {
+  it('switches the right pane between registers, memory, and hardware tabs', () => {
     render(<App />);
 
     const registersTab = screen.getByRole('tab', { name: /registers/i });
     const memoryTab = screen.getByRole('tab', { name: /memory/i });
+    const hardwareTab = screen.getByRole('tab', { name: /hardware/i });
 
     expect(registersTab).toHaveAttribute('aria-selected', 'true');
     expect(memoryTab).toHaveAttribute('aria-selected', 'false');
+    expect(hardwareTab).toHaveAttribute('aria-selected', 'false');
     expect(screen.getAllByText('Flags').length).toBeGreaterThan(0);
 
     fireEvent.click(memoryTab);
@@ -160,6 +167,12 @@ describe('App', () => {
     expect(registersTab).toHaveAttribute('aria-selected', 'false');
     expect(memoryTab).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByLabelText('Start Address')).toBeInTheDocument();
+
+    fireEvent.click(hardwareTab);
+
+    expect(memoryTab).toHaveAttribute('aria-selected', 'false');
+    expect(hardwareTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('hardware-panel-preview')).toBeInTheDocument();
   });
 
   it('hydrates theme and shell preferences from persisted storage', () => {
