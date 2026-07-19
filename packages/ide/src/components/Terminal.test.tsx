@@ -219,7 +219,7 @@ describe('Terminal', () => {
     });
   });
 
-  it('forwards terminal keyboard input into the emulator queue', () => {
+  it('forwards terminal keyboard input into the emulator queue', async () => {
     const queueInput = vi.fn();
 
     useEmulatorStore.getState().setEmulatorInstance({
@@ -235,9 +235,11 @@ describe('Terminal', () => {
     fireEvent.keyDown(terminalScreen, { key: 'Enter' });
     fireEvent.keyDown(terminalScreen, { key: 'd' });
 
-    expect(queueInput).toHaveBeenNthCalledWith(1, 'w');
-    expect(queueInput).toHaveBeenNthCalledWith(2, 0x0d);
-    expect(queueInput).toHaveBeenNthCalledWith(3, 'd');
+    await waitFor(() => {
+      expect(queueInput).toHaveBeenNthCalledWith(1, 'w');
+      expect(queueInput).toHaveBeenNthCalledWith(2, 0x0d);
+      expect(queueInput).toHaveBeenNthCalledWith(3, 'd');
+    });
   });
 
   it('records an input-accepted telemetry event after a worker keyboard input is queued', async () => {
@@ -785,7 +787,7 @@ describe('Terminal', () => {
     });
   });
 
-  it('forwards page-level keyboard input into the emulator queue when the page is active', () => {
+  it('forwards page-level keyboard input into the emulator queue when the page is active', async () => {
     const queueInput = vi.fn();
     const hasFocusSpy = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
 
@@ -798,8 +800,10 @@ describe('Terminal', () => {
     fireEvent.keyDown(document.body, { key: 'ArrowLeft' });
     fireEvent.keyDown(document.body, { key: 'Enter' });
 
-    expect(queueInput).toHaveBeenNthCalledWith(1, 'a');
-    expect(queueInput).toHaveBeenNthCalledWith(2, 0x0d);
+    await waitFor(() => {
+      expect(queueInput).toHaveBeenNthCalledWith(1, 'a');
+      expect(queueInput).toHaveBeenNthCalledWith(2, 0x0d);
+    });
 
     hasFocusSpy.mockRestore();
   });

@@ -33,6 +33,8 @@ import {
 import { useTerminalSurface } from '@/runtime/useTerminalSurface';
 import { useCompactShell } from '@/hooks/useCompactShell';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
+import { useRuntimeSession } from '@/runtime/useRuntimeSession';
+import { runtimeCommandPort } from '@/runtime/runtimeCommandPort';
 import { NIBBLES_FILE_ID, selectActiveFileId } from '@/store/filesSlice';
 import {
   ideStore,
@@ -158,30 +160,18 @@ function queueAssemblerInput(
     typeof performance !== 'undefined' && typeof performance.now === 'function'
       ? performance.now()
       : Date.now();
-  if (emulatorInstance.getRuntimeTransport?.() === 'worker' && emulatorInstance.controller) {
-    void emulatorInstance.controller
-      .requestQueueInput(input)
-      .then(() => {
-        recordInputAccepted();
-        recordInputProgressRequest({ startedAtMs: inputStartedAtMs });
-        if (shouldRequestVisualResume(emulatorInstance, executionState)) {
-          requestResumeExecution(
-            shouldRequestFullResume(emulatorInstance, executionState) ? 'resume' : 'pulse'
-          );
-        }
-      })
-      .catch(() => undefined);
-  } else {
-    emulatorInstance.queueInput(input);
-    recordInputAccepted();
-    recordInputProgressRequest({ startedAtMs: inputStartedAtMs });
-
-    if (shouldRequestVisualResume(emulatorInstance, executionState)) {
-      requestResumeExecution(
-        shouldRequestFullResume(emulatorInstance, executionState) ? 'resume' : 'pulse'
-      );
-    }
-  }
+  void runtimeCommandPort
+    .queueInput(input)
+    .then(() => {
+      recordInputAccepted();
+      recordInputProgressRequest({ startedAtMs: inputStartedAtMs });
+      if (shouldRequestVisualResume(emulatorInstance, executionState)) {
+        requestResumeExecution(
+          shouldRequestFullResume(emulatorInstance, executionState) ? 'resume' : 'pulse'
+        );
+      }
+    })
+    .catch(() => undefined);
 
   return true;
 }
@@ -217,7 +207,7 @@ const Terminal: React.FC = () => {
   const lastMeasuredGeometrySignatureRef = useRef('');
   const hasCommittedMeasuredGeometryRef = useRef(false);
   const [focused, setFocused] = useState(false);
-  const emulatorInstance = useSelector((state: RootState) => state.emulator.emulatorInstance);
+  const emulatorInstance = useRuntimeSession().session;
   const executionState = useSelector((state: RootState) => state.emulator.executionState);
   const { frameBuffer, meta, dirtyRows } = useTerminalSurface();
   const focusTerminalIntent = useSelector(
@@ -434,14 +424,8 @@ const Terminal: React.FC = () => {
 
     const queuePendingInputs = async (): Promise<void> => {
       try {
-        if (emulatorInstance.getRuntimeTransport?.() === 'worker' && emulatorInstance.controller) {
-          for (const input of pendingInput.inputs) {
-            await emulatorInstance.controller.requestQueueInput(input);
-          }
-        } else {
-          for (const input of pendingInput.inputs) {
-            emulatorInstance.queueInput(input);
-          }
+        for (const input of pendingInput.inputs) {
+          await runtimeCommandPort.queueInput(input);
         }
 
         recordInputAccepted();

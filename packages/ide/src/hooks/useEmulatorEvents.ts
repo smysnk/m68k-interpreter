@@ -16,6 +16,9 @@ import {
   shouldUseTerminalFocusedWorkerProfile,
 } from '@/runtime/workerExecutionPolicy';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
+import { runtimeSessionStore } from '@/runtime/runtimeSessionStore';
+import { runtimeCommandPort } from '@/runtime/runtimeCommandPort';
+import { hardwareSurfaceStore } from '@/runtime/hardwareSurfaceStore';
 import { syncRuntimeGeometryBridge } from '@/runtime/terminalProgramBridge';
 import {
   createWorkerIdeRuntimeSession,
@@ -26,7 +29,7 @@ import { useCompactShell } from '@/hooks/useCompactShell';
 import {
   NIBBLES_FILE_ID,
   resetEmulatorState,
-  setEmulatorInstance as setEmulatorInstanceAction,
+  setRuntimeSessionMetadata,
   setExecutionState as setExecutionStateAction,
   setRuntimeMetrics as setRuntimeMetricsAction,
   syncEmulatorFrame as syncEmulatorFrameAction,
@@ -66,30 +69,17 @@ function toWorkerDelayMs(delaySeconds: number): number {
   return Math.max(Math.round(delaySeconds * 1000), FRAME_FALLBACK_MS);
 }
 
-function setRuntimeUndoCaptureMode(
-  runtime: IdeRuntimeSession | null,
-  mode: UndoCaptureMode
-): void {
-  runtime?.setUndoCaptureMode?.(
-    mode,
-    mode === 'checkpointed' ? AUTOPLAY_UNDO_CHECKPOINT_INTERVAL : undefined
-  );
-}
-
 async function setRuntimeUndoCaptureModeAsync(
   runtime: IdeRuntimeSession | null,
   mode: UndoCaptureMode
 ): Promise<void> {
-  const controller = getWorkerController(runtime);
-  if (controller) {
-    await controller.requestSetUndoCaptureMode(
-      mode,
-      mode === 'checkpointed' ? AUTOPLAY_UNDO_CHECKPOINT_INTERVAL : undefined
-    );
+  if (!runtime) {
     return;
   }
-
-  setRuntimeUndoCaptureMode(runtime, mode);
+  await runtimeCommandPort.setUndoCaptureMode(
+    mode,
+    mode === 'checkpointed' ? AUTOPLAY_UNDO_CHECKPOINT_INTERVAL : undefined
+  );
 }
 
 async function primeRuntimeForAutoplay(runtime: IdeRuntimeSession | null): Promise<void> {
@@ -162,6 +152,26 @@ function cancelFrame(handle: number): void {
 
 function isDisposedWorkerRuntimeError(error: unknown): boolean {
   return error instanceof Error && /disposed/i.test(error.message);
+}
+
+function publishRuntimeSession(
+  runtime: IdeRuntimeSession | null,
+  dispatch: AppDispatch
+): void {
+  if (runtime) {
+    runtimeSessionStore.replace(runtime);
+  } else {
+    runtimeSessionStore.clear();
+  }
+  const snapshot = runtimeSessionStore.getSnapshot();
+  dispatch(
+    setRuntimeSessionMetadata({
+      ready: snapshot.ready,
+      transport: snapshot.transport,
+      epoch: snapshot.epoch,
+    })
+  );
+  window.emulatorInstance = runtime;
 }
 
 export const useEmulatorEvents = () => {
@@ -465,20 +475,25 @@ export const useEmulatorEvents = () => {
       const epoch = runtimeEpochRef.current;
       const previousRuntime = emulatorRef.current;
       emulatorRef.current = null;
-      dispatch(setEmulatorInstanceAction(null));
-      window.emulatorInstance = null;
+      publishRuntimeSession(null, dispatch);
+      hardwareSurfaceStore.reset();
       await disposeRuntime(previousRuntime);
       const { columns, rows } = ideStore.getState().emulator.terminal;
       const emulator =
         !isJsdomEnvironment() && supportsInterpreterWorkerRuntime()
           ? createWorkerIdeRuntimeSession()
-          : createInProcessIdeRuntimeSession(new Emulator(code, { columns, rows }));
+          : createInProcessIdeRuntimeSession(
+              new Emulator(code, {
+                columns,
+                rows,
+                hardwareConfig: ideStore.getState().hardware.config,
+              })
+            );
 
       const workerController = getWorkerController(emulator);
       emulatorRef.current = emulator;
       frameSyncCacheRef.current = createRuntimeFrameSyncCache();
-      dispatch(setEmulatorInstanceAction(emulator));
-      window.emulatorInstance = emulator;
+      publishRuntimeSession(emulator, dispatch);
 
       if (workerController?.subscribeEvents) {
         workerUnsubscribeRef.current = workerController.subscribeEvents((event) => {
@@ -525,19 +540,26 @@ export const useEmulatorEvents = () => {
       }
 
       if (workerController) {
-        await workerController.initialize?.();
+        await runtimeCommandPort.initialize();
         if (runtimeEpochRef.current !== epoch) {
           await disposeRuntime(emulator);
           return null;
         }
-        await workerController.requestLoadProgram(code, columns, rows);
+        await runtimeCommandPort.loadProgram(code, columns, rows);
         if (runtimeEpochRef.current !== epoch) {
           await disposeRuntime(emulator);
           return null;
         }
+        await runtimeCommandPort.configureHardware(ideStore.getState().hardware.config);
       } else {
         syncRuntimeGeometryBridge(emulator, columns, rows);
       }
+
+      const hardwarePreferences = ideStore.getState().hardware;
+      await runtimeCommandPort.configureAutomaticInterrupts(
+        hardwarePreferences.automaticInterruptLevels,
+        hardwarePreferences.automaticInterruptIntervalMs
+      );
 
       if (emulator.getException()) {
         if (!workerController) {
@@ -629,7 +651,7 @@ export const useEmulatorEvents = () => {
           await primeRuntimeForAutoplay(emulator);
           const workerController = getWorkerController(emulator);
           if (workerController) {
-            await workerController.requestRun(buildWorkerExecutionConfig());
+            await runtimeCommandPort.run(buildWorkerExecutionConfig());
             return;
           }
 
@@ -668,7 +690,7 @@ export const useEmulatorEvents = () => {
         await primeRuntimeForAutoplay(emulator);
         const workerController = getWorkerController(emulator);
         if (workerController) {
-          await workerController.requestResume(buildWorkerExecutionConfig());
+          await runtimeCommandPort.resume(buildWorkerExecutionConfig());
           return;
         }
 
@@ -685,9 +707,7 @@ export const useEmulatorEvents = () => {
 
         const workerController = getWorkerController(emulator);
         if (workerController?.requestPulseExecution) {
-          const accepted = await workerController.requestPulseExecution(
-            buildWorkerPulseFrameBudget()
-          );
+          const accepted = await runtimeCommandPort.pulse(buildWorkerPulseFrameBudget());
           if (!accepted) {
             dispatch(
               setExecutionStateAction({
@@ -697,8 +717,8 @@ export const useEmulatorEvents = () => {
               })
             );
             await primeRuntimeForAutoplay(emulator);
-            await workerController.requestResume(buildWorkerExecutionConfig());
-            await workerController.requestPulseExecution(buildWorkerPulseFrameBudget());
+            await runtimeCommandPort.resume(buildWorkerExecutionConfig());
+            await runtimeCommandPort.pulse(buildWorkerPulseFrameBudget());
           }
           return;
         }
@@ -739,10 +759,10 @@ export const useEmulatorEvents = () => {
 
         const workerController = getWorkerController(emulator);
         if (workerController) {
-          await workerController.requestStep();
+          await runtimeCommandPort.step();
           return;
         } else {
-          emulator.emulationStep();
+          await runtimeCommandPort.step();
         }
 
         const hasException = Boolean(emulator.getException());
@@ -782,10 +802,10 @@ export const useEmulatorEvents = () => {
 
         const workerController = getWorkerController(emulator);
         if (workerController) {
-          await workerController.requestUndo();
+          await runtimeCommandPort.undo();
           return;
         } else {
-          emulator.undoFromStack();
+          await runtimeCommandPort.undo();
         }
 
         syncStoreFromEmulator(emulator, {
@@ -821,8 +841,8 @@ export const useEmulatorEvents = () => {
         const runtime = emulatorRef.current;
         emulatorRef.current = null;
         dispatch(resetEmulatorState());
-        dispatch(setEmulatorInstanceAction(null));
-        window.emulatorInstance = null;
+        publishRuntimeSession(null, dispatch);
+        hardwareSurfaceStore.reset();
         await disposeRuntime(runtime);
       })();
     };
@@ -847,8 +867,8 @@ export const useEmulatorEvents = () => {
       frameSyncCacheRef.current = createRuntimeFrameSyncCache();
       void disposeRuntime(emulatorRef.current);
       emulatorRef.current = null;
-      dispatch(setEmulatorInstanceAction(null));
-      window.emulatorInstance = null;
+      publishRuntimeSession(null, dispatch);
+      hardwareSurfaceStore.reset();
     };
   }, [dispatch]);
 
@@ -858,8 +878,8 @@ export const useEmulatorEvents = () => {
       return;
     }
 
-    void controller
-      .requestConfigureExecution({
+    void runtimeCommandPort
+      .configureExecution({
         delayMs: toWorkerDelayMs(delay),
         speedMultiplier,
         frameBudgetMs: resolveWorkerFrameBudgetMs({

@@ -11,7 +11,6 @@ import {
   sanitizeIdeDevToolsState,
   syncEmulatorFrame,
   setEditorCode,
-  setEmulatorInstance,
   setRegisterEditRadix,
   setRootHorizontalLayout,
   setRootHorizontalWithContextLayout,
@@ -142,10 +141,8 @@ describe('ideStore', () => {
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const store = createIdeStore();
     const largeSource = 'MOVE.L D0,D0\n'.repeat(5000);
-    const runtime = { getLastInstruction: () => 'Ready' };
 
     store.dispatch(setEditorCode(largeSource));
-    store.dispatch(setEmulatorInstance(runtime as never));
 
     const rawAction = setEditorCode(largeSource);
     const sanitizedAction = sanitizeIdeDevToolsAction(rawAction);
@@ -154,7 +151,8 @@ describe('ideStore', () => {
 
     expect(measureSerializedSize(sanitizedAction)).toBeLessThan(measureSerializedSize(rawAction));
     expect(measureSerializedSize(sanitizedState)).toBeLessThan(measureSerializedSize(rawState));
-    expect(sanitizedState?.emulator.emulatorInstance).toBe('<runtime>');
+    expect(sanitizedState?.emulator).not.toHaveProperty('emulatorInstance');
+    expect(() => JSON.stringify(rawState)).not.toThrow();
     expect(sanitizedState?.emulator.editorCode).toEqual(
       expect.objectContaining({
         length: largeSource.length,

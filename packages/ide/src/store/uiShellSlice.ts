@@ -60,9 +60,6 @@ const uiShellSlice = createSlice({
     setInspectorView(state, action: PayloadAction<InspectorView>) {
       state.inspectorView = action.payload;
     },
-    toggleInspectorView(state) {
-      state.inspectorView = state.inspectorView === 'memory' ? 'registers' : 'memory';
-    },
     setContextView(state, action: PayloadAction<ContextView>) {
       state.contextView = action.payload;
       state.contextOpen = action.payload !== 'none';
@@ -140,7 +137,6 @@ const uiShellSlice = createSlice({
 export const {
   setWorkspaceTab,
   setInspectorView,
-  toggleInspectorView,
   setContextView,
   openContextView,
   closeContextPane,

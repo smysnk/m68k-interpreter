@@ -58,6 +58,7 @@ export interface RuntimeSyncVersions {
   memory: number;
   terminal: number;
   terminalGeometry: number;
+  hardware?: number;
 }
 
 export interface ExecutionState {
@@ -122,5 +123,13 @@ export interface Emulator {
   writeMemoryByte(address: number, value: number): void;
   writeMemoryWord(address: number, value: number): void;
   writeMemoryLong(address: number, value: number): void;
+  getHardwareSnapshot(): import('../devices/easy68kHardware').Easy68kHardwareSnapshot;
+  configureHardware(
+    config: import('../devices/easy68kHardware').Easy68kHardwareConfig
+  ): import('../devices/easy68kHardware').Easy68kHardwareValidationResult;
+  setHardwareToggle(bit: number, enabled: boolean): void;
+  setHardwareButton(bit: number, pressed: boolean): void;
+  requestInterruptLevel(level: number): import('../core/emulator').InterruptRequestResult;
+  getPendingInterruptLevels(): number[];
   raiseExternalInterrupt(handlerAddress: number): boolean;
 }

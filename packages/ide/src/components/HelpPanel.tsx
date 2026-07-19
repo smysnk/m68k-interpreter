@@ -25,6 +25,8 @@ const HelpPanel: React.FC = () => {
           <li>Runtime support for the Nibbles instruction subset including `MOVE`, `MOVEA`, `LEA`, `BRA/Bxx`, `BSR`, `JSR`, `RTS`, `MULU`, `DIVU`, `MOVEM`, and `BTST`.</li>
           <li>Easy68K trap tasks used by Nibbles: `TRAP #15` tasks `1`, `3`, and `4`, plus `TRAP #11` task `0` for halt.</li>
           <li>Terminal rendering for clear screen, cursor motion, carriage return, line feed, and ANSI SGR color/style sequences used by the game.</li>
+          <li>Memory-mapped EASy68K hardware: eight seven-segment bytes, shared switch/LED byte, active-low buttons, and configurable 24-bit addresses.</li>
+          <li>Level 1–7 autovector interrupts with SR masking, supervisor stack frames, automatic scheduling, and `RTE`.</li>
         </ul>
       </div>
 
@@ -32,7 +34,7 @@ const HelpPanel: React.FC = () => {
         <h3>Known Limitations</h3>
         <ul className="help-panel-list">
           <li>This is a targeted Easy68K subset for terminal-first programs like Nibbles, not full simulator compatibility.</li>
-          <li>Trainer board DUART routines and generic graphics devices are not implemented in this build.</li>
+          <li>Trainer board DUART routines and generic graphics/framebuffer devices beyond the Hardware I/O Board are not implemented.</li>
           <li>The runtime is tuned for browser playability and deterministic tests, not cycle accuracy.</li>
           <li>The IDE currently uses the internal fixed-grid terminal adapter surface; broader display integration remains a future swap.</li>
         </ul>

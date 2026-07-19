@@ -11,6 +11,7 @@ import {
 import { InterpreterWorkerClient, type InterpreterWorkerLike } from '@/runtime/worker/InterpreterWorkerClient';
 import { buildRuntimeFrameSyncPayload } from '@/runtime/runtimeFramePayload';
 import type { InterpreterWorkerCommand, InterpreterWorkerEvent } from '@/runtime/worker/interpreterWorkerProtocol';
+import { hardwareSurfaceStore } from '@/runtime/hardwareSurfaceStore';
 
 class MockWorker implements InterpreterWorkerLike {
   readonly postMessage = vi.fn<(message: InterpreterWorkerCommand) => void>();
@@ -60,6 +61,46 @@ function buildTerminalFrameBufferSnapshot(text: string) {
 }
 
 describe('InterpreterWorkerClient', () => {
+  it('routes hardware commands and publishes versioned hardware frames to the surface store', async () => {
+    hardwareSurfaceStore.reset();
+    const worker = new MockWorker();
+    const client = new InterpreterWorkerClient(worker);
+
+    const toggle = client.requestSetHardwareToggle(3, true);
+    expect(worker.postMessage).toHaveBeenLastCalledWith({
+      id: 1,
+      type: 'setHardwareToggle',
+      bit: 3,
+      enabled: true,
+    });
+    worker.emit({ type: 'reply', id: 1, ok: true });
+    await expect(toggle).resolves.toBeUndefined();
+
+    worker.emit({
+      type: 'frame',
+      kind: 'hardware',
+      frame: {},
+      snapshot: {
+        hardwareSnapshot: {
+          config: {
+            displayBase: 0xe00000,
+            ledAddress: 0xe00010,
+            switchAddress: 0xe00010,
+            buttonAddress: 0xe00012,
+          },
+          display: [1, 2, 3, 4, 5, 6, 7, 8],
+          leds: 0xa5,
+          switches: 0x08,
+          buttons: 0xff,
+          version: 2,
+          outputVersion: 1,
+        },
+      },
+    });
+
+    expect(client.getHardwareSnapshot()).toMatchObject({ leds: 0xa5, switches: 0x08 });
+    expect(hardwareSurfaceStore.getSnapshot()).toMatchObject({ leds: 0xa5, version: 2 });
+  });
   it('performs the init handshake through the worker protocol', async () => {
     (
       window as typeof window & {

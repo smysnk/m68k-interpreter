@@ -7,12 +7,18 @@ import type {
   TerminalMeta,
   TerminalSnapshot,
 } from '@m68k/interpreter';
-import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
+import type { IdeRuntimeTransport } from '@/runtime/ideRuntimeSession';
 
 export interface RuntimeMetrics {
   lastFrameInstructions: number;
   lastFrameDurationMs: number;
   lastStopReason: string;
+}
+
+export interface RuntimeSessionMetadata {
+  ready: boolean;
+  transport: IdeRuntimeTransport | null;
+  epoch: number;
 }
 
 export interface RuntimeIntentState {
@@ -40,7 +46,7 @@ export interface EmulatorState {
   memory: MemoryMeta;
   flags: ConditionFlags;
   executionState: ExecutionState;
-  emulatorInstance: IdeRuntimeSession | null;
+  runtime: RuntimeSessionMetadata;
   terminal: TerminalRuntimeState;
   showFlags: boolean;
   delay: number;
@@ -162,7 +168,11 @@ const initialState: EmulatorState = {
   memory: createEmptyMemoryState(),
   flags: initialFlags,
   executionState: initialExecutionState,
-  emulatorInstance: null,
+  runtime: {
+    ready: false,
+    transport: null,
+    epoch: 0,
+  },
   terminal: createEmptyTerminalState(),
   showFlags: false,
   delay: 0,
@@ -267,8 +277,8 @@ const emulatorSlice = createSlice({
     setExecutionState(state, action: PayloadAction<Partial<ExecutionState>>) {
       state.executionState = { ...state.executionState, ...action.payload };
     },
-    setEmulatorInstance(state, action: PayloadAction<IdeRuntimeSession | null>) {
-      state.emulatorInstance = action.payload;
+    setRuntimeSessionMetadata(state, action: PayloadAction<RuntimeSessionMetadata>) {
+      state.runtime = action.payload;
     },
     setTerminalState(
       state,
@@ -381,7 +391,11 @@ const emulatorSlice = createSlice({
       state.memory = createEmptyMemoryState();
       state.flags = { ...initialFlags };
       state.executionState = { ...initialExecutionState };
-      state.emulatorInstance = null;
+      state.runtime = {
+        ready: false,
+        transport: null,
+        epoch: state.runtime.epoch,
+      };
       state.terminal = createEmptyTerminalState(preservedTerminalColumns, preservedTerminalRows);
       state.showFlags = false;
       state.delay = preservedDelay;
@@ -399,7 +413,7 @@ export const {
   setMemory,
   setFlags,
   setExecutionState,
-  setEmulatorInstance,
+  setRuntimeSessionMetadata,
   setTerminalState,
   syncEmulatorFrame,
   toggleShowFlags,

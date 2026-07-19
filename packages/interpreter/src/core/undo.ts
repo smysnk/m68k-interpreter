@@ -1,33 +1,56 @@
 import type { MemorySnapshot } from './memory';
+import type { Easy68kHardwareOutputSnapshot } from '../devices/easy68kHardware';
 
 /**
  * Undo system for M68K emulator
  * Maintains a stack of execution states for undo functionality
  */
 
-export interface UndoFrame {
+export interface CpuUndoSnapshot {
   pc: number;
-  ccr: number;
+  sr: number;
+  usp: number;
+  ssp: number;
   registers: Int32Array;
-  memory: MemorySnapshot;
+}
+
+export interface DiagnosticsUndoSnapshot {
   errors: string[];
+}
+
+export interface ExecutionUndoSnapshot {
   lastInstruction: string;
   line: number;
+}
+
+export interface UndoFrame {
+  cpu: CpuUndoSnapshot;
+  memory: MemorySnapshot;
+  deviceOutputs: Easy68kHardwareOutputSnapshot;
+  diagnostics: DiagnosticsUndoSnapshot;
+  execution: ExecutionUndoSnapshot;
 }
 
 export class Undo {
   private stack: UndoFrame[] = [];
   private static readonly MAX_FRAMES = 256;
 
-  push(pc: number, ccr: number, registers: Int32Array, memory: MemorySnapshot, errors: string[], lastInstruction: string, line: number): void {
+  push(frame: UndoFrame): void {
     this.stack.push({
-      pc,
-      ccr,
-      registers: new Int32Array(registers),
-      memory,
-      errors: [...errors],
-      lastInstruction,
-      line,
+      cpu: {
+        ...frame.cpu,
+        registers: new Int32Array(frame.cpu.registers),
+      },
+      memory: frame.memory,
+      deviceOutputs: {
+        display: [...frame.deviceOutputs.display],
+        leds: frame.deviceOutputs.leds,
+        outputVersion: frame.deviceOutputs.outputVersion,
+      },
+      diagnostics: {
+        errors: [...frame.diagnostics.errors],
+      },
+      execution: { ...frame.execution },
     });
 
     if (this.stack.length > Undo.MAX_FRAMES) {

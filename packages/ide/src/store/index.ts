@@ -19,6 +19,7 @@ import {
 } from '@/store/persistence';
 import settingsReducer, { initialSettingsState } from '@/store/settingsSlice';
 import uiShellReducer, { initialUiShellState } from '@/store/uiShellSlice';
+import hardwareReducer, { initialHardwareState } from '@/store/hardwareSlice';
 import { resetEmulatorState, setEditorCode } from '@/store/emulatorSlice';
 
 const combinedReducer = combineReducers({
@@ -26,6 +27,7 @@ const combinedReducer = combineReducers({
   files: filesReducer,
   settings: settingsReducer,
   uiShell: uiShellReducer,
+  hardware: hardwareReducer,
 });
 
 const SOURCE_PREVIEW_LENGTH = 80;
@@ -78,11 +80,6 @@ export function sanitizeIdeDevToolsAction<A extends UnknownAction>(action: A, _i
       } as A;
     case 'files/setActiveFile':
       return action;
-    case 'emulator/setEmulatorInstance':
-      return {
-        ...action,
-        payload: action.payload ? '<runtime>' : null,
-      } as A;
     default:
       return action;
   }
@@ -100,7 +97,6 @@ export function sanitizeIdeDevToolsState<S>(state: S, _index?: number): S {
     emulator: {
       ...typedState.emulator,
       editorCode: createSourceSummary(typedState.emulator.editorCode),
-      emulatorInstance: typedState.emulator.emulatorInstance ? '<runtime>' : null,
       history: {
         length: typedState.emulator.history.length,
       },
@@ -177,6 +173,17 @@ export function createIdeStore() {
     },
     files,
     settings: hydratedSettings,
+    hardware: persisted?.hardware
+      ? {
+          ...initialHardwareState,
+          ...persisted.hardware,
+          config: {
+            ...initialHardwareState.config,
+            ...persisted.hardware.config,
+          },
+          configurationOpen: false,
+        }
+      : initialState.hardware,
     uiShell: persisted?.uiShell
       ? {
           ...initialUiShellState,
@@ -197,9 +204,9 @@ export function createIdeStore() {
       stateSanitizer: sanitizeIdeDevToolsState,
     },
     middleware: (getDefaultMiddleware) =>
-      getDefaultMiddleware({
-        serializableCheck: false,
-      }).concat(createActionSizeGuardMiddleware<ReturnType<typeof combinedReducer>>()),
+      getDefaultMiddleware().concat(
+        createActionSizeGuardMiddleware<ReturnType<typeof combinedReducer>>()
+      ),
   });
 
   let lastPersistedState = '';
@@ -221,6 +228,11 @@ export function createIdeStore() {
         contextView: state.uiShell.contextView,
         contextOpen: state.uiShell.contextOpen,
         layout: state.uiShell.layout,
+      },
+      hardware: {
+        config: state.hardware.config,
+        automaticInterruptLevels: state.hardware.automaticInterruptLevels,
+        automaticInterruptIntervalMs: state.hardware.automaticInterruptIntervalMs,
       },
     };
     const serialized = JSON.stringify(persistableState);
@@ -244,6 +256,8 @@ export type AppDispatch = AppStore['dispatch'];
 
 export * from '@/store/emulatorSlice';
 export * from '@/store/filesSlice';
+export * from '@/store/hardwareSlice';
+export * from '@/store/hardwareSelectors';
 export * from '@/store/settingsSlice';
 export * from '@/store/uiShellSlice';
 export * from '@/store/appShellSelectors';
@@ -251,3 +265,4 @@ export * from '@/store/fileExplorerSelectors';
 export * from '@/store/flagsSelectors';
 export * from '@/store/navbarSelectors';
 export * from '@/store/registerSelectors';
+export * from '@/store/paneDescriptors';

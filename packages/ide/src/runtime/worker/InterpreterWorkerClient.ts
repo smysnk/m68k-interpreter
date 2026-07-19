@@ -15,6 +15,11 @@ import {
   type TerminalMeta,
   type TerminalSnapshot,
   type UndoCaptureMode,
+  DEFAULT_EASY68K_HARDWARE_CONFIG,
+  type Easy68kHardwareConfig,
+  type Easy68kHardwareSnapshot,
+  type Easy68kHardwareValidationResult,
+  type InterruptRequestResult,
 } from '@m68k/interpreter';
 import type { IdeRuntimeCachedReadApi, IdeRuntimeController } from '@/runtime/ideRuntimeSession';
 import {
@@ -30,6 +35,9 @@ import {
   type WorkerRuntimeSnapshot,
 } from '@/runtime/worker/interpreterWorkerProtocol';
 import {
+  recordHardwareCommandAcknowledgement,
+  recordHardwareCommandRequest,
+  recordHardwareCommandVisibleLatency,
   recordWorkerCommandSent,
   recordWorkerEventReceived,
 } from '@/runtime/idePerformanceTelemetry';
@@ -37,6 +45,7 @@ import type {
   TerminalTouchPacket,
   TerminalTouchProtocolSymbols,
 } from '@/runtime/terminalTouchProtocol';
+import { hardwareSurfaceStore } from '@/runtime/hardwareSurfaceStore';
 
 interface WorkerMessageEventLike<T> {
   data: T;
@@ -85,6 +94,7 @@ interface WorkerClientCache {
   waitingForInput: boolean;
   symbols: Record<string, number>;
   syncVersions?: RuntimeSyncVersions;
+  hardwareSnapshot: Easy68kHardwareSnapshot;
 }
 
 type InterpreterWorkerClientEvent = Exclude<InterpreterWorkerEvent, { type: 'ready' } | { type: 'reply' }>;
@@ -137,6 +147,15 @@ function createEmptyWorkerClientCache(): WorkerClientCache {
     waitingForInput: false,
     symbols: {},
     syncVersions: undefined,
+    hardwareSnapshot: {
+      config: { ...DEFAULT_EASY68K_HARDWARE_CONFIG },
+      display: new Array(8).fill(0),
+      leds: 0,
+      switches: 0,
+      buttons: 0xff,
+      version: 0,
+      outputVersion: 0,
+    },
   };
 }
 
@@ -260,6 +279,7 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
   private resolveReady!: () => void;
   private nextCommandId = 1;
   private disposed = false;
+  private readonly pendingHardwareVisibleStartedAtMs: number[] = [];
 
   constructor(private readonly worker: InterpreterWorkerLike) {
     this.readyPromise = new Promise<void>((resolve) => {
@@ -331,7 +351,7 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
   }
 
   requestReset(): Promise<void> {
-    return this.postCommand<void>({ type: 'reset' });
+    return this.postHardwareCommand<void>({ type: 'reset' }, () => true, true);
   }
 
   requestQueueInput(input: string | number | number[]): Promise<void> {
@@ -340,6 +360,62 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
 
   requestClearInputQueue(): Promise<void> {
     return this.postCommand<void>({ type: 'clearInputQueue' });
+  }
+
+  async requestConfigureHardware(
+    config: Easy68kHardwareConfig
+  ): Promise<Easy68kHardwareValidationResult> {
+    const payload = await this.postHardwareCommand<Easy68kHardwareValidationResult>({
+      type: 'configureHardware',
+      config,
+    }, (result) => result?.valid === true, true);
+    return payload ?? {
+      valid: false,
+      conflicts: [],
+      errors: ['Hardware configuration was not acknowledged'],
+    };
+  }
+
+  requestSetHardwareToggle(bit: number, enabled: boolean): Promise<void> {
+    return this.postHardwareCommand<void>(
+      { type: 'setHardwareToggle', bit, enabled },
+      () => true,
+      true
+    );
+  }
+
+  requestSetHardwareButton(bit: number, pressed: boolean): Promise<void> {
+    return this.postHardwareCommand<void>(
+      { type: 'setHardwareButton', bit, pressed },
+      () => true,
+      true
+    );
+  }
+
+  async requestInterruptLevel(level: number): Promise<InterruptRequestResult> {
+    return (
+      (await this.postHardwareCommand<InterruptRequestResult>(
+        { type: 'requestInterruptLevel', level },
+        (result) => result !== 'rejected',
+        false
+      )) ??
+      'rejected'
+    );
+  }
+
+  requestConfigureAutomaticInterrupts(levels: number[], intervalMs: number): Promise<void> {
+    return this.postHardwareCommand<void>({
+      type: 'configureAutomaticInterrupts',
+      config: { levels, intervalMs },
+    }, () => true, false);
+  }
+
+  requestCancelAutomaticInterrupts(): Promise<void> {
+    return this.postHardwareCommand<void>(
+      { type: 'cancelAutomaticInterrupts' },
+      () => true,
+      false
+    );
   }
 
   async requestRaiseExternalInterrupt(handlerAddress: number): Promise<boolean> {
@@ -543,6 +619,14 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
     return this.cache.syncVersions ? { ...this.cache.syncVersions } : undefined;
   }
 
+  getHardwareSnapshot(): Easy68kHardwareSnapshot {
+    return {
+      ...this.cache.hardwareSnapshot,
+      config: { ...this.cache.hardwareSnapshot.config },
+      display: [...this.cache.hardwareSnapshot.display],
+    };
+  }
+
   subscribeEvents(
     listener: (event: InterpreterWorkerClientEvent) => void
   ): () => void {
@@ -569,6 +653,7 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
         includesMemoryImage: payload.snapshot.memoryImage !== undefined,
         includesTerminalFrameBuffer: payload.snapshot.terminalFrameBuffer !== undefined,
         includesTerminalSnapshot: payload.snapshot.terminalSnapshot !== undefined,
+        includesHardwareSnapshot: payload.snapshot.hardwareSnapshot !== undefined,
       });
       this.applySnapshot(payload.snapshot);
       this.emitRuntimeEvent(payload);
@@ -681,6 +766,21 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
     if (snapshot.syncVersions) {
       this.cache.syncVersions = { ...snapshot.syncVersions };
     }
+    if (snapshot.hardwareSnapshot) {
+      this.cache.hardwareSnapshot = {
+        ...snapshot.hardwareSnapshot,
+        config: { ...snapshot.hardwareSnapshot.config },
+        display: [...snapshot.hardwareSnapshot.display],
+      };
+      hardwareSurfaceStore.publish(this.cache.hardwareSnapshot);
+      const visibleAtMs =
+        typeof performance !== 'undefined' && typeof performance.now === 'function'
+          ? performance.now()
+          : Date.now();
+      for (const startedAtMs of this.pendingHardwareVisibleStartedAtMs.splice(0)) {
+        recordHardwareCommandVisibleLatency(Math.max(0, visibleAtMs - startedAtMs));
+      }
+    }
   }
 
   private postCommand<T>(command: InterpreterWorkerCommandInput): Promise<T | undefined> {
@@ -699,6 +799,52 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
       recordWorkerCommandSent();
       this.worker.postMessage({ id, ...command } as InterpreterWorkerCommand);
     });
+  }
+
+  private async postHardwareCommand<T>(
+    command: InterpreterWorkerCommandInput,
+    isAccepted: (payload: T | undefined) => boolean,
+    expectVisibleState: boolean
+  ): Promise<T | undefined> {
+    const startedAtMs =
+      typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now()
+        : Date.now();
+    recordHardwareCommandRequest();
+    if (expectVisibleState) {
+      this.pendingHardwareVisibleStartedAtMs.push(startedAtMs);
+    }
+    try {
+      const payload = await this.postCommand<T>(command);
+      const acknowledgedAtMs =
+        typeof performance !== 'undefined' && typeof performance.now === 'function'
+          ? performance.now()
+          : Date.now();
+      const accepted = isAccepted(payload);
+      recordHardwareCommandAcknowledgement({
+        accepted,
+        durationMs: Math.max(0, acknowledgedAtMs - startedAtMs),
+      });
+      if (!accepted && expectVisibleState) {
+        const pendingIndex = this.pendingHardwareVisibleStartedAtMs.indexOf(startedAtMs);
+        if (pendingIndex !== -1) this.pendingHardwareVisibleStartedAtMs.splice(pendingIndex, 1);
+      }
+      return payload;
+    } catch (error) {
+      if (expectVisibleState) {
+        const pendingIndex = this.pendingHardwareVisibleStartedAtMs.indexOf(startedAtMs);
+        if (pendingIndex !== -1) this.pendingHardwareVisibleStartedAtMs.splice(pendingIndex, 1);
+      }
+      const failedAtMs =
+        typeof performance !== 'undefined' && typeof performance.now === 'function'
+          ? performance.now()
+          : Date.now();
+      recordHardwareCommandAcknowledgement({
+        accepted: false,
+        durationMs: Math.max(0, failedAtMs - startedAtMs),
+      });
+      throw error;
+    }
   }
 
   private rejectPendingCommands(error: Error): void {

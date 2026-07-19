@@ -35,6 +35,26 @@ export interface IdeWorkerTransportStat {
   framesWithMemoryImage: number;
   framesWithTerminalFrameBuffer: number;
   framesWithTerminalSnapshot: number;
+  framesWithHardwareSnapshot: number;
+}
+
+export interface IdeHardwareSurfaceStat {
+  snapshotsReceived: number;
+  snapshotsPublished: number;
+  snapshotsReused: number;
+  noOpSnapshots: number;
+  outputVersionChanges: number;
+  framesWithHardwareSnapshot: number;
+  approximatePayloadBytes: number;
+  commandRequests: number;
+  commandAcceptances: number;
+  commandAcknowledgements: number;
+  commandRejections: number;
+  totalCommandAckLatencyMs: number;
+  maxCommandAckLatencyMs: number;
+  visibleStateLatencies: number;
+  totalVisibleStateLatencyMs: number;
+  maxVisibleStateLatencyMs: number;
 }
 
 export interface IdeTerminalRepaintStat {
@@ -74,6 +94,7 @@ export interface IdePerformanceSnapshot {
   terminalRepaint: IdeTerminalRepaintStat;
   touchLatency: IdeTouchLatencyStat;
   inputProgressAck: IdeInputProgressAckStat;
+  hardwareSurface: IdeHardwareSurfaceStat;
 }
 
 interface IdePerformanceTelemetryController {
@@ -115,6 +136,26 @@ const workerTransportStat: IdeWorkerTransportStat = {
   framesWithMemoryImage: 0,
   framesWithTerminalFrameBuffer: 0,
   framesWithTerminalSnapshot: 0,
+  framesWithHardwareSnapshot: 0,
+};
+
+const hardwareSurfaceStat: IdeHardwareSurfaceStat = {
+  snapshotsReceived: 0,
+  snapshotsPublished: 0,
+  snapshotsReused: 0,
+  noOpSnapshots: 0,
+  outputVersionChanges: 0,
+  framesWithHardwareSnapshot: 0,
+  approximatePayloadBytes: 0,
+  commandRequests: 0,
+  commandAcceptances: 0,
+  commandAcknowledgements: 0,
+  commandRejections: 0,
+  totalCommandAckLatencyMs: 0,
+  maxCommandAckLatencyMs: 0,
+  visibleStateLatencies: 0,
+  totalVisibleStateLatencyMs: 0,
+  maxVisibleStateLatencyMs: 0,
 };
 
 const terminalRepaintStat: IdeTerminalRepaintStat = {
@@ -198,6 +239,9 @@ function buildSnapshot(): IdePerformanceSnapshot {
     inputProgressAck: {
       ...inputProgressAckStat,
     },
+    hardwareSurface: {
+      ...hardwareSurfaceStat,
+    },
   };
 }
 
@@ -222,6 +266,23 @@ function resetTelemetry(): void {
   workerTransportStat.framesWithMemoryImage = 0;
   workerTransportStat.framesWithTerminalFrameBuffer = 0;
   workerTransportStat.framesWithTerminalSnapshot = 0;
+  workerTransportStat.framesWithHardwareSnapshot = 0;
+  hardwareSurfaceStat.snapshotsReceived = 0;
+  hardwareSurfaceStat.snapshotsPublished = 0;
+  hardwareSurfaceStat.snapshotsReused = 0;
+  hardwareSurfaceStat.noOpSnapshots = 0;
+  hardwareSurfaceStat.outputVersionChanges = 0;
+  hardwareSurfaceStat.framesWithHardwareSnapshot = 0;
+  hardwareSurfaceStat.approximatePayloadBytes = 0;
+  hardwareSurfaceStat.commandRequests = 0;
+  hardwareSurfaceStat.commandAcceptances = 0;
+  hardwareSurfaceStat.commandAcknowledgements = 0;
+  hardwareSurfaceStat.commandRejections = 0;
+  hardwareSurfaceStat.totalCommandAckLatencyMs = 0;
+  hardwareSurfaceStat.maxCommandAckLatencyMs = 0;
+  hardwareSurfaceStat.visibleStateLatencies = 0;
+  hardwareSurfaceStat.totalVisibleStateLatencyMs = 0;
+  hardwareSurfaceStat.maxVisibleStateLatencyMs = 0;
   terminalRepaintStat.repaintCount = 0;
   terminalRepaintStat.fullRedrawCount = 0;
   terminalRepaintStat.rowPatchCount = 0;
@@ -343,6 +404,7 @@ export function recordWorkerEventReceived(metric: {
   includesMemoryImage?: boolean;
   includesTerminalFrameBuffer?: boolean;
   includesTerminalSnapshot?: boolean;
+  includesHardwareSnapshot?: boolean;
 }): void {
   const controller = ensureTelemetryController();
   if (!controller?.enabled) {
@@ -362,6 +424,8 @@ export function recordWorkerEventReceived(metric: {
       workerTransportStat.framesWithMemoryImage += metric.includesMemoryImage ? 1 : 0;
       workerTransportStat.framesWithTerminalFrameBuffer += metric.includesTerminalFrameBuffer ? 1 : 0;
       workerTransportStat.framesWithTerminalSnapshot += metric.includesTerminalSnapshot ? 1 : 0;
+      workerTransportStat.framesWithHardwareSnapshot += metric.includesHardwareSnapshot ? 1 : 0;
+      hardwareSurfaceStat.framesWithHardwareSnapshot += metric.includesHardwareSnapshot ? 1 : 0;
       break;
     case 'stopped':
       workerTransportStat.stoppedEventsReceived += 1;
@@ -370,6 +434,61 @@ export function recordWorkerEventReceived(metric: {
       workerTransportStat.faultEventsReceived += 1;
       break;
   }
+}
+
+export function recordHardwareSurfaceSnapshot(metric: {
+  received: boolean;
+  published: boolean;
+  reused: boolean;
+  noOp: boolean;
+  outputVersionChanged: boolean;
+  approximatePayloadBytes: number;
+}): void {
+  const controller = ensureTelemetryController();
+  if (!controller?.enabled) {
+    return;
+  }
+  hardwareSurfaceStat.snapshotsReceived += metric.received ? 1 : 0;
+  hardwareSurfaceStat.snapshotsPublished += metric.published ? 1 : 0;
+  hardwareSurfaceStat.snapshotsReused += metric.reused ? 1 : 0;
+  hardwareSurfaceStat.noOpSnapshots += metric.noOp ? 1 : 0;
+  hardwareSurfaceStat.outputVersionChanges += metric.outputVersionChanged ? 1 : 0;
+  hardwareSurfaceStat.approximatePayloadBytes += Math.max(
+    0,
+    Math.round(metric.approximatePayloadBytes)
+  );
+}
+
+export function recordHardwareCommandRequest(): void {
+  const controller = ensureTelemetryController();
+  if (controller?.enabled) hardwareSurfaceStat.commandRequests += 1;
+}
+
+export function recordHardwareCommandAcknowledgement(metric: {
+  accepted: boolean;
+  durationMs: number;
+}): void {
+  const controller = ensureTelemetryController();
+  if (!controller?.enabled) return;
+  hardwareSurfaceStat.commandAcknowledgements += 1;
+  hardwareSurfaceStat.commandAcceptances += metric.accepted ? 1 : 0;
+  hardwareSurfaceStat.commandRejections += metric.accepted ? 0 : 1;
+  hardwareSurfaceStat.totalCommandAckLatencyMs += metric.durationMs;
+  hardwareSurfaceStat.maxCommandAckLatencyMs = Math.max(
+    hardwareSurfaceStat.maxCommandAckLatencyMs,
+    metric.durationMs
+  );
+}
+
+export function recordHardwareCommandVisibleLatency(durationMs: number): void {
+  const controller = ensureTelemetryController();
+  if (!controller?.enabled) return;
+  hardwareSurfaceStat.visibleStateLatencies += 1;
+  hardwareSurfaceStat.totalVisibleStateLatencyMs += durationMs;
+  hardwareSurfaceStat.maxVisibleStateLatencyMs = Math.max(
+    hardwareSurfaceStat.maxVisibleStateLatencyMs,
+    durationMs
+  );
 }
 
 export function recordTerminalRepaint(metric: {

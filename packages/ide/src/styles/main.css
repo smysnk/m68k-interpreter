@@ -2008,6 +2008,16 @@ input.register-segment-input[type='text'] {
   box-shadow: 0 0 9px color-mix(in srgb, var(--ide-status-warn) 60%, transparent);
 }
 
+.hardware-live-badge {
+  border-color: color-mix(in srgb, var(--ide-status-success) 42%, var(--ide-border));
+  background: color-mix(in srgb, var(--ide-status-success) 10%, var(--ide-surface));
+}
+
+.hardware-live-badge > span {
+  background: var(--ide-status-success);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--ide-status-success) 60%, transparent);
+}
+
 .hardware-preview-content {
   display: flex;
   flex: 1 1 auto;
@@ -2039,6 +2049,13 @@ input.register-segment-input[type='text'] {
 
 .hardware-display-section {
   border-color: color-mix(in srgb, var(--ide-accent) 24%, var(--ide-border));
+}
+
+.hardware-committed-address {
+  margin: 0;
+  color: var(--ide-text-muted);
+  font-family: var(--font-monospace);
+  font-size: 10px;
 }
 
 .hardware-section-heading {
@@ -2547,6 +2564,41 @@ input.register-segment-input[type='text'] {
   outline: none;
 }
 
+.hardware-configure-disclosure {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ide-accent);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.hardware-configure-disclosure:hover,
+.hardware-configure-disclosure:focus-visible {
+  color: var(--text-color);
+  outline: none;
+  text-decoration: underline;
+}
+
+.hardware-address-configuration {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  padding: 10px;
+  border: 1px solid var(--ide-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ide-bg) 50%, transparent);
+}
+
+.hardware-address-configuration .hardware-reset-button {
+  justify-self: start;
+}
+
+.hardware-address-input-wrap input[aria-invalid='true'] {
+  color: var(--ide-status-danger);
+}
+
 .hardware-interrupt-status,
 .hardware-preview-note {
   margin: 0;
@@ -2567,6 +2619,10 @@ input.register-segment-input[type='text'] {
 @container hardware-panel (max-width: 440px) {
   .hardware-preview-content {
     padding: 10px;
+  }
+
+  .hardware-address-configuration {
+    grid-template-columns: 1fr;
   }
 
   .hardware-io-matrix-row {

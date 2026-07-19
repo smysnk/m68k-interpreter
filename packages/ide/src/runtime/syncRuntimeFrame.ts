@@ -16,6 +16,7 @@ import {
   type RuntimeFrameSyncPayload,
 } from '@/runtime/runtimeFramePayload';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
+import { hardwareSurfaceStore } from '@/runtime/hardwareSurfaceStore';
 
 function memoryMetaEquals(left: MemoryMeta, right: MemoryMeta): boolean {
   return (
@@ -193,6 +194,11 @@ export function applyRuntimeFrameToIde(
   const previousTerminal = cache?.terminal ?? null;
   const previousMemory = cache?.memory ?? null;
   const publishMemorySurface = options.publishMemorySurface ?? true;
+  const hardwareVersionChanged = Boolean(
+    !syncVersions ||
+      !previousSyncVersions ||
+      previousSyncVersions.hardware !== syncVersions.hardware
+  );
   const nextTerminal = pickRuntimeTerminalMeta(frame, cache);
   const nextMemory = pickRuntimeMemoryMeta(frame, cache);
   const terminalChanged =
@@ -223,6 +229,14 @@ export function applyRuntimeFrameToIde(
     if (cache) {
       cache.memory = nextMemory;
     }
+  }
+
+  if (
+    hardwareVersionChanged &&
+    emulator.getRuntimeTransport?.() !== 'worker' &&
+    emulator.getHardwareSnapshot
+  ) {
+    hardwareSurfaceStore.publish(emulator.getHardwareSnapshot());
   }
 
   if (cache) {

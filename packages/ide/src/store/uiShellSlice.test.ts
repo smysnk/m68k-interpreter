@@ -4,10 +4,10 @@ import {
   resetSettingsState,
   setActiveSubmenu,
   setChromeOffsets,
+  setInspectorView,
   setWorkspaceTab,
   toggleAppMenu,
   toggleContextView,
-  toggleInspectorView,
 } from '@/store';
 import uiShellReducer, { type UiShellState } from '@/store/uiShellSlice';
 
@@ -29,7 +29,7 @@ describe('uiShellSlice', () => {
 
   it('tracks workspace, inspector, and context state in Redux', () => {
     let state = uiShellReducer(undefined, setWorkspaceTab('memory'));
-    state = uiShellReducer(state, toggleInspectorView());
+    state = uiShellReducer(state, setInspectorView('memory'));
     state = uiShellReducer(state, toggleContextView('help'));
     state = uiShellReducer(state, toggleAppMenu());
     state = uiShellReducer(state, setActiveSubmenu('style'));

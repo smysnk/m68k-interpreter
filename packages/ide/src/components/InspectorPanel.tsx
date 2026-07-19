@@ -2,22 +2,21 @@ import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Memory from './Memory';
 import Registers from './Registers';
-import HardwarePanelPreview from './HardwarePanelPreview';
-import { selectInspectorPanelModel, setInspectorView, type AppDispatch } from '@/store';
+import HardwarePanel from './HardwarePanel';
+import {
+  INSPECTOR_PANE_DESCRIPTORS,
+  selectInspectorPanelModel,
+  setInspectorView,
+  type AppDispatch,
+} from '@/store';
 
 const InspectorPanel: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { activeInspectorPane } = useSelector(selectInspectorPanelModel);
-  const tabs = [
-    { id: 'registers', label: 'Registers' },
-    { id: 'memory', label: 'Memory' },
-    { id: 'hardware', label: 'Hardware' },
-  ] as const;
-
   return (
     <div className="inspector-panel">
       <div className="inspector-tabs" role="tablist" aria-label="Inspector views">
-        {tabs.map((tab) => {
+        {INSPECTOR_PANE_DESCRIPTORS.map((tab) => {
           const active = activeInspectorPane === tab.id;
 
           return (
@@ -43,7 +42,7 @@ const InspectorPanel: React.FC = () => {
         role="tabpanel"
       >
         {activeInspectorPane === 'hardware' ? (
-          <HardwarePanelPreview />
+          <HardwarePanel />
         ) : activeInspectorPane === 'memory' ? (
           <Memory />
         ) : (

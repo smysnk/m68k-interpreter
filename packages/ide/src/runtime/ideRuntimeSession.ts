@@ -5,6 +5,10 @@ import type {
   TerminalMeta,
   TerminalSnapshot,
   UndoCaptureMode,
+  Easy68kHardwareConfig,
+  Easy68kHardwareSnapshot,
+  Easy68kHardwareValidationResult,
+  InterruptRequestResult,
 } from '@m68k/interpreter';
 import type {
   InterpreterWorkerEvent,
@@ -47,6 +51,7 @@ export interface IdeRuntimeCachedReadApi {
   isHalted(): boolean;
   isWaitingForInput(): boolean;
   getRuntimeSyncVersions?(): RuntimeSyncVersions | undefined;
+  getHardwareSnapshot?(): Easy68kHardwareSnapshot;
   getRuntimeTransport?(): IdeRuntimeTransport;
 }
 
@@ -63,6 +68,12 @@ export interface IdeRuntimeController {
   requestReset(): Promise<void>;
   requestQueueInput(input: string | number | number[]): Promise<void>;
   requestClearInputQueue(): Promise<void>;
+  requestConfigureHardware(config: Easy68kHardwareConfig): Promise<Easy68kHardwareValidationResult>;
+  requestSetHardwareToggle(bit: number, enabled: boolean): Promise<void>;
+  requestSetHardwareButton(bit: number, pressed: boolean): Promise<void>;
+  requestInterruptLevel(level: number): Promise<InterruptRequestResult>;
+  requestConfigureAutomaticInterrupts(levels: number[], intervalMs: number): Promise<void>;
+  requestCancelAutomaticInterrupts(): Promise<void>;
   requestRaiseExternalInterrupt(handlerAddress: number): Promise<boolean>;
   requestResizeTerminal(columns: number, rows: number): Promise<void>;
   requestWriteMemoryByte(address: number, value: number): Promise<void>;
@@ -99,6 +110,10 @@ export interface IdeRuntimeSession extends IdeRuntimeCachedReadApi {
   setUndoCaptureMode?: (mode: UndoCaptureMode, checkpointInterval?: number) => void;
   getUndoCaptureMode?: () => UndoCaptureMode;
   forceUndoCheckpoint?: () => void;
+  configureHardware?(config: Easy68kHardwareConfig): Easy68kHardwareValidationResult;
+  setHardwareToggle?(bit: number, enabled: boolean): void;
+  setHardwareButton?(bit: number, pressed: boolean): void;
+  requestInterruptLevel?(level: number): InterruptRequestResult;
   controller?: IdeRuntimeController;
 }
 

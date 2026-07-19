@@ -90,6 +90,17 @@ const EXCEPTION_SOURCE = `START
   DIVU #0,D0
   END START`;
 
+const AUTO_IRQ_SOURCE = `ORG $64
+IRQ1_VECTOR DC.L IRQ1_HANDLER
+ORG $1000
+START
+  BRA START
+IRQ1_HANDLER
+  ADDQ.B #1,IRQ_COUNT
+  RTE
+IRQ_COUNT DC.B 0
+  END START`;
+
 describe('InterpreterWorkerHost', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -97,6 +108,70 @@ describe('InterpreterWorkerHost', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('publishes compact hardware-only frames for panel input and configuration commands', async () => {
+    const events: InterpreterWorkerEvent[] = [];
+    const host = new InterpreterWorkerHost((event) => events.push(event));
+
+    await host.handleCommand({
+      id: 1,
+      type: 'loadProgram',
+      source: GEOMETRY_SOURCE,
+      columns: 80,
+      rows: 25,
+    });
+    events.length = 0;
+
+    await host.handleCommand({ id: 2, type: 'setHardwareToggle', bit: 7, enabled: true });
+    const toggleFrame = getLastFrameEvent(events);
+    expect(toggleFrame.kind).toBe('hardware');
+    expect(toggleFrame.snapshot.hardwareSnapshot).toMatchObject({ switches: 0x80 });
+    expect(toggleFrame.snapshot.memoryImage).toBeUndefined();
+    expect(toggleFrame.snapshot.terminalFrameBuffer).toBeUndefined();
+
+    await host.handleCommand({
+      id: 3,
+      type: 'configureHardware',
+      config: {
+        displayBase: 0xe00100,
+        ledAddress: 0xe00110,
+        switchAddress: 0xe00110,
+        buttonAddress: 0xe00112,
+      },
+    });
+    expect(events.at(-1)).toMatchObject({
+      type: 'reply',
+      id: 3,
+      ok: true,
+      payload: { valid: true, conflicts: [], errors: [] },
+    });
+    expect(getLastFrameSnapshot(events).hardwareSnapshot?.config.displayBase).toBe(0xe00100);
+  });
+
+  it('runs a bounded automatic IRQ scheduler and cancels it deterministically', async () => {
+    const events: InterpreterWorkerEvent[] = [];
+    const host = new InterpreterWorkerHost((event) => events.push(event));
+    await host.handleCommand({ id: 1, type: 'loadProgram', source: AUTO_IRQ_SOURCE, columns: 80, rows: 25 });
+    const countAddress = getLastFrameSnapshot(events).symbols?.IRQ_COUNT ?? -1;
+    await host.handleCommand({
+      id: 2,
+      type: 'configureAutomaticInterrupts',
+      config: { levels: [1, 1], intervalMs: 10 },
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+    await host.handleCommand({ id: 3, type: 'step' });
+    await host.handleCommand({ id: 4, type: 'step' });
+    await host.handleCommand({ id: 5, type: 'step' });
+    await host.handleCommand({ id: 6, type: 'readMemoryRange', address: countAddress, length: 1 });
+    expect(events.at(-1)).toMatchObject({ payload: [1] });
+
+    await host.handleCommand({ id: 7, type: 'cancelAutomaticInterrupts' });
+    await vi.advanceTimersByTimeAsync(500);
+    await host.handleCommand({ id: 8, type: 'step' });
+    await host.handleCommand({ id: 9, type: 'readMemoryRange', address: countAddress, length: 1 });
+    expect(events.at(-1)).toMatchObject({ payload: [1] });
   });
 
   it('initializes, loads a program, and seeds geometry-owned symbols inside the worker', async () => {

@@ -5,6 +5,8 @@ import type {
   TerminalMeta,
   TerminalSnapshot,
   UndoCaptureMode,
+  Easy68kHardwareConfig,
+  Easy68kHardwareSnapshot,
 } from '@m68k/interpreter';
 import type { RuntimeFrameSyncPayload } from '@/runtime/runtimeFramePayload';
 import type {
@@ -38,6 +40,11 @@ export interface WorkerExecutionConfig {
   terminalFocusedContinuousFrames?: boolean;
 }
 
+export interface WorkerAutomaticInterruptConfig {
+  levels: number[];
+  intervalMs: number;
+}
+
 export interface WorkerStepResult {
   halted: boolean;
   waitingForInput: boolean;
@@ -65,9 +72,10 @@ export interface WorkerRuntimeSnapshot {
   symbols?: Record<string, number>;
   syncVersions?: RuntimeSyncVersions;
   runtimeMetrics?: Partial<WorkerRuntimeMetricsSnapshot>;
+  hardwareSnapshot?: Easy68kHardwareSnapshot;
 }
 
-export type WorkerFrameKind = 'full' | 'terminal' | 'heartbeat';
+export type WorkerFrameKind = 'full' | 'terminal' | 'hardware' | 'heartbeat';
 
 export type InterpreterWorkerCommand =
   | { id: number; type: 'init' }
@@ -81,6 +89,12 @@ export type InterpreterWorkerCommand =
   | { id: number; type: 'reset' }
   | { id: number; type: 'queueInput'; input: string | number | number[] }
   | { id: number; type: 'clearInputQueue' }
+  | { id: number; type: 'configureHardware'; config: Easy68kHardwareConfig }
+  | { id: number; type: 'setHardwareToggle'; bit: number; enabled: boolean }
+  | { id: number; type: 'setHardwareButton'; bit: number; pressed: boolean }
+  | { id: number; type: 'requestInterruptLevel'; level: number }
+  | { id: number; type: 'configureAutomaticInterrupts'; config: WorkerAutomaticInterruptConfig }
+  | { id: number; type: 'cancelAutomaticInterrupts' }
   | { id: number; type: 'raiseExternalInterrupt'; handlerAddress: number }
   | { id: number; type: 'resizeTerminal'; columns: number; rows: number }
   | { id: number; type: 'writeMemoryByte'; address: number; value: number }

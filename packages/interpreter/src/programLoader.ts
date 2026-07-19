@@ -30,10 +30,11 @@ const SYMBOL_PATTERN = /^[_A-Za-z.$][_A-Za-z0-9.$]*$/;
 
 export function loadProgramSource(source: ProgramSource): ProgramLoadResult {
   const sourceLines = decodeProgramSource(source).replace(/\r\n?/g, '\n').split('\n');
+  const forwardSymbolLookup = collectForwardSymbolAddresses(sourceLines);
   const instructions: Array<[string, number, boolean]> = [];
   const codeLabels: Record<string, number> = {};
   const symbols: Record<string, number> = {};
-  const symbolLookup: Record<string, number> = {};
+  const symbolLookup = Object.create(forwardSymbolLookup) as Record<string, number>;
   const memoryImage: Record<number, number> = {};
   const errors: string[] = [];
 
@@ -207,6 +208,65 @@ export function loadProgramSource(source: ProgramSource): ProgramLoadResult {
   };
 }
 
+function collectForwardSymbolAddresses(sourceLines: readonly string[]): Record<string, number> {
+  const lookup: Record<string, number> = {};
+  let currentAddress = 0;
+  let pendingLabels: PendingLabel[] = [];
+
+  for (let index = 0; index < sourceLines.length; index += 1) {
+    const stripped = stripComments(sourceLines[index]);
+    if (!stripped.trim()) continue;
+    const parsedLine = parseStructuredLine(stripped, index + 1);
+    const attachedLabels = [...pendingLabels, ...parsedLine.labels];
+    pendingLabels = [];
+    if (!parsedLine.content) {
+      pendingLabels = attachedLabels;
+      continue;
+    }
+
+    const [mnemonic, operandText = ''] = splitFirstToken(parsedLine.content);
+    const upperMnemonic = mnemonic.toUpperCase();
+    if (upperMnemonic === 'END') break;
+
+    if (upperMnemonic === 'EQU') {
+      const value = resolveExpression(operandText, lookup);
+      if (value !== undefined && attachedLabels.length === 1) {
+        lookup[normalizeSymbol(attachedLabels[0].name)] = value >>> 0;
+      }
+      continue;
+    }
+
+    if (upperMnemonic === 'ORG') {
+      const value = resolveExpression(operandText, lookup);
+      if (value !== undefined) currentAddress = value >>> 0;
+      for (const label of attachedLabels) lookup[normalizeSymbol(label.name)] = currentAddress;
+      continue;
+    }
+
+    for (const label of attachedLabels) lookup[normalizeSymbol(label.name)] = currentAddress;
+
+    if (upperMnemonic.startsWith('DC.')) {
+      const scalarBytes = sizeToBytes(directiveToSizeCode(upperMnemonic));
+      const scalarCount = splitCommaSeparated(operandText).reduce((count, token) => {
+        if (!token) return count;
+        return count + (isQuoted(token) ? token.slice(1, -1).length : 1);
+      }, 0);
+      currentAddress += scalarBytes * scalarCount;
+      continue;
+    }
+
+    if (upperMnemonic.startsWith('DS.')) {
+      const units = resolveExpression(operandText, lookup) ?? 0;
+      currentAddress += Math.max(0, units) * sizeToBytes(directiveToSizeCode(upperMnemonic));
+      continue;
+    }
+
+    currentAddress += 4;
+  }
+
+  return lookup;
+}
+
 function buildCodeLabelLookup(codeLabels: Record<string, number>): Record<string, number> {
   return Object.fromEntries(
     Object.entries(codeLabels).map(([label, instructionIndex]) => [
@@ -325,7 +385,7 @@ function registerSymbol(
   symbolLookup: Record<string, number>
 ): boolean {
   const normalized = normalizeSymbol(name);
-  if (symbolLookup[normalized] !== undefined) {
+  if (Object.prototype.hasOwnProperty.call(symbolLookup, normalized)) {
     return false;
   }
 

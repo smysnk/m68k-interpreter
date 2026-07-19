@@ -10,6 +10,12 @@ import {
   type DecodedOperand,
 } from '../instructionDecoder';
 import { TerminalDevice, type TerminalMeta, type TerminalSnapshot } from '../devices/terminal';
+import {
+  Easy68kHardware,
+  type Easy68kHardwareConfig,
+  type Easy68kHardwareSnapshot,
+  type Easy68kHardwareValidationResult,
+} from '../devices/easy68kHardware';
 import type { TerminalFrameBuffer } from '../devices/terminalBuffer';
 import { Memory } from './memory';
 import { Undo } from './undo';
@@ -45,6 +51,12 @@ import {
   rorOP,
 } from './operations';
 import type { RuntimeSyncVersions } from '../types/emulator';
+import {
+  enterInterruptStatus,
+  isInterruptLevelEligible,
+  isSupervisorMode,
+} from './statusRegister';
+import { getEasy68kInterruptVectorAddress } from '../devices/easy68kHardware';
 
 // Token type constants
 const TOKEN_IMMEDIATE = 0;
@@ -61,12 +73,14 @@ const DEFAULT_UNDO_CHECKPOINT_INTERVAL = 64;
 type Operand = DecodedOperand;
 
 export type UndoCaptureMode = 'full' | 'off' | 'checkpointed';
+export type InterruptRequestResult = 'accepted' | 'masked' | 'rejected';
 
 export interface EmulatorOptions {
   columns?: number;
   rows?: number;
   undoMode?: UndoCaptureMode;
   undoCheckpointInterval?: number;
+  hardwareConfig?: Easy68kHardwareConfig;
 }
 
 function normalizeUndoCheckpointInterval(value: number | undefined): number {
@@ -82,10 +96,15 @@ export class Emulator {
   private registers: Int32Array = new Int32Array(16);
 
   private pc: number = 0x0; // Program counter
-  private ccr: number = 0x00; // Condition Code Register
+  private statusRegister = 0x0000;
+  private userStackPointer = DEFAULT_STACK_POINTER;
+  private supervisorStackPointer = DEFAULT_STACK_POINTER;
   private memory: Memory;
   private undo: Undo;
   private terminal: TerminalDevice;
+  private hardware: Easy68kHardware;
+  private hardwareAddressMin = 0;
+  private hardwareAddressMax = 0;
 
   // Parsed instructions
   private instructions: Array<[string, number, boolean]> = []; // [instruction, line, isDirective]
@@ -108,6 +127,7 @@ export class Emulator {
   private halted = false;
   private pendingInputTask: number | undefined;
   private pendingExternalInterruptAddress: number | undefined;
+  private pendingInterruptLevels = new Set<number>();
   private undoCaptureMode: UndoCaptureMode;
   private undoCheckpointInterval: number;
   private instructionsSinceUndoSnapshot = 0;
@@ -125,6 +145,8 @@ export class Emulator {
       columns: options.columns,
       rows: options.rows,
     });
+    this.hardware = new Easy68kHardware(options.hardwareConfig);
+    this.updateHardwareAddressWindow();
     this.undoCaptureMode = options.undoMode ?? 'full';
     this.undoCheckpointInterval = normalizeUndoCheckpointInterval(options.undoCheckpointInterval);
 
@@ -159,6 +181,14 @@ export class Emulator {
     this.resetUndoHistory();
   }
 
+  private get ccr(): number {
+    return this.statusRegister & 0x1f;
+  }
+
+  private set ccr(value: number) {
+    this.statusRegister = (this.statusRegister & 0xffe0) | (value & 0x1f);
+  }
+
   /**
    * Check if PC is valid (aligned and >= 0)
    */
@@ -170,6 +200,7 @@ export class Emulator {
     registers: Int32Array;
     pc: number;
     ccr: number;
+    sr: number;
     lastInstruction: string;
     line: number;
     halted: boolean;
@@ -182,6 +213,7 @@ export class Emulator {
       registers: Int32Array.from(this.registers),
       pc: this.pc,
       ccr: this.ccr,
+      sr: this.statusRegister,
       lastInstruction: this.lastInstruction,
       line: this.line,
       halted: this.halted,
@@ -212,6 +244,7 @@ export class Emulator {
     if (
       before.pc !== this.pc ||
       before.ccr !== this.ccr ||
+      before.sr !== this.statusRegister ||
       !Emulator.registersMatch(before.registers, this.registers)
     ) {
       this.registerSyncVersion += 1;
@@ -269,15 +302,24 @@ export class Emulator {
       return;
     }
 
-    this.undo.push(
-      this.pc,
-      this.ccr,
-      this.registers,
-      this.memory.createSnapshot(),
-      this.errors,
-      lastInstruction,
-      line
-    );
+    this.undo.push({
+      cpu: {
+        pc: this.pc,
+        sr: this.statusRegister,
+        usp: this.getUSP(),
+        ssp: this.getSSP(),
+        registers: this.registers,
+      },
+      memory: this.memory.createSnapshot(),
+      deviceOutputs: this.hardware.getOutputSnapshot(),
+      diagnostics: {
+        errors: this.errors,
+      },
+      execution: {
+        lastInstruction,
+        line,
+      },
+    });
     this.instructionsSinceUndoSnapshot = 0;
   }
 
@@ -419,28 +461,85 @@ export class Emulator {
 
   private readMemoryValue(address: number, size: number): number {
     if (size === CODE_BYTE) {
-      return this.memory.getByte(address);
+      return this.readBusByte(address);
     }
 
     if (size === CODE_WORD) {
-      return this.memory.getWord(address);
+      return this.readBusWord(address);
     }
 
-    return this.memory.getLong(address);
+    return this.readBusLong(address);
   }
 
   private writeMemoryValue(address: number, size: number, value: number): void {
     if (size === CODE_BYTE) {
-      this.memory.setByte(address, value & BYTE_MASK);
+      this.writeBusByte(address, value & BYTE_MASK);
       return;
     }
 
     if (size === CODE_WORD) {
-      this.memory.setWord(address, value & WORD_MASK);
+      this.writeBusWord(address, value & WORD_MASK);
       return;
     }
 
-    this.memory.setLong(address, value >>> 0);
+    this.writeBusLong(address, value >>> 0);
+  }
+
+  private readBusByte(address: number): number {
+    const normalized = address & 0x00ff_ffff;
+    if (normalized < this.hardwareAddressMin || normalized > this.hardwareAddressMax) {
+      return this.memory.getByte(normalized);
+    }
+    return this.hardware.readByte(normalized) ?? this.memory.getByte(normalized);
+  }
+
+  private readBusWord(address: number): number {
+    return ((this.readBusByte(address) << 8) | this.readBusByte(address + 1)) >>> 0;
+  }
+
+  private readBusLong(address: number): number {
+    return (
+      (this.readBusByte(address) << 24) |
+      (this.readBusByte(address + 1) << 16) |
+      (this.readBusByte(address + 2) << 8) |
+      this.readBusByte(address + 3)
+    ) >>> 0;
+  }
+
+  private writeBusByte(address: number, value: number): void {
+    const normalized = address & 0x00ff_ffff;
+    if (
+      normalized < this.hardwareAddressMin ||
+      normalized > this.hardwareAddressMax ||
+      !this.hardware.writeByte(normalized, value)
+    ) {
+      this.memory.setByte(normalized, value & BYTE_MASK);
+    }
+  }
+
+  private updateHardwareAddressWindow(): void {
+    const config = this.hardware.getSnapshot().config;
+    const addresses = [
+      config.displayBase,
+      config.displayBase + 14,
+      config.ledAddress,
+      config.switchAddress,
+      config.buttonAddress,
+    ];
+    this.hardwareAddressMin = Math.min(...addresses);
+    this.hardwareAddressMax = Math.max(...addresses);
+  }
+
+  private writeBusWord(address: number, value: number): void {
+    this.writeBusByte(address, value >>> 8);
+    this.writeBusByte(address + 1, value);
+  }
+
+  private writeBusLong(address: number, value: number): void {
+    this.writeBusByte(address, value >>> 24);
+    this.writeBusByte(address + 1, value >>> 16);
+    this.writeBusByte(address + 2, value >>> 8);
+    this.writeBusByte(address + 3, value);
   }
 
   private readOperandValue(op: Operand, size: number): number | undefined {
@@ -520,11 +619,37 @@ export class Emulator {
 
   private pushLongToStack(value: number): void {
     this.registers[STACK_POINTER_REGISTER] -= 4;
-    this.memory.setLong(this.registers[STACK_POINTER_REGISTER], value >>> 0);
+    this.writeBusLong(this.registers[STACK_POINTER_REGISTER], value >>> 0);
+  }
+
+  private pushWordToStack(value: number): void {
+    this.registers[STACK_POINTER_REGISTER] -= 2;
+    this.writeBusWord(this.registers[STACK_POINTER_REGISTER], value & WORD_MASK);
+  }
+
+  private popWordFromStack(): number {
+    const value = this.readBusWord(this.registers[STACK_POINTER_REGISTER]);
+    this.registers[STACK_POINTER_REGISTER] += 2;
+    return value & WORD_MASK;
+  }
+
+  private applyStatusRegister(value: number): void {
+    const wasSupervisor = isSupervisorMode(this.statusRegister);
+    const willBeSupervisor = isSupervisorMode(value);
+    if (wasSupervisor !== willBeSupervisor) {
+      if (wasSupervisor) {
+        this.supervisorStackPointer = this.registers[STACK_POINTER_REGISTER] >>> 0;
+        this.registers[STACK_POINTER_REGISTER] = this.userStackPointer;
+      } else {
+        this.userStackPointer = this.registers[STACK_POINTER_REGISTER] >>> 0;
+        this.registers[STACK_POINTER_REGISTER] = this.supervisorStackPointer;
+      }
+    }
+    this.statusRegister = value & WORD_MASK;
   }
 
   private popLongFromStack(): number {
-    const value = this.memory.getLong(this.registers[STACK_POINTER_REGISTER]);
+    const value = this.readBusLong(this.registers[STACK_POINTER_REGISTER]);
     this.registers[STACK_POINTER_REGISTER] += 4;
     return value >>> 0;
   }
@@ -625,11 +750,45 @@ export class Emulator {
 
     const nextStackPointer = (((this.registers[STACK_POINTER_REGISTER] >>> 0) - 4) >>> 0);
     this.registers[STACK_POINTER_REGISTER] = nextStackPointer;
-    this.memory.setLong(nextStackPointer, this.pc >>> 0);
+    this.writeBusLong(nextStackPointer, this.pc >>> 0);
     this.waitingForInput = false;
     this.pendingInputTask = undefined;
     this.pc = handlerAddress;
 
+    return true;
+  }
+
+  private servicePendingInterruptLevel(): boolean {
+    if (this.pendingInterruptLevels.size === 0) {
+      return false;
+    }
+    const level = [...this.pendingInterruptLevels]
+      .sort((left, right) => right - left)
+      .find((candidate) => isInterruptLevelEligible(this.statusRegister, candidate));
+    if (level === undefined) {
+      return false;
+    }
+
+    this.pendingInterruptLevels.delete(level);
+    const vectorAddress = getEasy68kInterruptVectorAddress(level);
+    const vectorTarget = this.readBusLong(vectorAddress);
+    const handlerAddress = this.resolveExternalInterruptAddress(vectorTarget);
+    if (vectorTarget === 0 || handlerAddress === undefined) {
+      this.exception = `Invalid or missing IRQ ${level} autovector at $${vectorAddress
+        .toString(16)
+        .toUpperCase()}`;
+      return true;
+    }
+
+    this.maybeCaptureUndoSnapshot(true);
+    const previousStatus = this.statusRegister;
+    const previousPc = this.pc;
+    this.applyStatusRegister(enterInterruptStatus(previousStatus, level));
+    this.pushLongToStack(previousPc);
+    this.pushWordToStack(previousStatus);
+    this.waitingForInput = false;
+    this.pendingInputTask = undefined;
+    this.pc = handlerAddress;
     return true;
   }
 
@@ -701,6 +860,10 @@ export class Emulator {
       if (this.exception) return true;
       if (this.halted) return true;
 
+      if (this.servicePendingInterruptLevel()) {
+        return this.halted || this.exception !== undefined;
+      }
+
       if (this.servicePendingExternalInterrupt()) {
         return this.halted || this.exception !== undefined;
       }
@@ -767,6 +930,9 @@ export class Emulator {
       switch (instr.bareToken) {
         case 'rts':
           this.rts();
+          break;
+        case 'rte':
+          this.rte();
           break;
         default:
           this.errors.push(Strings.UNRECOGNISED_INSTRUCTION + Strings.AT_LINE + this.line);
@@ -1544,6 +1710,18 @@ export class Emulator {
     this.lastInstruction = 'RTS';
   }
 
+  private rte(): void {
+    if (!isSupervisorMode(this.statusRegister)) {
+      this.exception = 'Privilege violation: RTE requires supervisor mode';
+      return;
+    }
+    const previousStatus = this.popWordFromStack();
+    const previousPc = this.popLongFromStack();
+    this.applyStatusRegister(previousStatus);
+    this.pc = previousPc;
+    this.lastInstruction = 'RTE';
+  }
+
   private bsr(label: string): void {
     this.pushLongToStack(this.pc);
     this.branchToLabel(label);
@@ -1896,15 +2074,19 @@ export class Emulator {
   }
 
   getSR(): number {
-    return this.ccr & 0x1f;
+    return this.statusRegister;
   }
 
   getUSP(): number {
-    return this.registers[STACK_POINTER_REGISTER] >>> 0;
+    return isSupervisorMode(this.statusRegister)
+      ? this.userStackPointer >>> 0
+      : this.registers[STACK_POINTER_REGISTER] >>> 0;
   }
 
   getSSP(): number {
-    return this.registers[STACK_POINTER_REGISTER] >>> 0;
+    return isSupervisorMode(this.statusRegister)
+      ? this.registers[STACK_POINTER_REGISTER] >>> 0
+      : this.supervisorStackPointer >>> 0;
   }
 
   getMemory(): Record<number, number> {
@@ -1936,11 +2118,32 @@ export class Emulator {
       memory: this.memory.getMemoryVersion(),
       terminal: terminalMeta.version,
       terminalGeometry: terminalMeta.geometryVersion,
+      hardware: this.hardware.getSnapshot().version,
     };
   }
 
   readMemoryRange(address: number, length: number): Uint8Array {
-    return this.memory.readRange(address, length);
+    return Uint8Array.from({ length }, (_, index) => this.readBusByte(address + index));
+  }
+
+  getHardwareSnapshot(): Easy68kHardwareSnapshot {
+    return this.hardware.getSnapshot();
+  }
+
+  configureHardware(config: Easy68kHardwareConfig): Easy68kHardwareValidationResult {
+    const result = this.hardware.configure(config);
+    if (result.valid) {
+      this.updateHardwareAddressWindow();
+    }
+    return result;
+  }
+
+  setHardwareToggle(bit: number, enabled: boolean): void {
+    this.hardware.setToggle(bit, enabled);
+  }
+
+  setHardwareButton(bit: number, pressed: boolean): void {
+    this.hardware.setButton(bit, pressed);
   }
 
   getTerminalSnapshot(): TerminalSnapshot {
@@ -1972,15 +2175,15 @@ export class Emulator {
   }
 
   writeMemoryByte(address: number, value: number): void {
-    this.memory.setByte(address >>> 0, value & BYTE_MASK);
+    this.writeBusByte(address, value);
   }
 
   writeMemoryWord(address: number, value: number): void {
-    this.memory.setWord(address >>> 0, value & WORD_MASK);
+    this.writeBusWord(address, value);
   }
 
   writeMemoryLong(address: number, value: number): void {
-    this.memory.setLong(address >>> 0, value >>> 0);
+    this.writeBusLong(address, value);
   }
 
   raiseExternalInterrupt(handlerAddress: number): boolean {
@@ -1992,6 +2195,18 @@ export class Emulator {
 
     this.pendingExternalInterruptAddress = resolvedHandlerAddress;
     return true;
+  }
+
+  requestInterruptLevel(level: number): InterruptRequestResult {
+    if (!Number.isInteger(level) || level < 1 || level > 7) {
+      return 'rejected';
+    }
+    this.pendingInterruptLevels.add(level);
+    return isInterruptLevelEligible(this.statusRegister, level) ? 'accepted' : 'masked';
+  }
+
+  getPendingInterruptLevels(): number[] {
+    return [...this.pendingInterruptLevels].sort((left, right) => right - left);
   }
 
   queueInput(input: string | number | number[] | Uint8Array): void {
@@ -2102,13 +2317,16 @@ export class Emulator {
       return;
     }
 
-    this.pc = frame.pc;
-    this.ccr = frame.ccr;
-    this.lastInstruction = frame.lastInstruction;
-    this.line = frame.line;
-    this.registers = new Int32Array(frame.registers);
+    this.pc = frame.cpu.pc;
+    this.statusRegister = frame.cpu.sr;
+    this.userStackPointer = frame.cpu.usp;
+    this.supervisorStackPointer = frame.cpu.ssp;
+    this.lastInstruction = frame.execution.lastInstruction;
+    this.line = frame.execution.line;
+    this.registers = new Int32Array(frame.cpu.registers);
     this.memory.restoreSnapshot(frame.memory);
-    this.errors = [...frame.errors];
+    this.hardware.restoreOutputSnapshot(frame.deviceOutputs);
+    this.errors = [...frame.diagnostics.errors];
     this.waitingForInput = false;
     this.halted = false;
     this.pendingInputTask = undefined;
@@ -2122,10 +2340,13 @@ export class Emulator {
   reset(): void {
     const runtimeSyncSnapshot = this.snapshotRuntimeSyncState();
     this.pc = 0x0;
-    this.ccr = 0x00;
+    this.statusRegister = 0x0000;
+    this.userStackPointer = DEFAULT_STACK_POINTER;
+    this.supervisorStackPointer = DEFAULT_STACK_POINTER;
     this.registers.fill(0);
     this.registers[STACK_POINTER_REGISTER] = DEFAULT_STACK_POINTER;
     this.memory.setMemory(this.initialMemory);
+    this.hardware.reset();
     this.undo.clear();
     this.terminal.reset();
     this.inputQueue = [];
@@ -2133,6 +2354,7 @@ export class Emulator {
     this.halted = false;
     this.pendingInputTask = undefined;
     this.pendingExternalInterruptAddress = undefined;
+    this.pendingInterruptLevels.clear();
     this.lastInstruction = Strings.LAST_INSTRUCTION_DEFAULT_TEXT;
     this.exception = undefined;
     this.errors = [];

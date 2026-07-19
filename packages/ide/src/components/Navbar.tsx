@@ -30,10 +30,10 @@ import {
   setActiveSubmenu,
   setWorkspaceTab,
   toggleAppMenu,
+  getWorkspacePaneDescriptors,
   type AppDispatch,
   type RootState,
 } from '@/store';
-import type { WorkspaceTab } from '@/store/uiShellSlice';
 import {
   selectNavbarMenuState,
   selectNavbarPresentationModel,
@@ -60,47 +60,12 @@ const Navbar: React.FC = () => {
   const isCompactShell = useCompactShell();
   const isFocusedMobileTerminal = isCompactShell && activeWorkspaceTab === 'terminal';
   const showRuntimeControls = !isCompactShell || activeWorkspaceTab !== 'terminal';
-  const workspaceTabs: Array<{
-    id: WorkspaceTab;
-    controls: string;
-    label: string;
-    ariaLabel: string;
-  }> = [
-    {
-      id: 'terminal' as WorkspaceTab,
-      controls: 'workspace-tabpanel-terminal',
-      label: isCompactShell ? 'Term' : 'Terminal',
-      ariaLabel: 'Terminal',
-    },
-    {
-      id: 'code' as WorkspaceTab,
-      controls: 'workspace-tabpanel-code',
-      label: 'Code',
-      ariaLabel: 'Code',
-    },
-    ...(isCompactShell
-      ? [
-          {
-            id: 'registers' as WorkspaceTab,
-            controls: 'workspace-tabpanel-registers',
-            label: 'Regs',
-            ariaLabel: 'Registers',
-          },
-          {
-            id: 'memory' as WorkspaceTab,
-            controls: 'workspace-tabpanel-memory',
-            label: 'Mem',
-            ariaLabel: 'Memory',
-          },
-          {
-            id: 'hardware' as WorkspaceTab,
-            controls: 'workspace-tabpanel-hardware',
-            label: 'HW',
-            ariaLabel: 'Hardware',
-          },
-        ]
-      : []),
-  ];
+  const workspaceTabs = getWorkspacePaneDescriptors(isCompactShell).map((pane) => ({
+    id: pane.id,
+    controls: `workspace-tabpanel-${pane.id}`,
+    label: isCompactShell ? pane.compactLabel : pane.label,
+    ariaLabel: pane.label,
+  }));
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const menuLayerRef = useRef<HTMLDivElement | null>(null);

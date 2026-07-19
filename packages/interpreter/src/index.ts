@@ -1,4 +1,5 @@
 export { Emulator } from './core/emulator';
+export type { InterruptRequestResult } from './core/emulator';
 export { Memory } from './core/memory';
 export {
   DEFAULT_MEMORY_BUFFER_PAGE_SIZE,
@@ -33,6 +34,7 @@ export {
   tstOP,
 } from './core/operations';
 export { Strings } from './core/strings';
+export * from './core/statusRegister';
 export { TerminalDevice } from './devices/terminal';
 export {
   DEFAULT_TERMINAL_BUFFER_COLUMNS,
@@ -58,6 +60,8 @@ export {
   resolveDecodedInstruction,
 } from './instructionDecoder';
 export { loadProgramSource } from './programLoader';
+export * from './devices/deviceAddressMap';
+export * from './devices/easy68kHardware';
 export type {
   MemorySnapshot,
   MemoryUndoPageEntry,

@@ -65,6 +65,7 @@ interface WorkerPublicationPlan {
   diagnosticsChanged: boolean;
   memoryChanged: boolean;
   terminalChanged: boolean;
+  hardwareChanged: boolean;
   includeSymbols: boolean;
 }
 
@@ -118,6 +119,9 @@ export class InterpreterWorkerHost {
   private lastPublishedSyncVersions: RuntimeSyncVersions | null = null;
   private lastPublishedRuntimeStateSignature: string | null = null;
   private publishedSymbolsForCurrentProgram = false;
+  private automaticInterruptTimer: ReturnType<typeof setTimeout> | null = null;
+  private automaticInterruptLevels: number[] = [];
+  private automaticInterruptIntervalMs = 1000;
 
   constructor(private readonly emitEvent: WorkerEventSink) {}
 
@@ -133,6 +137,7 @@ export class InterpreterWorkerHost {
           return;
         case 'dispose':
           this.stopExecutionLoop();
+          this.cancelAutomaticInterrupts();
           this.emulator = null;
           this.lastLoadedSource = '';
           this.resetPublishedSnapshotState();
@@ -140,6 +145,7 @@ export class InterpreterWorkerHost {
           return;
         case 'loadProgram':
           this.stopExecutionLoop();
+          this.cancelAutomaticInterrupts();
           this.resetPublishedSnapshotState();
           this.lastLoadedSource = command.source;
           this.geometry = {
@@ -196,6 +202,7 @@ export class InterpreterWorkerHost {
           return;
         case 'reset':
           this.stopExecutionLoop();
+          this.cancelAutomaticInterrupts();
           if (this.emulator === null && this.lastLoadedSource.trim().length > 0) {
             this.emulator = new Emulator(this.lastLoadedSource, {
               columns: this.geometry.columns,
@@ -228,6 +235,61 @@ export class InterpreterWorkerHost {
             lastFrameDurationMs: 0,
             lastStopReason: 'input_cleared',
           });
+          this.emitEvent(createReplyEvent(command.id, true));
+          return;
+        case 'configureHardware': {
+          const validation = this.requireEmulator().configureHardware(command.config);
+          this.publishFrame(
+            {
+              lastFrameInstructions: 0,
+              lastFrameDurationMs: 0,
+              lastStopReason: validation.valid
+                ? 'hardware_configured'
+                : 'hardware_configuration_rejected',
+            },
+            undefined,
+            'hardware'
+          );
+          this.emitEvent(createReplyEvent(command.id, true, validation));
+          return;
+        }
+        case 'setHardwareToggle':
+          this.requireEmulator().setHardwareToggle(command.bit, command.enabled);
+          this.publishFrame(
+            {
+              lastFrameInstructions: 0,
+              lastFrameDurationMs: 0,
+              lastStopReason: 'hardware_toggle_changed',
+            },
+            undefined,
+            'hardware'
+          );
+          this.emitEvent(createReplyEvent(command.id, true));
+          return;
+        case 'setHardwareButton':
+          this.requireEmulator().setHardwareButton(command.bit, command.pressed);
+          this.publishFrame(
+            {
+              lastFrameInstructions: 0,
+              lastFrameDurationMs: 0,
+              lastStopReason: 'hardware_button_changed',
+            },
+            undefined,
+            'hardware'
+          );
+          this.emitEvent(createReplyEvent(command.id, true));
+          return;
+        case 'requestInterruptLevel': {
+          const result = this.requireEmulator().requestInterruptLevel(command.level);
+          this.emitEvent(createReplyEvent(command.id, true, result));
+          return;
+        }
+        case 'configureAutomaticInterrupts':
+          this.configureAutomaticInterrupts(command.config.levels, command.config.intervalMs);
+          this.emitEvent(createReplyEvent(command.id, true));
+          return;
+        case 'cancelAutomaticInterrupts':
+          this.cancelAutomaticInterrupts();
           this.emitEvent(createReplyEvent(command.id, true));
           return;
         case 'raiseExternalInterrupt': {
@@ -392,6 +454,39 @@ export class InterpreterWorkerHost {
     };
   }
 
+  private configureAutomaticInterrupts(levels: number[], intervalMs: number): void {
+    this.cancelAutomaticInterrupts();
+    this.automaticInterruptLevels = [...new Set(levels)]
+      .filter((level) => Number.isInteger(level) && level >= 1 && level <= 7)
+      .sort((left, right) => right - left);
+    this.automaticInterruptIntervalMs = Math.max(50, Math.round(intervalMs) || 50);
+    this.scheduleAutomaticInterruptTick();
+  }
+
+  private scheduleAutomaticInterruptTick(): void {
+    if (this.automaticInterruptLevels.length === 0 || this.emulator === null) {
+      return;
+    }
+    this.automaticInterruptTimer = setTimeout(() => {
+      this.automaticInterruptTimer = null;
+      const runtime = this.emulator;
+      if (runtime) {
+        for (const level of this.automaticInterruptLevels) {
+          runtime.requestInterruptLevel(level);
+        }
+      }
+      this.scheduleAutomaticInterruptTick();
+    }, this.automaticInterruptIntervalMs);
+  }
+
+  private cancelAutomaticInterrupts(): void {
+    if (this.automaticInterruptTimer !== null) {
+      clearTimeout(this.automaticInterruptTimer);
+      this.automaticInterruptTimer = null;
+    }
+    this.automaticInterruptLevels = [];
+  }
+
   private publishFrame(
     runtimeMetrics?: WorkerRuntimeMetricsSnapshot,
     snapshotOptions?: WorkerSnapshotOptions,
@@ -499,6 +594,8 @@ export class InterpreterWorkerHost {
       terminalSnapshot: includeTerminalSnapshot ? runtime.getTerminalSnapshot() : undefined,
       terminalFrameBuffer:
         plan.terminalChanged || forceFullSections ? terminalFrameBufferSnapshot : undefined,
+      hardwareSnapshot:
+        plan.hardwareChanged || forceFullSections ? runtime.getHardwareSnapshot() : undefined,
       lastInstruction: includeRuntimeState ? runtime.getLastInstruction() : undefined,
       errors: includeRuntimeState ? [...runtime.getErrors()] : undefined,
       exception: includeRuntimeState ? runtime.getException() ?? null : undefined,
@@ -535,6 +632,9 @@ export class InterpreterWorkerHost {
         previousSyncVersions === null ||
         previousSyncVersions.terminal !== syncVersions.terminal ||
         previousSyncVersions.terminalGeometry !== syncVersions.terminalGeometry,
+      hardwareChanged:
+        previousSyncVersions === null ||
+        previousSyncVersions.hardware !== syncVersions.hardware,
       includeSymbols:
         snapshotOptions.includeSymbols === true || !this.publishedSymbolsForCurrentProgram,
     };
@@ -567,6 +667,10 @@ export class InterpreterWorkerHost {
 
     if (plan.terminalChanged) {
       return this.executionState.terminalFocusedContinuousFrames ? 'terminal' : 'full';
+    }
+
+    if (plan.hardwareChanged) {
+      return 'hardware';
     }
 
     if (

@@ -1,4 +1,7 @@
-import type { UndoCaptureMode } from '@m68k/interpreter';
+import type {
+  Easy68kHardwareValidationResult,
+  UndoCaptureMode,
+} from '@m68k/interpreter';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import { InterpreterWorkerClient, type InterpreterWorkerLike } from '@/runtime/worker/InterpreterWorkerClient';
 
@@ -23,6 +26,22 @@ export function createWorkerIdeRuntimeSession(
     clearInputQueue: () => {
       void client.requestClearInputQueue();
     },
+    configureHardware: (config) => {
+      void client.requestConfigureHardware(config);
+      const optimisticResult: Easy68kHardwareValidationResult = {
+        valid: true,
+        conflicts: [],
+        errors: [],
+      };
+      return optimisticResult;
+    },
+    setHardwareToggle: (bit, enabled) => {
+      void client.requestSetHardwareToggle(bit, enabled);
+    },
+    setHardwareButton: (bit, pressed) => {
+      void client.requestSetHardwareButton(bit, pressed);
+    },
+    requestInterruptLevel: () => 'accepted',
     emulationStep: () => {
       throw new Error('Worker-backed runtime does not support synchronous emulationStep()');
     },
@@ -90,6 +109,7 @@ export function createWorkerIdeRuntimeSession(
     isHalted: client.isHalted.bind(client),
     isWaitingForInput: client.isWaitingForInput.bind(client),
     getRuntimeSyncVersions: client.getRuntimeSyncVersions.bind(client),
+    getHardwareSnapshot: client.getHardwareSnapshot.bind(client),
   };
 
   return session;

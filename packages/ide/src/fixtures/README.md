@@ -11,5 +11,9 @@ Bundled example programs for the browser IDE and interpreter:
 - `subroutine-stack.asm` - call a subroutine multiple times
 - `flags-compare.asm` - compare values and inspect the result flags
 - `nibbles.asm` - the bundled Nibbles game source used by the IDE
+- `hardware-led-switches.asm` - mirror the toggle byte to the LED latch at shared address `$E00010`
+- `hardware-buttons.asm` - inspect active-low push buttons and mirror them to LEDs
+- `hardware-seven-segment.asm` - write patterns to the eight display bytes at `$E00000` through `$E0000E`
+- `hardware-interrupts.asm` - install level 1-7 autovectors, update LEDs in handlers, and return with `RTE`
 
 Most of these examples halt with `TRAP #11` task `0`, so you can run them and inspect the terminal, registers, flags, and memory.

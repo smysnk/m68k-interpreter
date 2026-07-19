@@ -1,12 +1,44 @@
-import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { Provider } from 'react-redux';
+import { Emulator } from '@m68k/interpreter';
 import HardwarePanelPreview from './HardwarePanelPreview';
+import { createIdeStore } from '@/store';
+import { runtimeSessionStore } from '@/runtime/runtimeSessionStore';
+import { hardwareSurfaceStore } from '@/runtime/hardwareSurfaceStore';
+
+let runtime: Emulator;
+
+function renderPanel() {
+  return render(<Provider store={createIdeStore()}><HardwarePanelPreview /></Provider>);
+}
 
 describe('HardwarePanelPreview', () => {
-  it('renders the proposed memory map and interactive I/O banks', () => {
-    render(<HardwarePanelPreview />);
+  beforeEach(() => {
+    window.localStorage.clear();
+    runtime = new Emulator('START\n  END START');
+    runtime.setHardwareToggle(7, true);
+    runtime.setHardwareToggle(5, true);
+    runtime.setHardwareToggle(2, true);
+    runtime.setHardwareToggle(0, true);
+    runtime.writeMemoryByte(0xe00010, 0xa5);
+    [0x7d, 0x7f, 0, 0, 0x5b, 0x3f, 0x5b, 0x7d].forEach((value, index) => {
+      runtime.writeMemoryByte(0xe00000 + index * 2, value);
+    });
+    runtimeSessionStore.replace(runtime);
+    hardwareSurfaceStore.reset();
+    hardwareSurfaceStore.publish(runtime.getHardwareSnapshot());
+  });
 
-    expect(screen.getByLabelText('Base address')).toHaveValue('00E00000');
+  afterEach(() => {
+    runtimeSessionStore.clear();
+    hardwareSurfaceStore.reset();
+  });
+
+  it('renders the live memory map and interactive I/O banks', async () => {
+    renderPanel();
+
+    expect(screen.getByText('Base · $00E00000')).toBeInTheDocument();
     expect(screen.getByText('Read · $00E00010')).toBeInTheDocument();
     expect(screen.getByText('Write · $00E00010')).toBeInTheDocument();
     expect(screen.getByText('Read low · $00E00012')).toBeInTheDocument();
@@ -22,15 +54,13 @@ describe('HardwarePanelPreview', () => {
 
     fireEvent.click(bitSeven);
 
-    expect(bitSeven).toHaveAttribute('aria-checked', 'false');
-    expect(screen.getByRole('img', { name: 'LED output 0x25' })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cycle preview display' }));
-    expect(screen.getByRole('img', { name: 'Display digit 1, pattern 0x7F' })).toBeInTheDocument();
+    await waitFor(() => expect(bitSeven).toHaveAttribute('aria-checked', 'false'));
+    expect(screen.getByRole('img', { name: 'LED output 0xA5' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Display digit 1, pattern 0x7D' })).toBeInTheDocument();
   });
 
-  it('models active-low buttons, interrupt feedback, and reset behavior', () => {
-    render(<HardwarePanelPreview />);
+  it('models active-low buttons, interrupt feedback, configuration, and reset behavior', async () => {
+    renderPanel();
 
     const buttonRow = screen.getByTestId('hardware-matrix-button-row');
     const pushButton = screen.getByRole('button', { name: 'Push button 0' });
@@ -38,16 +68,18 @@ describe('HardwarePanelPreview', () => {
     expect(within(buttonRow).getByText('0xFF')).toBeInTheDocument();
 
     fireEvent.pointerDown(pushButton);
-    expect(within(buttonRow).getByText('0xFE')).toBeInTheDocument();
+    await waitFor(() => expect(within(buttonRow).getByText('0xFE')).toBeInTheDocument());
 
     fireEvent.pointerUp(pushButton);
-    expect(within(buttonRow).getByText('0xFF')).toBeInTheDocument();
+    await waitFor(() => expect(within(buttonRow).getByText('0xFF')).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: 'Request interrupt level 5' }));
-    expect(screen.getByText('IRQ 5 requested • preview only')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('IRQ 5 accepted')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reset board' }));
-    expect(screen.getByRole('img', { name: 'LED output 0xA5' })).toBeInTheDocument();
-    expect(screen.getByText('1 automatic level armed • preview only')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Configure addresses' }));
+    expect(screen.getByTestId('hardware-address-configuration')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset hardware' }));
+    await waitFor(() => expect(screen.getByRole('img', { name: 'LED output 0x00' })).toBeInTheDocument());
   });
 });

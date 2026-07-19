@@ -63,4 +63,19 @@ END START
       0x48,
     ]);
   });
+
+  it('resolves forward-referenced labels in DC.L during the second pass', () => {
+    const result = loadProgramSource(`ORG $64
+IRQ1_VECTOR DC.L IRQ1_HANDLER
+ORG $1000
+START
+  BRA START
+IRQ1_HANDLER
+  RTE
+  END START`);
+
+    expect(result.errors).toEqual([]);
+    expect(result.symbols.IRQ1_HANDLER).toBe(0x1004);
+    expect(readBytes(result.memoryImage, 0x64, 4)).toEqual([0, 0, 0x10, 0x04]);
+  });
 });

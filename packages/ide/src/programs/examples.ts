@@ -7,6 +7,10 @@ import nibblesSource from '@/fixtures/nibbles.asm';
 import pollingInputSource from '@/fixtures/polling-input.asm';
 import subroutineStackSource from '@/fixtures/subroutine-stack.asm';
 import sum1To10Source from '@/fixtures/sum-1-to-10.asm';
+import hardwareLedSwitchesSource from '@/fixtures/hardware-led-switches.asm';
+import hardwareButtonsSource from '@/fixtures/hardware-buttons.asm';
+import hardwareSevenSegmentSource from '@/fixtures/hardware-seven-segment.asm';
+import hardwareInterruptsSource from '@/fixtures/hardware-interrupts.asm';
 
 interface BundledExampleFile {
   id: string;
@@ -17,6 +21,34 @@ interface BundledExampleFile {
 }
 
 export const bundledExampleFiles: BundledExampleFile[] = [
+  {
+    id: 'example:hardware-led-switches.asm',
+    name: 'hardware-led-switches.asm',
+    path: 'fixtures/hardware-led-switches.asm',
+    kind: 'example',
+    content: hardwareLedSwitchesSource,
+  },
+  {
+    id: 'example:hardware-buttons.asm',
+    name: 'hardware-buttons.asm',
+    path: 'fixtures/hardware-buttons.asm',
+    kind: 'example',
+    content: hardwareButtonsSource,
+  },
+  {
+    id: 'example:hardware-seven-segment.asm',
+    name: 'hardware-seven-segment.asm',
+    path: 'fixtures/hardware-seven-segment.asm',
+    kind: 'example',
+    content: hardwareSevenSegmentSource,
+  },
+  {
+    id: 'example:hardware-interrupts.asm',
+    name: 'hardware-interrupts.asm',
+    path: 'fixtures/hardware-interrupts.asm',
+    kind: 'example',
+    content: hardwareInterruptsSource,
+  },
   {
     id: 'example:nibbles.asm',
     name: 'nibbles.asm',

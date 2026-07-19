@@ -1,6 +1,7 @@
 import type { FilesState } from '@/store/filesSlice';
 import type { SettingsState } from '@/store/settingsSlice';
 import type { UiShellState } from '@/store/uiShellSlice';
+import type { HardwarePreferencesState } from '@/store/hardwareSlice';
 
 export const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v1';
 
@@ -13,6 +14,10 @@ export interface PersistedIdeState {
   uiShell?: Pick<
     UiShellState,
     'workspaceTab' | 'inspectorView' | 'contextView' | 'contextOpen' | 'layout'
+  >;
+  hardware?: Pick<
+    HardwarePreferencesState,
+    'config' | 'automaticInterruptLevels' | 'automaticInterruptIntervalMs'
   >;
 }
 

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium, devices, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import {
   loadNibbles as loadNibblesFixture,
+  readTerminalSnapshot,
   scheduleDeferredGameplayInput,
   startGameplayFromIntroTouch,
   touchTerminalRelativeDirection,
@@ -46,6 +47,26 @@ interface WorkerTransportSummary {
   framesWithMemoryImage: number;
   framesWithTerminalFrameBuffer: number;
   framesWithTerminalSnapshot: number;
+  framesWithHardwareSnapshot: number;
+}
+
+interface HardwareSurfaceSummary {
+  snapshotsReceived: number;
+  snapshotsPublished: number;
+  snapshotsReused: number;
+  noOpSnapshots: number;
+  outputVersionChanges: number;
+  framesWithHardwareSnapshot: number;
+  approximatePayloadBytes: number;
+  commandRequests: number;
+  commandAcceptances: number;
+  commandAcknowledgements: number;
+  commandRejections: number;
+  averageCommandAckLatencyMs: number;
+  maxCommandAckLatencyMs: number;
+  visibleStateLatencies: number;
+  averageVisibleStateLatencyMs: number;
+  maxVisibleStateLatencyMs: number;
 }
 
 interface TerminalRepaintSummary {
@@ -85,9 +106,12 @@ interface IdeRuntimeScenarioSummary {
   terminalColumns: number | null;
   introElapsedMs: number;
   gameplayElapsedMs: number;
+  heapGrowthBytes: number | null;
+  postCancelFrameDelta: number | null;
   topRenderHotspots: RenderHotspotRow[];
   runtimeSync: RuntimeSyncSummary;
   workerTransport: WorkerTransportSummary;
+  hardwareSurface: HardwareSurfaceSummary;
   terminalRepaint: TerminalRepaintSummary;
   touchLatency: TouchLatencySummary;
 }
@@ -121,6 +145,25 @@ interface IdePerformanceSnapshot {
     framesWithMemoryImage: number;
     framesWithTerminalFrameBuffer: number;
     framesWithTerminalSnapshot: number;
+    framesWithHardwareSnapshot: number;
+  };
+  hardwareSurface: {
+    snapshotsReceived: number;
+    snapshotsPublished: number;
+    snapshotsReused: number;
+    noOpSnapshots: number;
+    outputVersionChanges: number;
+    framesWithHardwareSnapshot: number;
+    approximatePayloadBytes: number;
+    commandRequests: number;
+    commandAcceptances: number;
+    commandAcknowledgements: number;
+    commandRejections: number;
+    totalCommandAckLatencyMs: number;
+    maxCommandAckLatencyMs: number;
+    visibleStateLatencies: number;
+    totalVisibleStateLatencyMs: number;
+    maxVisibleStateLatencyMs: number;
   };
   terminalRepaint: {
     repaintCount: number;
@@ -193,6 +236,25 @@ async function readIdePerformanceSnapshotFromPage(page: Page): Promise<IdePerfor
           framesWithMemoryImage: 0,
           framesWithTerminalFrameBuffer: 0,
           framesWithTerminalSnapshot: 0,
+          framesWithHardwareSnapshot: 0,
+        },
+        hardwareSurface: {
+          snapshotsReceived: 0,
+          snapshotsPublished: 0,
+          snapshotsReused: 0,
+          noOpSnapshots: 0,
+          outputVersionChanges: 0,
+          framesWithHardwareSnapshot: 0,
+          approximatePayloadBytes: 0,
+          commandRequests: 0,
+          commandAcceptances: 0,
+          commandAcknowledgements: 0,
+          commandRejections: 0,
+          totalCommandAckLatencyMs: 0,
+          maxCommandAckLatencyMs: 0,
+          visibleStateLatencies: 0,
+          totalVisibleStateLatencyMs: 0,
+          maxVisibleStateLatencyMs: 0,
         },
         terminalRepaint: {
           repaintCount: 0,
@@ -232,21 +294,27 @@ async function waitForTelemetryAdvanceAfterInput(
     trigger: () => Promise<void> | void;
     timeoutMs?: number;
     activeRunMs?: number;
+    requireInputProgressAck?: boolean;
     requireTouchDispatch?: boolean;
     requireTouchVisual?: boolean;
   }
 ): Promise<void> {
   const timeoutMs = options.timeoutMs ?? 8_000;
   const before = await readIdePerformanceSnapshotFromPage(page);
+  let lastSnapshot = before;
   const startedAt = performance.now();
 
   await Promise.resolve(options.trigger());
 
   while (performance.now() - startedAt < timeoutMs) {
     const after = await readIdePerformanceSnapshotFromPage(page);
+    lastSnapshot = after;
     const acceptedAdvanced =
+      options.requireInputProgressAck === false ||
       after.inputProgressAck.acceptedCount > before.inputProgressAck.acceptedCount;
-    const ackAdvanced = after.inputProgressAck.ackCount > before.inputProgressAck.ackCount;
+    const ackAdvanced =
+      options.requireInputProgressAck === false ||
+      after.inputProgressAck.ackCount > before.inputProgressAck.ackCount;
     const frameAdvanced =
       after.workerTransport.frameEventsReceived > before.workerTransport.frameEventsReceived;
     const repaintAdvanced =
@@ -275,7 +343,32 @@ async function waitForTelemetryAdvanceAfterInput(
     await page.waitForTimeout(100);
   }
 
-  throw new Error(`Timed out waiting for IDE telemetry to advance after input after ${timeoutMs}ms`);
+  throw new Error(
+    `Timed out waiting for IDE telemetry to advance after input after ${timeoutMs}ms: ${JSON.stringify(
+      {
+        inputProgressAck: {
+          before: before.inputProgressAck,
+          after: lastSnapshot.inputProgressAck,
+        },
+        frameEvents: {
+          before: before.workerTransport.frameEventsReceived,
+          after: lastSnapshot.workerTransport.frameEventsReceived,
+        },
+        terminalRepaints: {
+          before: before.terminalRepaint.repaintCount,
+          after: lastSnapshot.terminalRepaint.repaintCount,
+        },
+        touchDispatches: {
+          before: before.touchLatency.dispatchCount,
+          after: lastSnapshot.touchLatency.dispatchCount,
+        },
+        touchVisuals: {
+          before: before.touchLatency.visualLatencyCount,
+          after: lastSnapshot.touchLatency.visualLatencyCount,
+        },
+      }
+    )}`
+  );
 }
 
 async function main(): Promise<void> {
@@ -303,6 +396,8 @@ async function main(): Promise<void> {
       const scenarios = [
         await profileDesktopScenario(browser, baseUrl),
         await profileMobileScenario(browser, baseUrl),
+        await profileHardwareScenario(browser, baseUrl, false),
+        await profileHardwareScenario(browser, baseUrl, true),
       ];
 
       const payload = {
@@ -324,6 +419,7 @@ async function main(): Promise<void> {
         console.table(scenario.topRenderHotspots);
         console.table([scenario.runtimeSync]);
         console.table([scenario.workerTransport]);
+        console.table([scenario.hardwareSurface]);
         console.table([scenario.terminalRepaint]);
         console.table([scenario.touchLatency]);
       }
@@ -332,6 +428,141 @@ async function main(): Promise<void> {
     }
   } finally {
     await stopServer(server);
+  }
+}
+
+const HARDWARE_PROFILE_SOURCE = `ORG $64
+IRQ1_VECTOR DC.L IRQ1_HANDLER
+ORG $1000
+START
+  MOVE.B $E00010,D0
+  MOVE.B D0,$E00010
+  MOVE.B #$7D,$E00000
+  MOVE.B #$7F,$E00002
+  BRA START
+IRQ1_HANDLER
+  ADDQ.B #1,IRQ_COUNT
+  MOVE.B IRQ_COUNT,$E00010
+  RTE
+IRQ_COUNT DC.B 0
+  END START`;
+
+async function readHeapSize(page: Page): Promise<number | null> {
+  return page.evaluate(() => {
+    const memory = (globalThis.performance as Performance & {
+      memory?: { usedJSHeapSize?: number };
+    }).memory;
+    return typeof memory?.usedJSHeapSize === 'number' ? memory.usedJSHeapSize : null;
+  });
+}
+
+async function profileHardwareScenario(
+  browser: Browser,
+  baseUrl: string,
+  compact: boolean
+): Promise<IdeRuntimeScenarioSummary> {
+  const viewport = compact ? { width: 390, height: 844 } : devices['Desktop Chrome'].viewport;
+  const context = await browser.newContext(
+    compact ? { ...devices['iPhone 13'], viewport } : { ...devices['Desktop Chrome'] }
+  );
+  try {
+    const page = await prepareInstrumentedPage(context, baseUrl);
+    await page.waitForFunction(
+      () =>
+        typeof (window as typeof window & {
+          __M68K_IDE_TEST_CONTROLS__?: { runProgram?: () => void };
+        }).__M68K_IDE_TEST_CONTROLS__?.runProgram === 'function',
+      undefined,
+      { timeout: 30_000 }
+    );
+    await page.evaluate(() => {
+      (window as typeof window & {
+        __M68K_IDE_TEST_CONTROLS__?: { runProgram?: () => void };
+      }).__M68K_IDE_TEST_CONTROLS__?.runProgram?.();
+    });
+    await page.waitForFunction(
+      () => {
+        const runtime = (window as typeof window & { emulatorInstance?: any }).emulatorInstance;
+        return Boolean(runtime?.controller);
+      },
+      undefined,
+      { timeout: 30_000 }
+    );
+    await page.evaluate(async () => {
+      const runtime = (window as typeof window & { emulatorInstance?: any }).emulatorInstance;
+      await runtime?.controller?.whenReady?.();
+    });
+    await page.waitForFunction(
+      () =>
+        Object.keys(
+          (window as typeof window & { emulatorInstance?: any }).emulatorInstance?.getSymbols?.() ?? {}
+        ).length > 0,
+      undefined,
+      { timeout: 30_000 }
+    );
+    await page.evaluate(() => {
+      (window as typeof window & { __M68K_IDE_PERF__?: { reset?: () => void } })
+        .__M68K_IDE_PERF__?.reset?.();
+    });
+    const introStartedAt = performance.now();
+    const hardwareTab = page.getByRole('tab', { name: /hardware/i }).last();
+    await hardwareTab.click();
+    await page.getByTestId('hardware-panel-preview').waitFor({ state: 'visible', timeout: 30_000 });
+    await page.waitForTimeout(400);
+    const introElapsedMs = performance.now() - introStartedAt;
+    const heapBefore = await readHeapSize(page);
+    const gameplayStartedAt = performance.now();
+
+    await page.evaluate(async (source) => {
+      const runtime = (window as typeof window & { emulatorInstance?: any }).emulatorInstance;
+      await runtime?.controller?.requestLoadProgram?.(source, 80, 25);
+      await runtime?.controller?.requestRun?.({ delayMs: 0, speedMultiplier: 1 });
+    }, HARDWARE_PROFILE_SOURCE);
+
+    for (const bit of [7, 6, 5, 4, 3, 2, 1, 0]) {
+      await page.getByRole('switch', { name: `Toggle switch ${bit}` }).click();
+      const button = page.getByRole('button', { name: `Push button ${bit}` });
+      await button.dispatchEvent('pointerdown');
+      await button.dispatchEvent('pointerup');
+    }
+
+    await page.getByRole('button', { name: 'Configure addresses' }).click();
+    const displayAddress = page.getByLabel('Display base address');
+    await displayAddress.fill('00E00100');
+    await displayAddress.press('Enter');
+    await displayAddress.fill('00E00000');
+    await displayAddress.press('Enter');
+
+    await page.getByRole('button', { name: 'Request interrupt level 1' }).click();
+    await page.getByLabel('Automatic interrupt interval').fill('50');
+    await page.getByLabel('Automatic interrupt level 1').check();
+    await page.waitForTimeout(1_000);
+    await page.getByLabel('Automatic interrupt level 1').uncheck();
+    await page.evaluate(async () => {
+      const runtime = (window as typeof window & { emulatorInstance?: any }).emulatorInstance;
+      await runtime?.controller?.requestCancelAutomaticInterrupts?.();
+      await runtime?.controller?.requestPause?.();
+    });
+    const beforeCancelSnapshot = await readIdePerformanceSnapshotFromPage(page);
+    await page.waitForTimeout(300);
+    const afterCancelSnapshot = await readIdePerformanceSnapshotFromPage(page);
+    const gameplayElapsedMs = performance.now() - gameplayStartedAt;
+    const heapAfter = await readHeapSize(page);
+
+    return await buildScenarioSummary(page, {
+      id: compact ? 'compact-hardware-runtime' : 'desktop-hardware-runtime',
+      title: compact ? 'Compact Hardware Runtime' : 'Desktop Hardware Runtime',
+      viewport,
+      introElapsedMs,
+      gameplayElapsedMs,
+      heapGrowthBytes:
+        heapBefore === null || heapAfter === null ? null : Math.max(0, heapAfter - heapBefore),
+      postCancelFrameDelta:
+        afterCancelSnapshot.workerTransport.frameEventsReceived -
+        beforeCancelSnapshot.workerTransport.frameEventsReceived,
+    });
+  } finally {
+    await context.close();
   }
 }
 
@@ -348,6 +579,7 @@ async function profileDesktopScenario(
     const introStartedAt = performance.now();
     await loadNibblesFixture(page, { useFileExplorer: true, speed: '1', navigate: false });
     await waitForIntro(page, { expectTouchCopy: false, timeoutMs: 60_000 });
+    const easyTarget = await resolveMenuTouchTarget(page, 'EASY');
     const introElapsedMs = performance.now() - introStartedAt;
 
     const gameplayStartedAt = performance.now();
@@ -355,15 +587,16 @@ async function profileDesktopScenario(
     await waitForTelemetryAdvanceAfterInput(page, {
       trigger: () =>
         startGameplayFromIntroTouch(page, {
-          row: 10,
-          col: 8,
+          row: easyTarget.row,
+          col: easyTarget.col,
           hudMarker: ['SCORE:', 'S:'],
           gameplayTimeoutMs: 60_000,
           dispatchStrategy: 'runtime',
         }),
       triggerTimeoutMs: 60_000,
-      timeoutMs: 60_000,
+      timeoutMs: 12_000,
       activeRunMs: 1_200,
+      requireInputProgressAck: false,
     });
     const gameplayElapsedMs = performance.now() - gameplayStartedAt;
 
@@ -394,12 +627,13 @@ async function profileMobileScenario(
     const introStartedAt = performance.now();
     await loadNibblesFixture(page, { useFileExplorer: false, speed: '8', navigate: false });
     await waitForIntro(page, { expectTouchCopy: true, timeoutMs: 60_000 });
+    const easyTarget = await resolveMenuTouchTarget(page, 'EASY');
     const introElapsedMs = performance.now() - introStartedAt;
 
     const gameplayStartedAt = performance.now();
     await startGameplayFromIntroTouch(page, {
-      row: 8,
-      col: 4,
+      row: easyTarget.row,
+      col: easyTarget.col,
       hudMarker: 'Lv:',
       maxAttempts: 3,
       gameplayTimeoutMs: 8_000,
@@ -423,6 +657,24 @@ async function profileMobileScenario(
   } finally {
     await context.close();
   }
+}
+
+async function resolveMenuTouchTarget(
+  page: Page,
+  label: string
+): Promise<{ row: number; col: number }> {
+  const snapshot = await readTerminalSnapshot(page);
+  const row = snapshot?.lines.findIndex((line) => line.includes(label)) ?? -1;
+  const labelColumn = row >= 0 ? snapshot?.lines[row]?.indexOf(label) ?? -1 : -1;
+
+  if (row < 0 || labelColumn < 0) {
+    throw new Error(`Unable to resolve the ${label} menu target from the terminal snapshot`);
+  }
+
+  return {
+    row,
+    col: Math.max(2, labelColumn - 1),
+  };
 }
 
 async function prepareInstrumentedPage(
@@ -475,6 +727,8 @@ async function buildScenarioSummary(
     viewport: { width: number; height: number };
     introElapsedMs: number;
     gameplayElapsedMs: number;
+    heapGrowthBytes?: number | null;
+    postCancelFrameDelta?: number | null;
   }
 ): Promise<IdeRuntimeScenarioSummary> {
   const runtimeState = await readRuntimeState(page);
@@ -484,11 +738,13 @@ async function buildScenarioSummary(
     ...base,
     introElapsedMs: round(base.introElapsedMs),
     gameplayElapsedMs: round(base.gameplayElapsedMs),
+    heapGrowthBytes: base.heapGrowthBytes ?? null,
+    postCancelFrameDelta: base.postCancelFrameDelta ?? null,
     shellMode: runtimeState.shellMode,
     inputMode: runtimeState.inputMode,
     terminalRows: runtimeState.rows,
     terminalColumns: runtimeState.columns,
-    topRenderHotspots: performanceSnapshot.renderStats.slice(0, 5).map((stat) => ({
+    topRenderHotspots: performanceSnapshot.renderStats.slice(0, 12).map((stat) => ({
       id: stat.id,
       renderCount: stat.renderCount,
       actualDurationMs: round(stat.actualDurationMs),
@@ -524,6 +780,41 @@ async function buildScenarioSummary(
       framesWithTerminalFrameBuffer:
         performanceSnapshot.workerTransport.framesWithTerminalFrameBuffer,
       framesWithTerminalSnapshot: performanceSnapshot.workerTransport.framesWithTerminalSnapshot,
+      framesWithHardwareSnapshot:
+        performanceSnapshot.workerTransport.framesWithHardwareSnapshot,
+    },
+    hardwareSurface: {
+      snapshotsReceived: performanceSnapshot.hardwareSurface.snapshotsReceived,
+      snapshotsPublished: performanceSnapshot.hardwareSurface.snapshotsPublished,
+      snapshotsReused: performanceSnapshot.hardwareSurface.snapshotsReused,
+      noOpSnapshots: performanceSnapshot.hardwareSurface.noOpSnapshots,
+      outputVersionChanges: performanceSnapshot.hardwareSurface.outputVersionChanges,
+      framesWithHardwareSnapshot:
+        performanceSnapshot.hardwareSurface.framesWithHardwareSnapshot,
+      approximatePayloadBytes: performanceSnapshot.hardwareSurface.approximatePayloadBytes,
+      commandRequests: performanceSnapshot.hardwareSurface.commandRequests,
+      commandAcceptances: performanceSnapshot.hardwareSurface.commandAcceptances,
+      commandAcknowledgements: performanceSnapshot.hardwareSurface.commandAcknowledgements,
+      commandRejections: performanceSnapshot.hardwareSurface.commandRejections,
+      averageCommandAckLatencyMs:
+        performanceSnapshot.hardwareSurface.commandAcknowledgements > 0
+          ? round(
+              performanceSnapshot.hardwareSurface.totalCommandAckLatencyMs /
+                performanceSnapshot.hardwareSurface.commandAcknowledgements
+            )
+          : 0,
+      maxCommandAckLatencyMs: round(performanceSnapshot.hardwareSurface.maxCommandAckLatencyMs),
+      visibleStateLatencies: performanceSnapshot.hardwareSurface.visibleStateLatencies,
+      averageVisibleStateLatencyMs:
+        performanceSnapshot.hardwareSurface.visibleStateLatencies > 0
+          ? round(
+              performanceSnapshot.hardwareSurface.totalVisibleStateLatencyMs /
+                performanceSnapshot.hardwareSurface.visibleStateLatencies
+            )
+          : 0,
+      maxVisibleStateLatencyMs: round(
+        performanceSnapshot.hardwareSurface.maxVisibleStateLatencyMs
+      ),
     },
     terminalRepaint: {
       repaintCount: performanceSnapshot.terminalRepaint.repaintCount,

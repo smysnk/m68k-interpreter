@@ -30,6 +30,8 @@ Write, step through, and debug m68k assembly — no installation needed.
 - Export register and memory state to file
 - Terminal-mode execution path for `nibbles.asm`
 - Runtime batching and keyboard capture for browser-playable terminal programs
+- Live EASy68K Hardware I/O Board with eight aligned switches, LEDs, active-low buttons, and seven-segment outputs
+- Level 1–7 autovector interrupts, SR masking, automatic IRQ scheduling, and `RTE`
 
 ## Supported instructions
 
@@ -38,11 +40,11 @@ Write, step through, and debug m68k assembly — no installation needed.
 **Data movement** — `CLR` `EXG` `EXT` `MOVE` `MOVEA` `NEG` `SWAP`  
 **Shifts & rotates** — `ASL` `ASR` `LSL` `LSR` `ROL` `ROR`  
 **Comparisons** — `CMP` `CMPA` `CMPI` `TST`  
-**Control flow** — `JMP` `JSR` `RTS` `BRA` `BSR` `BEQ` `BNE` `BGE` `BGT` `BLE` `BLT`
+**Control flow** — `JMP` `JSR` `RTS` `RTE` `BRA` `BSR` `BEQ` `BNE` `BGE` `BGT` `BLE` `BLT`
 
 ## Easy68K subset notes
 
-The current terminal build is aimed at the Easy68K subset needed by `nibbles.asm`, including `EQU`, `DC.*`, `DS.*`, trap tasks `1`, `3`, `4`, and `TRAP #11` halt. See [docs/EASY68K_SUBSET_AND_LIMITATIONS.md](docs/EASY68K_SUBSET_AND_LIMITATIONS.md) for the supported subset and known limitations.
+The current build includes the Easy68K subset needed by `nibbles.asm`, two-pass forward label resolution for `DC.L`, memory-mapped trainer-board I/O, autovector interrupts, trap tasks `1`, `3`, `4`, and `TRAP #11` halt. See [docs/EASY68K_SUBSET_AND_LIMITATIONS.md](docs/EASY68K_SUBSET_AND_LIMITATIONS.md) for the supported subset and known limitations.
 
 ## Runtime shape
 
@@ -56,7 +58,7 @@ The current terminal build is aimed at the Easy68K subset needed by `nibbles.asm
 - Top-level interface components are store-connected and prop-free
 - Selectors own derived UI models
 - Controller hooks own browser/runtime side effects
-- Terminal and memory byte buffers stay outside Redux in external surface stores
+- Terminal, memory, and live hardware snapshots stay outside Redux in external surface stores
 
 See [docs/VIEW_CONTROLLER_REDUX_CONVENTIONS.md](docs/VIEW_CONTROLLER_REDUX_CONVENTIONS.md) for the current architecture rules.
 

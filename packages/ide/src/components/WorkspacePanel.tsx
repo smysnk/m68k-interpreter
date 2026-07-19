@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import Editor from './Editor';
 import Memory from './Memory';
 import Registers from './Registers';
-import HardwarePanelPreview from './HardwarePanelPreview';
+import HardwarePanel from './HardwarePanel';
 import Terminal from './Terminal';
 import { RenderProfileBoundary, useIdeRenderTelemetry } from '@/runtime/idePerformanceTelemetry';
 import { selectWorkspacePanelModel } from '@/store';
@@ -33,9 +33,7 @@ const WorkspacePanel: React.FC = () => {
       break;
     case 'hardware':
       panel = (
-        <RenderProfileBoundary id="HardwarePanelPreview">
-          <HardwarePanelPreview />
-        </RenderProfileBoundary>
+        <HardwarePanel />
       );
       break;
     case 'terminal':

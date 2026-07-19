@@ -1088,3 +1088,67 @@ _SGETCH
     expect(renderedText).not.toContain('Touch to steer');
   }, 20000);
 });
+
+describe('Emulator - level interrupts', () => {
+  const irqSource = `ORG $64
+IRQ1_VECTOR DC.L IRQ1_HANDLER
+ORG $78
+IRQ6_VECTOR DC.L IRQ6_HANDLER
+ORG $7C
+IRQ7_VECTOR DC.L IRQ7_HANDLER
+ORG $1000
+START
+  BRA START
+IRQ1_HANDLER
+  ADDQ.B #1,IRQ1_COUNT
+  RTE
+IRQ6_HANDLER
+  ADDQ.B #1,IRQ6_COUNT
+  RTE
+IRQ7_HANDLER
+  ADDQ.B #1,IRQ7_COUNT
+  RTE
+IRQ1_COUNT DC.B 0
+IRQ6_COUNT DC.B 0
+IRQ7_COUNT DC.B 0
+  END START`;
+
+  it('services an autovector with an SR/PC frame and returns through RTE', () => {
+    const emulator = new Emulator(irqSource);
+    runUntil(emulator, (runtime) => normalizeInstruction(runtime.getLastInstruction()) === 'BRA START');
+    const returnPc = emulator.getPC();
+    const originalUsp = emulator.getUSP();
+
+    expect(emulator.requestInterruptLevel(1)).toBe('accepted');
+    emulator.emulationStep();
+    expect(emulator.getSR() & 0x2700).toBe(0x2100);
+    expect(emulator.getUSP()).toBe(originalUsp);
+    expect(emulator.getSSP()).toBe(originalUsp - 6);
+
+    emulator.emulationStep();
+    emulator.emulationStep();
+    expect(emulator.readMemoryRange(emulator.getSymbolAddress('IRQ1_COUNT')!, 1)[0]).toBe(1);
+    expect(emulator.getSR()).toBe(0);
+    expect(emulator.getPC()).toBe(returnPc);
+    expect(emulator.getUSP()).toBe(originalUsp);
+    expect(emulator.getSSP()).toBe(originalUsp);
+  });
+
+  it('coalesces masked levels and always admits level seven', () => {
+    const emulator = new Emulator(irqSource);
+    runUntil(emulator, (runtime) => normalizeInstruction(runtime.getLastInstruction()) === 'BRA START');
+    expect(emulator.requestInterruptLevel(6)).toBe('accepted');
+    emulator.emulationStep();
+    expect(emulator.requestInterruptLevel(1)).toBe('masked');
+    expect(emulator.requestInterruptLevel(1)).toBe('masked');
+    expect(emulator.requestInterruptLevel(7)).toBe('accepted');
+    expect(emulator.getPendingInterruptLevels()).toEqual([7, 1]);
+  });
+
+  it('surfaces a useful exception for a missing autovector', () => {
+    const emulator = new Emulator('START\n  BRA START\n  END START');
+    expect(emulator.requestInterruptLevel(3)).toBe('accepted');
+    expect(emulator.emulationStep()).toBe(true);
+    expect(emulator.getException()).toContain('Invalid or missing IRQ 3 autovector');
+  });
+});

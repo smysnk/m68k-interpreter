@@ -11,6 +11,8 @@ import type {
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import { memorySurfaceStore } from '@/runtime/memorySurfaceStore';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
+import { runtimeCommandPort } from '@/runtime/runtimeCommandPort';
+import { runtimeSessionStore } from '@/runtime/runtimeSessionStore';
 import {
   ideStore,
   setEditorCode as setEditorCodeAction,
@@ -19,7 +21,7 @@ import {
   setMemory as setMemoryAction,
   setFlags as setFlagsAction,
   setExecutionState as setExecutionStateAction,
-  setEmulatorInstance as setEmulatorInstanceAction,
+  setRuntimeSessionMetadata,
   setTerminalState as setTerminalStateAction,
   syncEmulatorFrame as syncEmulatorFrameAction,
   toggleShowFlags as toggleShowFlagsAction,
@@ -38,6 +40,7 @@ import {
 } from '@/store';
 
 type EmulatorStoreFacade = RootState['emulator'] & {
+  emulatorInstance: IdeRuntimeSession | null;
   setEditorCode: (code: string) => void;
   setRegisters: (registers: Partial<Registers>) => void;
   setMemory: (memory: MemoryMeta) => void;
@@ -103,8 +106,21 @@ function createActions(dispatch: AppDispatch) {
     setMemory: (memory: MemoryMeta) => dispatch(setMemoryAction(memory)),
     setFlags: (flags: Partial<ConditionFlags>) => dispatch(setFlagsAction(flags)),
     setExecutionState: (nextState: Partial<ExecutionState>) => dispatch(setExecutionStateAction(nextState)),
-    setEmulatorInstance: (emulator: IdeRuntimeSession | null) =>
-      dispatch(setEmulatorInstanceAction(emulator)),
+    setEmulatorInstance: (emulator: IdeRuntimeSession | null) => {
+      if (emulator) {
+        runtimeSessionStore.replace(emulator);
+      } else {
+        runtimeSessionStore.clear();
+      }
+      const runtime = runtimeSessionStore.getSnapshot();
+      dispatch(
+        setRuntimeSessionMetadata({
+          ready: runtime.ready,
+          transport: runtime.transport,
+          epoch: runtime.epoch,
+        })
+      );
+    },
     setTerminalSnapshot: (snapshot: TerminalSnapshot) => {
       terminalSurfaceStore.replaceFromSnapshot(snapshot);
       dispatch(setTerminalStateAction(toTerminalRuntimeState(snapshot)));
@@ -132,14 +148,9 @@ function createActions(dispatch: AppDispatch) {
     },
     setRegister,
     setRegisterInEmulator: (name: keyof Registers, value: number) => {
-      const emulator = ideStore.getState().emulator.emulatorInstance;
+      const emulator = runtimeSessionStore.getSession();
       if (emulator && name in registerMap) {
-        if (typeof emulator.setRegisterValue === 'function') {
-          emulator.setRegisterValue(registerMap[name], value);
-        } else {
-          const registers = emulator.getRegisters();
-          registers[registerMap[name]] = value;
-        }
+        void runtimeCommandPort.setRegisterValue(registerMap[name], value);
       }
       setRegister(name, value);
     },
@@ -152,6 +163,7 @@ function buildFacade(
 ): EmulatorStoreFacade {
   return {
     ...emulatorState,
+    emulatorInstance: runtimeSessionStore.getSession(),
     ...actions,
     getRegister: (name) => emulatorState.registers[name],
   };
