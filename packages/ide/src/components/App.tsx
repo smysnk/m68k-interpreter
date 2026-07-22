@@ -9,6 +9,7 @@ import InspectorPanel from './InspectorPanel';
 import StatusBar from './StatusBar';
 import HelpPanel from './HelpPanel';
 import FileExplorerSidebar from './FileExplorerSidebar';
+import PanelWorkspacePrototype from './PanelWorkspacePrototype';
 import { useAppShellController } from '@/hooks/useAppShellController';
 import { useCompactShell } from '@/hooks/useCompactShell';
 import { useEmulatorEvents } from '@/hooks/useEmulatorEvents';
@@ -269,14 +270,32 @@ function AppShell(): React.ReactElement {
   );
 }
 
-const App: React.FC = () => (
-  <IdeProviders>
-    <RuntimeDriver />
-    <RenderProfileBoundary id="AppShell">
-      <AppShell />
-    </RenderProfileBoundary>
-  </IdeProviders>
-);
+function shouldRenderPanelWorkspacePrototype(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return new URLSearchParams(window.location.search).get('panelPrototype') === 'debug';
+}
+
+const App: React.FC = () => {
+  const showPanelWorkspacePrototype = shouldRenderPanelWorkspacePrototype();
+
+  return (
+    <IdeProviders>
+      {showPanelWorkspacePrototype ? (
+        <PanelWorkspacePrototype />
+      ) : (
+        <>
+          <RuntimeDriver />
+          <RenderProfileBoundary id="AppShell">
+            <AppShell />
+          </RenderProfileBoundary>
+        </>
+      )}
+    </IdeProviders>
+  );
+};
 
 export { AppShell };
 export default App;
