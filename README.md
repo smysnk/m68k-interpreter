@@ -1,6 +1,6 @@
 # M68K Interpreter
 
-## [https://smysnk.com/m68k-interpreter](https://smysnk.com/m68k-interpreter)
+**Hosted Demo:** [**smysnk.com/m68k-interpreter**](https://smysnk.com/m68k-interpreter)
 
 [![M68K Interpreter demo video](assets/m68k-interpreter-demo.webp)](https://github.com/user-attachments/assets/ec1eefff-b997-4261-bd53-46690e0b6075)
 
