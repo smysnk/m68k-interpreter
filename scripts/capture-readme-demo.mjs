@@ -6,7 +6,7 @@ import { chromium } from '@playwright/test';
 const rootDir = process.cwd();
 const baseUrl = process.env.DEMO_BASE_URL || 'http://127.0.0.1:4173/';
 const outputDir = path.resolve(rootDir, '.test-results/readme-demo-video');
-const finalMp4Path = path.resolve(rootDir, 'assets/m68k-interpreter-demo.mp4');
+const finalMp4Path = path.resolve(outputDir, 'm68k-interpreter-demo-github.mp4');
 const finalPreviewPath = path.resolve(rootDir, 'assets/m68k-interpreter-demo.webp');
 const previewFramesDir = path.resolve(outputDir, 'webp-frames');
 const trimStartSeconds = process.env.DEMO_TRIM_START_SECONDS || '0.45';
@@ -578,7 +578,7 @@ runFfmpeg([
   '-preset',
   'slow',
   '-crf',
-  '18',
+  '20',
   '-pix_fmt',
   'yuv420p',
   '-movflags',
@@ -631,6 +631,9 @@ const mp4Bytes = fs.statSync(finalMp4Path).size;
 const previewBytes = fs.statSync(finalPreviewPath).size;
 if (!Number.isFinite(duration) || duration < 20) {
   throw new Error(`Demo video is unexpectedly short (${duration.toFixed(2)} seconds).`);
+}
+if (mp4Bytes > 10_000_000) {
+  throw new Error(`GitHub-hosted demo video exceeds its 10 MB attachment budget.`);
 }
 if (previewBytes > 10_000_000) {
   throw new Error(`Animated README preview exceeds its 10 MB performance budget.`);
