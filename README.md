@@ -1,10 +1,12 @@
-[![M68K Interpreter Demo](assets/m68k-interpreter-nibbles-demo.webp)](https://smysnk.com/nibbles)
+# M68K Interpreter
+
+## [https://smysnk.com/m68k-interpreter](https://smysnk.com/m68k-interpreter)
+
+[![M68K Interpreter demo video](assets/m68k-interpreter-demo.gif)](assets/m68k-interpreter-demo.mp4)
+
+**[▶ Watch the HD demo](assets/m68k-interpreter-demo.mp4)** · **[Play Nibbles](https://smysnk.com/nibbles)**
 
 This demo is running my old [m68k-nibbles](https://github.com/smysnk/m68k-nibbles) game, which I originally wrote for a college assembly class back in 2007. I always wished someone would eventually build a 68000 browser emulator so I could bring it back to life, so I was excited when I found [gianlucarea's m68k-interpreter project](https://github.com/gianlucarea/m68k-interpreter). I took a little liberty with this fork to adapt the interface, auto-load the game, and add a screen terminal emulator so the project could feel closer to the original experience. If you enjoy this version, please consider showing some support to the upstream project too.
-
-**[→ Play Nibbles](https://smysnk.com/nibbles)**
-
-# m68k-interpreter
 
 [![tests](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml)
 [![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fsmysnk.github.io%2Fm68k-interpreter%2Fbadges%2Fcoverage.json)](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml)
