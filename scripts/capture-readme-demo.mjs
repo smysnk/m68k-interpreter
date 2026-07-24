@@ -7,8 +7,8 @@ const rootDir = process.cwd();
 const baseUrl = process.env.DEMO_BASE_URL || 'http://127.0.0.1:4173/';
 const outputDir = path.resolve(rootDir, '.test-results/readme-demo-video');
 const finalMp4Path = path.resolve(rootDir, 'assets/m68k-interpreter-demo.mp4');
-const finalPreviewPath = path.resolve(rootDir, 'assets/m68k-interpreter-demo.gif');
-const palettePath = path.resolve(outputDir, 'preview-palette.png');
+const finalPreviewPath = path.resolve(rootDir, 'assets/m68k-interpreter-demo.webp');
+const previewFramesDir = path.resolve(outputDir, 'webp-frames');
 const trimStartSeconds = process.env.DEMO_TRIM_START_SECONDS || '0.45';
 const viewport = { width: 1440, height: 810 };
 const videoSize = { width: 1920, height: 1080 };
@@ -22,6 +22,17 @@ function runFfmpeg(args) {
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], {
     stdio: 'inherit',
   });
+}
+
+function runImg2Webp(args) {
+  try {
+    execFileSync('img2webp', args, { stdio: 'inherit' });
+  } catch (error) {
+    throw new Error(
+      'Animated README preview generation requires img2webp from the WebP tools package.',
+      { cause: error }
+    );
+  }
 }
 
 function videoDuration(filePath) {
@@ -576,50 +587,43 @@ runFfmpeg([
   finalMp4Path,
 ]);
 
-runFfmpeg([
-  '-i',
-  finalMp4Path,
-  '-vf',
-  'fps=10,scale=800:-2:flags=lanczos,palettegen=max_colors=80:stats_mode=diff',
-  '-frames:v',
-  '1',
-  palettePath,
-]);
-
-runFfmpeg([
-  '-i',
-  finalMp4Path,
-  '-i',
-  palettePath,
-  '-lavfi',
-  'fps=10,scale=800:-2:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle',
-  '-loop',
-  '0',
-  finalPreviewPath,
-]);
-
-const previewLimitBytes = 9_500_000;
-if (fs.statSync(finalPreviewPath).size > previewLimitBytes) {
+fs.rmSync(previewFramesDir, { recursive: true, force: true });
+fs.mkdirSync(previewFramesDir, { recursive: true });
+try {
   runFfmpeg([
     '-i',
     finalMp4Path,
     '-vf',
-    'fps=8,scale=800:-2:flags=lanczos,palettegen=max_colors=64:stats_mode=diff',
-    '-frames:v',
-    '1',
-    palettePath,
+    'fps=12,scale=960:-2:flags=lanczos',
+    path.join(previewFramesDir, 'frame-%05d.png'),
   ]);
-  runFfmpeg([
-    '-i',
-    finalMp4Path,
-    '-i',
-    palettePath,
-    '-lavfi',
-    'fps=8,scale=800:-2:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle',
+
+  const previewFrames = fs
+    .readdirSync(previewFramesDir)
+    .filter((entry) => entry.endsWith('.png'))
+    .sort()
+    .map((entry) => path.join(previewFramesDir, entry));
+  if (previewFrames.length === 0) {
+    throw new Error('No animated README preview frames were produced.');
+  }
+
+  runImg2Webp([
     '-loop',
     '0',
+    '-min_size',
+    '-d',
+    '83',
+    '-lossy',
+    '-q',
+    '72',
+    '-m',
+    '4',
+    ...previewFrames,
+    '-o',
     finalPreviewPath,
   ]);
+} finally {
+  fs.rmSync(previewFramesDir, { recursive: true, force: true });
 }
 
 const duration = videoDuration(finalMp4Path);
@@ -629,7 +633,7 @@ if (!Number.isFinite(duration) || duration < 20) {
   throw new Error(`Demo video is unexpectedly short (${duration.toFixed(2)} seconds).`);
 }
 if (previewBytes > 10_000_000) {
-  throw new Error(`Animated README preview exceeds 10 MB (${previewBytes} bytes).`);
+  throw new Error(`Animated README preview exceeds its 10 MB performance budget.`);
 }
 
 console.log(

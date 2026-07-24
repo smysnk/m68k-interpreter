@@ -2,7 +2,7 @@
 
 ## [https://smysnk.com/m68k-interpreter](https://smysnk.com/m68k-interpreter)
 
-[![M68K Interpreter demo video](assets/m68k-interpreter-demo.gif)](assets/m68k-interpreter-demo.mp4)
+[![M68K Interpreter demo video](assets/m68k-interpreter-demo.webp)](assets/m68k-interpreter-demo.mp4)
 
 **[▶ Watch the HD demo](assets/m68k-interpreter-demo.mp4)** · **[Play Nibbles](https://smysnk.com/nibbles)**
 
