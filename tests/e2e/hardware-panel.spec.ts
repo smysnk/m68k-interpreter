@@ -64,6 +64,12 @@ async function initializeRuntime(page: Page): Promise<void> {
     await runtime.controller.requestLoadProgram(source, 80, 25);
     await runtime.controller.requestRun({ delayMs: 0, speedMultiplier: 1 });
   }, SOURCE);
+  await page.waitForFunction(
+    () =>
+      'IRQ_COUNT' in
+      ((window as typeof window & { emulatorInstance?: BrowserRuntime }).emulatorInstance
+        ?.getSymbols?.() ?? {})
+  );
 }
 
 async function assertAlignedMatrix(page: Page): Promise<void> {
@@ -99,7 +105,9 @@ async function assertAlignedMatrix(page: Page): Promise<void> {
 test.describe('live EASy68K hardware panel', () => {
   test('drives live I/O and preserves one aligned eight-column desktop matrix', async ({ page }) => {
     await initializeRuntime(page);
-    await page.getByRole('tab', { name: 'Hardware' }).last().click();
+    await page.getByRole('button', { name: 'Open view menu' }).click();
+    await page.getByRole('menuitem', { name: 'Add Panel' }).click();
+    await page.getByRole('menuitem', { name: 'Add Hardware I/O panel' }).click();
     await expect(page.getByTestId('hardware-panel-preview')).toBeVisible();
     await assertAlignedMatrix(page);
 

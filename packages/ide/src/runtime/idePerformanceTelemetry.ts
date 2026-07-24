@@ -87,6 +87,32 @@ export interface IdeInputProgressAckStat {
   lastLatencyMs: number;
 }
 
+export interface IdePanelWorkspaceStat {
+  visiblePanels: number;
+  expandedPanels: number;
+  minimizedPanels: number;
+  floatingPanels: number;
+  terminalMirrors: number;
+  layoutCommits: number;
+  dragStarts: number;
+  dragCancels: number;
+  successfulDrops: number;
+  validDockDrops: number;
+  floatingDrops: number;
+  dragDurationCount: number;
+  totalDragDurationMs: number;
+  maxDragDurationMs: number;
+  previewFrameCount: number;
+  p95PreviewFrameIntervalMs: number;
+  maxPreviewFrameIntervalMs: number;
+  ownershipTransfers: number;
+  totalReducerDurationMs: number;
+  maxReducerDurationMs: number;
+  persistenceWrites: number;
+  persistenceBytes: number;
+  totalPersistenceDurationMs: number;
+}
+
 export interface IdePerformanceSnapshot {
   renderStats: IdeRenderProfileStat[];
   runtimeSync: IdeRuntimeSyncStat;
@@ -95,6 +121,7 @@ export interface IdePerformanceSnapshot {
   touchLatency: IdeTouchLatencyStat;
   inputProgressAck: IdeInputProgressAckStat;
   hardwareSurface: IdeHardwareSurfaceStat;
+  panelWorkspace: IdePanelWorkspaceStat;
 }
 
 interface IdePerformanceTelemetryController {
@@ -187,9 +214,35 @@ const inputProgressAckStat: IdeInputProgressAckStat = {
   maxLatencyMs: 0,
   lastLatencyMs: 0,
 };
+const panelWorkspaceStat: IdePanelWorkspaceStat = {
+  visiblePanels: 0,
+  expandedPanels: 0,
+  minimizedPanels: 0,
+  floatingPanels: 0,
+  terminalMirrors: 0,
+  layoutCommits: 0,
+  dragStarts: 0,
+  dragCancels: 0,
+  successfulDrops: 0,
+  validDockDrops: 0,
+  floatingDrops: 0,
+  dragDurationCount: 0,
+  totalDragDurationMs: 0,
+  maxDragDurationMs: 0,
+  previewFrameCount: 0,
+  p95PreviewFrameIntervalMs: 0,
+  maxPreviewFrameIntervalMs: 0,
+  ownershipTransfers: 0,
+  totalReducerDurationMs: 0,
+  maxReducerDurationMs: 0,
+  persistenceWrites: 0,
+  persistenceBytes: 0,
+  totalPersistenceDurationMs: 0,
+};
 
 let pendingTouchVisualLatencyStartedAtMs: number | null = null;
 let pendingInputProgressAckStartedAtMs: number | null = null;
+const panelDragFrameIntervalsMs: number[] = [];
 
 function nowMs(): number {
   if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
@@ -241,6 +294,9 @@ function buildSnapshot(): IdePerformanceSnapshot {
     },
     hardwareSurface: {
       ...hardwareSurfaceStat,
+    },
+    panelWorkspace: {
+      ...panelWorkspaceStat,
     },
   };
 }
@@ -304,6 +360,17 @@ function resetTelemetry(): void {
   inputProgressAckStat.totalLatencyMs = 0;
   inputProgressAckStat.maxLatencyMs = 0;
   inputProgressAckStat.lastLatencyMs = 0;
+  Object.assign(panelWorkspaceStat, {
+    visiblePanels: 0, expandedPanels: 0, minimizedPanels: 0, floatingPanels: 0,
+    terminalMirrors: 0, layoutCommits: 0, dragStarts: 0, dragCancels: 0,
+    successfulDrops: 0, validDockDrops: 0, floatingDrops: 0,
+    dragDurationCount: 0, totalDragDurationMs: 0, maxDragDurationMs: 0,
+    previewFrameCount: 0, p95PreviewFrameIntervalMs: 0, maxPreviewFrameIntervalMs: 0,
+    ownershipTransfers: 0, totalReducerDurationMs: 0,
+    maxReducerDurationMs: 0, persistenceWrites: 0, persistenceBytes: 0,
+    totalPersistenceDurationMs: 0,
+  });
+  panelDragFrameIntervalsMs.length = 0;
   pendingTouchVisualLatencyStartedAtMs = null;
   pendingInputProgressAckStartedAtMs = null;
 }
@@ -599,6 +666,79 @@ export function recordTouchDispatch(metric: { startedAtMs: number; durationMs: n
   touchLatencyStat.lastDispatchDurationMs = metric.durationMs;
   pendingTouchVisualLatencyStartedAtMs = metric.startedAtMs;
   recordInputProgressRequest({ startedAtMs: metric.startedAtMs });
+}
+
+export function recordPanelWorkspaceCommit(metric: {
+  durationMs: number;
+  visiblePanels: number;
+  expandedPanels: number;
+  minimizedPanels: number;
+  floatingPanels: number;
+  terminalMirrors: number;
+  ownershipTransfer?: boolean;
+}): void {
+  const controller = ensureTelemetryController();
+  if (!controller?.enabled) return;
+  panelWorkspaceStat.visiblePanels = metric.visiblePanels;
+  panelWorkspaceStat.expandedPanels = metric.expandedPanels;
+  panelWorkspaceStat.minimizedPanels = metric.minimizedPanels;
+  panelWorkspaceStat.floatingPanels = metric.floatingPanels;
+  panelWorkspaceStat.terminalMirrors = metric.terminalMirrors;
+  panelWorkspaceStat.layoutCommits += 1;
+  panelWorkspaceStat.ownershipTransfers += metric.ownershipTransfer ? 1 : 0;
+  panelWorkspaceStat.totalReducerDurationMs += metric.durationMs;
+  panelWorkspaceStat.maxReducerDurationMs = Math.max(panelWorkspaceStat.maxReducerDurationMs, metric.durationMs);
+}
+
+export function recordPanelWorkspaceDrag(
+  kind: 'start' | 'cancel' | 'drop',
+  metric?: {
+    durationMs?: number;
+    outcome?: 'dock' | 'float' | 'noop';
+    frameIntervalsMs?: readonly number[];
+  },
+): void {
+  const controller = ensureTelemetryController();
+  if (!controller?.enabled) return;
+  if (kind === 'start') panelWorkspaceStat.dragStarts += 1;
+  if (kind === 'cancel') panelWorkspaceStat.dragCancels += 1;
+  if (kind === 'drop') {
+    panelWorkspaceStat.successfulDrops += 1;
+    panelWorkspaceStat.validDockDrops += metric?.outcome === 'dock' ? 1 : 0;
+    panelWorkspaceStat.floatingDrops += metric?.outcome === 'float' ? 1 : 0;
+  }
+  if (typeof metric?.durationMs === 'number') {
+    panelWorkspaceStat.dragDurationCount += 1;
+    panelWorkspaceStat.totalDragDurationMs += metric.durationMs;
+    panelWorkspaceStat.maxDragDurationMs = Math.max(
+      panelWorkspaceStat.maxDragDurationMs,
+      metric.durationMs,
+    );
+  }
+  if (metric?.frameIntervalsMs?.length) {
+    panelDragFrameIntervalsMs.push(
+      ...metric.frameIntervalsMs.filter((value) => Number.isFinite(value) && value >= 0),
+    );
+    if (panelDragFrameIntervalsMs.length > 240) {
+      panelDragFrameIntervalsMs.splice(0, panelDragFrameIntervalsMs.length - 240);
+    }
+    const sorted = [...panelDragFrameIntervalsMs].sort((left, right) => left - right);
+    panelWorkspaceStat.previewFrameCount += metric.frameIntervalsMs.length + 1;
+    panelWorkspaceStat.p95PreviewFrameIntervalMs =
+      sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)] ?? 0;
+    panelWorkspaceStat.maxPreviewFrameIntervalMs = Math.max(
+      panelWorkspaceStat.maxPreviewFrameIntervalMs,
+      ...metric.frameIntervalsMs,
+    );
+  }
+}
+
+export function recordPanelWorkspacePersistence(metric: { durationMs: number; bytes: number }): void {
+  const controller = ensureTelemetryController();
+  if (!controller?.enabled) return;
+  panelWorkspaceStat.persistenceWrites += 1;
+  panelWorkspaceStat.persistenceBytes = metric.bytes;
+  panelWorkspaceStat.totalPersistenceDurationMs += metric.durationMs;
 }
 
 const handleProfileRender: React.ProfilerOnRenderCallback = (

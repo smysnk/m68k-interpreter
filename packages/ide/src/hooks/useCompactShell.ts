@@ -10,21 +10,28 @@ function readIsCompactShell(): boolean {
   return window.innerWidth <= COMPACT_SHELL_MAX_WIDTH;
 }
 
+let listening = false;
+const listeners = new Set<() => void>();
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  if (!listening && typeof window !== 'undefined') {
+    listening = true;
+    window.addEventListener('resize', notifyViewportListeners);
+  }
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0 && listening && typeof window !== 'undefined') {
+      window.removeEventListener('resize', notifyViewportListeners);
+      listening = false;
+    }
+  };
+}
+
+function notifyViewportListeners(): void {
+  listeners.forEach((listener) => listener());
+}
+
 export function useCompactShell(): boolean {
-  const [isCompactShell, setIsCompactShell] = React.useState<boolean>(() => readIsCompactShell());
-
-  React.useEffect(() => {
-    const updateCompactShell = (): void => {
-      setIsCompactShell(readIsCompactShell());
-    };
-
-    updateCompactShell();
-    window.addEventListener('resize', updateCompactShell);
-
-    return () => {
-      window.removeEventListener('resize', updateCompactShell);
-    };
-  }, []);
-
-  return isCompactShell;
+  return React.useSyncExternalStore(subscribe, readIsCompactShell, () => false);
 }

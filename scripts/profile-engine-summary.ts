@@ -5,11 +5,14 @@ import {
 } from '../tests/benchmarks/engineScenarios';
 import { Easy68kHardware } from '../packages/interpreter/src/devices/easy68kHardware';
 import { performance } from 'node:perf_hooks';
+import fs from 'node:fs';
+import path from 'node:path';
 
 interface ProfileSummaryOptions {
   warmupRuns: number;
   measuredRuns: number;
   json: boolean;
+  outputPath: string | null;
 }
 
 interface NibblesSummaryRow {
@@ -39,6 +42,7 @@ function parseNonNegativeInteger(value: string | undefined, fallback: number): n
 function parseArgs(argv: string[]): ProfileSummaryOptions {
   const warmupIndex = argv.indexOf('--warmup');
   const runsIndex = argv.indexOf('--runs');
+  const outputIndex = argv.indexOf('--output');
 
   return {
     warmupRuns: parseNonNegativeInteger(
@@ -50,6 +54,7 @@ function parseArgs(argv: string[]): ProfileSummaryOptions {
       3
     ),
     json: argv.includes('--json'),
+    outputPath: outputIndex >= 0 ? argv[outputIndex + 1] ?? null : null,
   };
 }
 
@@ -170,21 +175,27 @@ function main(): void {
   const nibblesRow = buildNibblesRow(options.warmupRuns, options.measuredRuns);
   const hardwareRows = buildHardwareRows(options.warmupRuns, options.measuredRuns);
 
-  if (options.json) {
-    console.log(
-      JSON.stringify(
-        {
-          generatedAt: new Date().toISOString(),
-          warmupRuns: options.warmupRuns,
-          measuredRuns: options.measuredRuns,
-          batteryRows,
-          nibblesRow,
-          hardwareRows,
-        },
-        null,
-        2
-      )
-    );
+  if (options.json || options.outputPath) {
+    const json = `${JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        warmupRuns: options.warmupRuns,
+        measuredRuns: options.measuredRuns,
+        batteryRows,
+        nibblesRow,
+        hardwareRows,
+      },
+      null,
+      2
+    )}\n`;
+    if (options.outputPath) {
+      const outputPath = path.resolve(options.outputPath);
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+      fs.writeFileSync(outputPath, json);
+    }
+    if (options.json) {
+      process.stdout.write(json);
+    }
     return;
   }
 

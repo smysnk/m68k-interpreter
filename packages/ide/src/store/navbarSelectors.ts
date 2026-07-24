@@ -1,7 +1,6 @@
 import { createSelector } from '@reduxjs/toolkit';
 import type { RootState } from '@/store';
 import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
-import { selectActiveInspectorPane, selectShowHelp } from '@/store/appShellSelectors';
 
 export const selectNavbarMenuState = createSelector(
   [
@@ -30,18 +29,19 @@ export const selectNavbarThemeLabel = createSelector(
 
 export const selectNavbarViewModel = createSelector(
   [
-    (state: RootState) => state.uiShell.workspaceTab,
-    selectActiveInspectorPane,
+    (state: RootState) => {
+      const document = state.panelLayout.activeLayout;
+      return document.focusedPanelId ? document.instances[document.focusedPanelId]?.kind ?? 'terminal' : 'terminal';
+    },
     (state: RootState) => state.settings.editorTheme,
     (state: RootState) => state.settings.followSystemTheme,
     (state: RootState) => state.settings.lineNumbers,
     (state: RootState) => state.settings.terminalInputMode,
     (state: RootState) => state.emulator.speedMultiplier,
-    selectShowHelp,
+    (state: RootState) => Object.values(state.panelLayout.activeLayout.instances).some((panel) => panel.kind === 'help' && !panel.minimized),
   ],
   (
     activeWorkspaceTab,
-    activeInspectorPane,
     editorTheme,
     followSystemTheme,
     lineNumbers,
@@ -50,7 +50,6 @@ export const selectNavbarViewModel = createSelector(
     showHelp
   ) => ({
     activeWorkspaceTab,
-    activeInspectorPane,
     editorTheme,
     followSystemTheme,
     lineNumbers,
@@ -62,9 +61,9 @@ export const selectNavbarViewModel = createSelector(
 
 export const selectNavbarPresentationModel = createSelector([selectNavbarViewModel], (model) => ({
   ...model,
-  registersMenuActive: model.activeInspectorPane === 'registers',
-  memoryMenuActive: model.activeInspectorPane === 'memory',
-  hardwareMenuActive: model.activeInspectorPane === 'hardware',
+  registersMenuActive: model.activeWorkspaceTab === 'registers',
+  memoryMenuActive: model.activeWorkspaceTab === 'memory',
+  hardwareMenuActive: model.activeWorkspaceTab === 'hardware',
   helpMenuActive: model.showHelp,
   followSystemActive: model.followSystemTheme,
   lightThemeActive: !model.followSystemTheme && model.editorTheme === EditorThemeEnum.M68K_LIGHT,

@@ -12,6 +12,18 @@ const HelpPanel: React.FC = () => {
       </div>
 
       <div className="help-panel-section">
+        <h3>Panel Workspace</h3>
+        <ul className="help-panel-list">
+          <li>Choose one to four columns, then add Screen, Code, Registers, Memory, Hardware I/O, or Help panels from the workspace toolbar.</li>
+          <li>Drag a panel by its dotted header handle to reorder it. The More menu provides keyboard-friendly move-up, move-down, and move-to-column commands.</li>
+          <li>Minimize retains a header, Duplicate creates another view of the same simulator, and Float creates an in-app window that can be moved, resized, or dragged back over a column to dock.</li>
+          <li>Only the Screen marked Interactive owns keyboard, touch, focus, and terminal geometry. Other Screen panels are passive mirrors; use Make interactive to transfer ownership.</li>
+          <li>The Layouts menu applies immutable built-in views and saves, restores, renames, or deletes personal views. The active draft resumes automatically after reload.</li>
+          <li>On compact screens, the desktop layout is preserved and projected through a single-panel switcher.</li>
+        </ul>
+      </div>
+
+      <div className="help-panel-section">
         <h3>Play Nibbles</h3>
         <p>Select `nibbles.asm` from the file explorer, press Run, then use W A S D, arrow keys, or keypad 4 5 6 8. Press Enter to confirm menus.</p>
         <p>Reset clears the current emulator session and terminal so the loaded program can be launched again from a clean state.</p>

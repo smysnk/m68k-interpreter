@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { requestFocusTerminal, requestRun, setWorkspaceTab, type AppDispatch, type RootState } from '@/store';
+import { requestFocusTerminal, requestRun, revealPanelKind, type AppDispatch, type RootState } from '@/store';
 import { getIdeBootConfig } from '@/config/ideBootConfig';
 
 function isJsdomEnvironment(): boolean {
@@ -30,7 +30,7 @@ export function useBootProgramController() {
     }
 
     hasAutoPlayedRef.current = true;
-    dispatch(setWorkspaceTab('terminal'));
+    dispatch(revealPanelKind('terminal'));
     dispatch(requestFocusTerminal());
     dispatch(requestRun());
   }, [activeFileId, autoPlay, dispatch, terminalGeometryVersion]);

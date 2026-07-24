@@ -32,16 +32,6 @@ function lineHasAnyBackground(
   return cells.some((cell) => cell.background !== null);
 }
 
-function expectMarkerAtPosition(
-  lines: string[],
-  marker: string,
-  row: number,
-  column: number
-): void {
-  expect(lines[row]).toContain(marker);
-  expect(lines[row]?.indexOf(marker)).toBe(column);
-}
-
 function expectMarkerCentered(
   lines: string[],
   columns: number,
@@ -99,7 +89,6 @@ test.describe('browser e2e nibbles', () => {
     const touchHintRow = findLineIndex(safeIntroSnapshot.lines, 'Tap difficulty');
     const keysHintRow = findLineIndex(safeIntroSnapshot.lines, 'or W / S + Enter');
     const selectLabelRow = findLineIndex(safeIntroSnapshot.lines, 'SELECT DIFFICULTY');
-    const mediumRow = findLineIndex(safeIntroSnapshot.lines, 'MEDIUM');
     const selectedDifficultyRow = findLineIndex(safeIntroSnapshot.lines, 'MEDIUM');
     const easyRow = findLineIndex(safeIntroSnapshot.lines, 'EASY');
     const hardRow = findLineIndex(safeIntroSnapshot.lines, 'HARD');
@@ -124,20 +113,15 @@ test.describe('browser e2e nibbles', () => {
     if (desktopTouchHintRow >= 0) {
       expect(desktopTouchHintRow).toBe(5);
       expect(selectLabelRow).toBe(7);
-      expectMarkerAtPosition(
-        safeIntroSnapshot.lines,
-        'Touch a row or use W / S + Enter',
-        5,
-        13
-      );
-      expectMarkerAtPosition(safeIntroSnapshot.lines, 'SELECT DIFFICULTY', 7, 10);
+      expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'Touch a row or use W / S + Enter', 5);
+      expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'SELECT DIFFICULTY', 7);
     } else {
       expect(touchHintRow).toBe(5);
       expect(keysHintRow).toBe(6);
       expect(selectLabelRow).toBe(4);
-      expectMarkerAtPosition(safeIntroSnapshot.lines, 'SELECT DIFFICULTY', 4, 16);
-      expectMarkerAtPosition(safeIntroSnapshot.lines, 'Tap difficulty', 5, 18);
-      expectMarkerAtPosition(safeIntroSnapshot.lines, 'or W / S + Enter', 6, 17);
+      expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'SELECT DIFFICULTY', 4);
+      expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'Tap difficulty', 5);
+      expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'or W / S + Enter', 6);
     }
     expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'NIBBLES', 2);
     expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, subtitle, 3);

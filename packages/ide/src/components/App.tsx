@@ -1,15 +1,12 @@
 import React from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { Analytics } from '@vercel/analytics/react';
-import { Group, Panel, Separator, type Layout } from 'react-resizable-panels';
 import { useTheme } from 'styled-components';
 import Navbar from './Navbar';
-import WorkspacePanel from './WorkspacePanel';
-import InspectorPanel from './InspectorPanel';
 import StatusBar from './StatusBar';
-import HelpPanel from './HelpPanel';
 import FileExplorerSidebar from './FileExplorerSidebar';
 import PanelWorkspacePrototype from './PanelWorkspacePrototype';
+import PanelWorkspace from './panels/PanelWorkspace';
 import { useAppShellController } from '@/hooks/useAppShellController';
 import { useCompactShell } from '@/hooks/useCompactShell';
 import { useEmulatorEvents } from '@/hooks/useEmulatorEvents';
@@ -20,19 +17,16 @@ import {
 } from '@/runtime/idePerformanceTelemetry';
 import { IdeProviders } from '@/theme/IdeProviders';
 import {
-  setRootHorizontalLayout,
-  setRootHorizontalWithContextLayout,
-  setInspectorView,
   NIBBLES_FILE_ID,
   requestFocusTerminal,
   requestRun,
   setEditorCode,
   setActiveFile,
   setSpeedMultiplier,
-  setWorkspaceTab,
-  selectRootPanelLayoutModel,
+  revealPanelKind,
+  resetToPreset,
+  selectActivePanelLayout,
   ideStore,
-  type AppDispatch,
   type RootState,
 } from '@/store';
 
@@ -44,6 +38,7 @@ declare global {
       runProgram: () => void;
       setSpeedMultiplier: (value: number) => void;
       setWorkspaceTab: (value: 'terminal' | 'code' | 'registers' | 'memory' | 'hardware') => void;
+      setPanelPreset: (value: 'classic' | 'code-run' | 'hardware-lab' | 'debug' | 'terminal-focus') => void;
     };
   }
 }
@@ -93,7 +88,7 @@ function IdePerformanceProbe(): React.ReactElement | null {
       activateNibblesSource: () => {
         const state = ideStore.getState();
         const nibblesFile = state.files.items.find((item) => item.id === NIBBLES_FILE_ID);
-        ideStore.dispatch(setWorkspaceTab('code'));
+        ideStore.dispatch(revealPanelKind('code'));
         ideStore.dispatch(setActiveFile(NIBBLES_FILE_ID));
         if (nibblesFile) {
           ideStore.dispatch(setEditorCode(nibblesFile.content));
@@ -104,7 +99,7 @@ function IdePerformanceProbe(): React.ReactElement | null {
         ideStore.dispatch(requestFocusTerminal());
       },
       runProgram: () => {
-        ideStore.dispatch(setWorkspaceTab('terminal'));
+        ideStore.dispatch(revealPanelKind('terminal'));
         ideStore.dispatch(requestFocusTerminal());
         ideStore.dispatch(requestRun());
       },
@@ -112,7 +107,10 @@ function IdePerformanceProbe(): React.ReactElement | null {
         ideStore.dispatch(setSpeedMultiplier(value));
       },
       setWorkspaceTab: (value) => {
-        ideStore.dispatch(setWorkspaceTab(value));
+        ideStore.dispatch(revealPanelKind(value));
+      },
+      setPanelPreset: (value) => {
+        ideStore.dispatch(resetToPreset(value));
       },
     };
     setControlsReady(true);
@@ -148,46 +146,15 @@ function IdePerformanceProbe(): React.ReactElement | null {
 
 function AppShell(): React.ReactElement {
   useIdeRenderTelemetry('AppShell');
-  const dispatch = useDispatch<AppDispatch>();
   const theme = useTheme();
   const { navbarShellRef, statusBarShellRef } = useAppShellController();
-  const panelLayout = useSelector(selectRootPanelLayoutModel);
+  const panelLayout = useSelector(selectActivePanelLayout);
   const bottomChromeOffset = useSelector((state: RootState) => state.uiShell.chromeOffsets.bottom);
-  const activeWorkspaceTab = useSelector((state: RootState) => state.uiShell.workspaceTab);
   const isCompactShell = useCompactShell();
-  const isFocusedMobileTerminal = isCompactShell && activeWorkspaceTab === 'terminal';
-
-  React.useEffect(() => {
-    if (isCompactShell) {
-      return;
-    }
-
-    if (
-      activeWorkspaceTab === 'registers' ||
-      activeWorkspaceTab === 'memory' ||
-      activeWorkspaceTab === 'hardware'
-    ) {
-      dispatch(setInspectorView(activeWorkspaceTab));
-      dispatch(setWorkspaceTab('terminal'));
-    }
-  }, [activeWorkspaceTab, dispatch, isCompactShell]);
-
-  const handleRootLayout = (layout: Layout): void => {
-    const workspaceSize = layout.workspace;
-    const inspectorSize = layout.inspector;
-    const contextSize = layout.context;
-
-    if (typeof workspaceSize !== 'number' || typeof inspectorSize !== 'number') {
-      return;
-    }
-
-    if (typeof contextSize === 'number') {
-      dispatch(setRootHorizontalWithContextLayout([workspaceSize, inspectorSize, contextSize]));
-      return;
-    }
-
-    dispatch(setRootHorizontalLayout([workspaceSize, inspectorSize]));
-  };
+  const focusedPanel = panelLayout.focusedPanelId
+    ? panelLayout.instances[panelLayout.focusedPanelId]
+    : undefined;
+  const isFocusedMobileTerminal = isCompactShell && focusedPanel?.kind === 'terminal';
 
   return (
     <div
@@ -207,57 +174,9 @@ function AppShell(): React.ReactElement {
       </div>
       {!isFocusedMobileTerminal ? <FileExplorerSidebar /> : null}
       <main className={`main-content ${isCompactShell ? 'main-content-mobile' : ''}`.trim()}>
-        {isCompactShell ? (
-          <div className="mobile-workspace-shell" data-testid="mobile-workspace-shell">
-            <WorkspacePanel />
-          </div>
-        ) : (
-          <Group
-            className="main-shell"
-            key={panelLayout.shellKey}
-            onLayoutChanged={handleRootLayout}
-            orientation="horizontal"
-          >
-            <Panel
-              className="panel-slot"
-              defaultSize={`${panelLayout.workspaceDefaultSize}`}
-              id="workspace"
-              minSize="34"
-            >
-              <WorkspacePanel />
-            </Panel>
-            <Separator
-              className="panel-resize-handle panel-resize-handle-horizontal"
-              data-testid="resize-handle-root"
-            />
-            <Panel
-              className="panel-slot"
-              defaultSize={`${panelLayout.inspectorDefaultSize}`}
-              id="inspector"
-              minSize="24"
-            >
-              <InspectorPanel />
-            </Panel>
-            {panelLayout.hasContextPanel ? (
-              <>
-                <Separator
-                  className="panel-resize-handle panel-resize-handle-horizontal"
-                  data-testid="resize-handle-context"
-                />
-                <Panel
-                  className="panel-slot"
-                  defaultSize={`${panelLayout.contextDefaultSize ?? 18}`}
-                  id="context"
-                  minSize="14"
-                >
-                  <div className="context-panel" data-testid="context-panel">
-                    <HelpPanel />
-                  </div>
-                </Panel>
-              </>
-            ) : null}
-          </Group>
-        )}
+        <div className={isCompactShell ? 'mobile-workspace-shell' : 'main-shell'} data-testid={isCompactShell ? 'mobile-workspace-shell' : 'desktop-workspace-shell'}>
+          <PanelWorkspace />
+        </div>
       </main>
       {!isFocusedMobileTerminal ? (
         <div className="app-chrome-bottom" ref={statusBarShellRef}>

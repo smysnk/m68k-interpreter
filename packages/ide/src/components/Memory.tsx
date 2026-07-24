@@ -9,7 +9,7 @@ const MEMORY_VIEWPORT_COLUMNS = 16;
 const MEMORY_VIEWPORT_ROWS = 16;
 const MEMORY_VIEWPORT_LENGTH = MEMORY_VIEWPORT_COLUMNS * MEMORY_VIEWPORT_ROWS;
 
-const Memory: React.FC = () => {
+const Memory: React.FC<{ instanceId?: string }> = ({ instanceId }) => {
   useIdeRenderTelemetry('Memory');
   const { meta } = useMemorySurface();
   const [startAddress, setStartAddress] = useState<number>(0x1000);
@@ -62,9 +62,9 @@ const Memory: React.FC = () => {
       </div>
 
       <div className="memory-controls">
-        <label htmlFor="mem-start">Start Address</label>
+        <label htmlFor={instanceId ? `mem-start-${instanceId}` : 'mem-start'}>Start Address</label>
         <input
-          id="mem-start"
+          id={instanceId ? `mem-start-${instanceId}` : 'mem-start'}
           type="text"
           value={`0x${startAddress.toString(16).padStart(8, '0')}`}
           onChange={handleAddressChange}

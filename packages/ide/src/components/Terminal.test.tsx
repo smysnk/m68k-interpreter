@@ -242,6 +242,25 @@ describe('Terminal', () => {
     });
   });
 
+  it('keeps duplicate terminal mirrors passive so one physical key queues one command', async () => {
+    const queueInput = vi.fn();
+    useEmulatorStore.getState().setEmulatorInstance({ queueInput } as unknown as Emulator);
+
+    renderWithIdeProviders(
+      <>
+        <Terminal instanceId="owner" interactive />
+        <Terminal instanceId="mirror" interactive={false} />
+      </>
+    );
+
+    fireEvent.keyDown(window, { key: 'a' });
+
+    await waitFor(() => expect(queueInput).toHaveBeenCalledTimes(1));
+    expect(queueInput).toHaveBeenCalledWith('a');
+    expect(screen.getAllByLabelText('M68K interactive terminal')).toHaveLength(1);
+    expect(screen.getAllByLabelText('M68K terminal mirror')).toHaveLength(1);
+  });
+
   it('records an input-accepted telemetry event after a worker keyboard input is queued', async () => {
     (
       window as typeof window & {

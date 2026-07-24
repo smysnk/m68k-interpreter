@@ -194,7 +194,17 @@ function shouldRequestFullResume(
   return !executionState.started || executionState.stopped || emulatorInstance.isWaitingForInput?.() === true;
 }
 
-const Terminal: React.FC = () => {
+export interface TerminalProps {
+  interactive?: boolean;
+  instanceId?: string;
+  onRequestInteraction?: () => void;
+}
+
+const Terminal: React.FC<TerminalProps> = ({
+  interactive = true,
+  instanceId = 'legacy-terminal',
+  onRequestInteraction,
+}) => {
   useIdeRenderTelemetry('Terminal');
   const dispatch = useDispatch<AppDispatch>();
   const terminalRef = useRef<HTMLDivElement | null>(null);
@@ -208,7 +218,6 @@ const Terminal: React.FC = () => {
   const hasCommittedMeasuredGeometryRef = useRef(false);
   const [focused, setFocused] = useState(false);
   const emulatorInstance = useRuntimeSession().session;
-  const executionState = useSelector((state: RootState) => state.emulator.executionState);
   const { frameBuffer, meta, dirtyRows } = useTerminalSurface();
   const focusTerminalIntent = useSelector(
     (state: RootState) => state.emulator.runtimeIntents.focusTerminal
@@ -334,10 +343,11 @@ const Terminal: React.FC = () => {
   ]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
-    if (isTouchOnlyMode) {
+    if (!interactive || isTouchOnlyMode) {
       return;
     }
 
+    const executionState = ideStore.getState().emulator.executionState;
     queueAssemblerInput(
       emulatorInstance,
       executionState,
@@ -350,15 +360,22 @@ const Terminal: React.FC = () => {
   };
 
   const focusTerminal = React.useCallback((): void => {
+    if (!interactive) {
+      onRequestInteraction?.();
+      return;
+    }
     if (isTouchOnlyMode) {
       return;
     }
 
     const viewport = terminalRef.current?.querySelector<HTMLDivElement>('.retro-lcd__viewport');
     viewport?.focus();
-  }, [isTouchOnlyMode]);
+  }, [interactive, isTouchOnlyMode, onRequestInteraction]);
 
   useEffect(() => {
+    if (!interactive) {
+      return;
+    }
     const handleWindowKeyDown = (event: KeyboardEvent): void => {
       if (isTouchOnlyMode) {
         return;
@@ -379,6 +396,7 @@ const Terminal: React.FC = () => {
         return;
       }
 
+      const executionState = ideStore.getState().emulator.executionState;
       queueAssemblerInput(
         emulatorInstance,
         executionState,
@@ -395,14 +413,18 @@ const Terminal: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleWindowKeyDown);
     };
-  }, [dispatch, emulatorInstance, executionState, isTouchOnlyMode]);
+  }, [dispatch, emulatorInstance, interactive, isTouchOnlyMode]);
 
   useEffect(() => {
+    if (!interactive) {
+      return;
+    }
     if (typeof window === 'undefined') {
       return;
     }
 
     const pendingInput = window.__M68K_IDE_TEST_PENDING_INPUT__;
+    const executionState = ideStore.getState().emulator.executionState;
     if (!pendingInput || pendingInput.dispatched || !emulatorInstance || executionState.ended) {
       return;
     }
@@ -444,16 +466,19 @@ const Terminal: React.FC = () => {
     };
 
     void queuePendingInputs();
-  }, [dispatch, emulatorInstance, executionState, meta.output, meta.version]);
+  }, [dispatch, emulatorInstance, interactive, meta.output, meta.version]);
 
   useEffect(() => {
+    if (!interactive) {
+      return;
+    }
     if (focusTerminalIntent === focusTerminalIntentRef.current) {
       return;
     }
 
     focusTerminalIntentRef.current = focusTerminalIntent;
     focusTerminal();
-  }, [focusTerminal, focusTerminalIntent]);
+  }, [focusTerminal, focusTerminalIntent, interactive]);
 
   useEffect(() => {
     lastMeasuredGeometrySignatureRef.current = createTerminalGeometrySignature(
@@ -536,6 +561,9 @@ const Terminal: React.FC = () => {
 
   const handleGeometryChange = React.useCallback(
     (geometry: RetroLcdGeometry): void => {
+      if (!interactive) {
+        return;
+      }
       const normalizedGeometry = normalizeTerminalGeometry(geometry);
 
       if (!normalizedGeometry) {
@@ -575,7 +603,7 @@ const Terminal: React.FC = () => {
         isCompactShell ? 40 : 80
       );
     },
-    [applyMeasuredGeometry, isCompactShell]
+    [applyMeasuredGeometry, interactive, isCompactShell]
   );
 
   const handleTouchCell = React.useCallback(
@@ -588,9 +616,10 @@ const Terminal: React.FC = () => {
       pointerType: string;
       buttons: number;
     }): Promise<void> => {
-      if (!emulatorInstance) {
+      if (!interactive || !emulatorInstance) {
         return;
       }
+      const executionState = ideStore.getState().emulator.executionState;
 
       const touchDispatchStartedAt =
         typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -635,7 +664,7 @@ const Terminal: React.FC = () => {
     [
       dispatch,
       emulatorInstance,
-      executionState,
+      interactive,
     ]
   );
 
@@ -648,14 +677,18 @@ const Terminal: React.FC = () => {
   );
 
   return (
-    <section className="terminal-container" data-terminal-theme={theme.surfaceMode}>
+    <section
+      className="terminal-container"
+      data-terminal-owner={interactive ? 'true' : 'false'}
+      data-terminal-theme={theme.surfaceMode}
+    >
       <div
         ref={terminalRef}
         className="terminal-screen"
         data-terminal-focused={focused ? 'true' : 'false'}
         data-terminal-game-screen={isNibblesScreen ? 'true' : 'false'}
         data-terminal-input-mode={effectiveTerminalInputMode}
-        data-testid="terminal-screen"
+        data-testid={interactive ? 'terminal-screen' : `terminal-screen-${instanceId}`}
         onClick={focusTerminal}
         onFocusCapture={() => {
           setFocused(true);
@@ -668,11 +701,11 @@ const Terminal: React.FC = () => {
           setFocused(false);
         }}
         onKeyDown={handleKeyDown}
-        role="application"
-        aria-label="M68K terminal"
+        role={interactive ? 'application' : 'img'}
+        aria-label={interactive ? 'M68K interactive terminal' : 'M68K terminal mirror'}
       >
         <RetroLcd
-          captureKeyboard={!isTouchOnlyMode}
+          captureKeyboard={interactive && !isTouchOnlyMode}
           captureMouse={false}
           className="terminal-retro-lcd"
           controller={controllerRef.current}
@@ -682,10 +715,10 @@ const Terminal: React.FC = () => {
           displaySurfaceMode={theme.surfaceMode}
           gridMode="auto"
           mode="terminal"
-          onGeometryChange={handleGeometryChange}
+          onGeometryChange={interactive ? handleGeometryChange : undefined}
           touchInput={{
-            enabled: isTouchOnlyMode,
-            overlayTestId: 'terminal-touch-overlay',
+            enabled: interactive && isTouchOnlyMode,
+            overlayTestId: interactive ? 'terminal-touch-overlay' : `terminal-touch-overlay-${instanceId}`,
             onTouchCell: handleTouchCell,
           }}
         />

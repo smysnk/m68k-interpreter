@@ -7,7 +7,7 @@ import {
   selectFileExplorerModel,
   setActiveFile,
   setEditorCode,
-  setWorkspaceTab,
+  revealPanelKind,
   type AppDispatch,
 } from '@/store';
 
@@ -54,7 +54,7 @@ const FileExplorerSidebar: React.FC = () => {
     setIsOpen(false);
     dispatch(setActiveFile(file.id));
     dispatch(setEditorCode(file.content));
-    dispatch(setWorkspaceTab('code'));
+    dispatch(revealPanelKind('code'));
 
     window.editorCode = file.content;
     dispatch(requestReset());

@@ -28,7 +28,7 @@ import {
   setTerminalInputMode,
   setSpeedMultiplier,
   setActiveSubmenu,
-  setWorkspaceTab,
+  revealPanelKind,
   toggleAppMenu,
   getWorkspacePaneDescriptors,
   type AppDispatch,
@@ -41,6 +41,7 @@ import {
 } from '@/store/navbarSelectors';
 import { useCompactShell } from '@/hooks/useCompactShell';
 import { EditorThemeEnum, type EditorThemeId } from '@/theme/editorThemeRegistry';
+import NavbarViewMenu from './NavbarViewMenu';
 
 const Navbar: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -170,6 +171,10 @@ const Navbar: React.FC = () => {
     dispatch(requestFocusTerminal());
   };
 
+  const handleWorkspaceSelection = (tab: (typeof workspaceTabs)[number]['id']): void => {
+    dispatch(revealPanelKind(tab));
+  };
+
   const handleStep = (): void => {
     dispatch(requestStep());
     dispatch(requestFocusTerminal());
@@ -212,6 +217,7 @@ const Navbar: React.FC = () => {
             </button>
           </div>
         ) : null}
+        {!isFocusedMobileTerminal ? <NavbarViewMenu /> : null}
         <div className="navbar-menubar">
           <div className="navbar-view-toggle" role="tablist" aria-label="Workspace views">
             {workspaceTabs.map((tab) => (
@@ -222,7 +228,7 @@ const Navbar: React.FC = () => {
                 aria-selected={activeWorkspaceTab === tab.id}
                 className={`navbar-view-tab ${activeWorkspaceTab === tab.id ? 'active' : ''}`}
                 id={`workspace-tab-${tab.id}`}
-                onClick={() => dispatch(setWorkspaceTab(tab.id))}
+                onClick={() => handleWorkspaceSelection(tab.id)}
                 role="tab"
                 type="button"
               >

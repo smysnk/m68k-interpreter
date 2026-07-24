@@ -1,13 +1,58 @@
 import { expect, test } from '@playwright/test';
 
-const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v1';
+const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v2';
 
 test.describe('browser e2e ide shell', () => {
+  test('removes the workspace toolbar and lets docked columns meet the content edges', async ({ page }) => {
+    await page.goto('/');
+
+    await expect(page.locator('.panel-workspace-toolbar')).toHaveCount(0);
+    const mainContent = page.locator('.main-content');
+    const firstColumn = page.getByTestId('panel-column-1');
+    const lastColumn = page.getByTestId('panel-column-2');
+    const firstPanel = page.getByTestId('panel-instance-panel-terminal-1');
+    const [mainBox, firstColumnBox, lastColumnBox, firstPanelBox] = await Promise.all([
+      mainContent.boundingBox(),
+      firstColumn.boundingBox(),
+      lastColumn.boundingBox(),
+      firstPanel.boundingBox(),
+    ]);
+
+    expect(mainBox).not.toBeNull();
+    expect(firstColumnBox).not.toBeNull();
+    expect(lastColumnBox).not.toBeNull();
+    expect(firstPanelBox).not.toBeNull();
+    expect(Math.abs(firstColumnBox!.x - mainBox!.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(firstColumnBox!.y - mainBox!.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs((lastColumnBox!.x + lastColumnBox!.width) - (mainBox!.x + mainBox!.width))).toBeLessThanOrEqual(1);
+    expect(Math.abs(firstPanelBox!.x - firstColumnBox!.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(firstPanelBox!.y - firstColumnBox!.y)).toBeLessThanOrEqual(1);
+  });
+
+  test('keeps View compact and reveals one contextual submenu at a time', async ({ page }) => {
+    await page.goto('/');
+
+    await page.getByRole('button', { name: /open view menu/i }).click();
+    const viewMenu = page.getByRole('menu', { name: 'View options' });
+    await expect(viewMenu).toBeVisible();
+    await expect(viewMenu.getByRole('menuitem')).toHaveCount(4);
+
+    await viewMenu.getByRole('menuitem', { name: /columns/i }).click();
+    const columnsSubmenu = page.getByTestId('navbar-view-columns-submenu');
+    await expect(columnsSubmenu).toBeVisible();
+    await expect(columnsSubmenu.getByRole('menuitemradio')).toHaveCount(4);
+
+    await viewMenu.getByRole('menuitem', { name: /layouts/i }).click();
+    await expect(columnsSubmenu).toHaveCount(0);
+    await expect(page.getByTestId('navbar-view-layouts-submenu')).toBeVisible();
+  });
+
   test('persists theme and shell layout state across reload', async ({ page }) => {
     await page.goto('/');
 
     const appContainer = page.getByTestId('app-container');
     const appMenuButton = page.getByRole('button', { name: /open app menu/i });
+    const viewMenuButton = page.getByRole('button', { name: /open view menu/i });
     const terminalTab = page.getByRole('tab', { name: /terminal/i });
     const codeTab = page.getByRole('tab', { name: /code/i });
     const fileExplorerTab = page.getByRole('button', { name: /open file explorer/i });
@@ -16,10 +61,15 @@ test.describe('browser e2e ide shell', () => {
     const expectedTheme = initialTheme === 'dark' ? 'light' : 'dark';
 
     const menuButtonBox = await appMenuButton.boundingBox();
+    const viewMenuButtonBox = await viewMenuButton.boundingBox();
     const terminalTabBox = await terminalTab.boundingBox();
     expect(menuButtonBox).not.toBeNull();
+    expect(viewMenuButtonBox).not.toBeNull();
     expect(terminalTabBox).not.toBeNull();
     expect((menuButtonBox?.x ?? 0) + (menuButtonBox?.width ?? 0)).toBeLessThan(
+      viewMenuButtonBox?.x ?? 0
+    );
+    expect((viewMenuButtonBox?.x ?? 0) + (viewMenuButtonBox?.width ?? 0)).toBeLessThan(
       terminalTabBox?.x ?? 0
     );
     const explorerTabBox = await fileExplorerTab.boundingBox();
@@ -50,12 +100,17 @@ test.describe('browser e2e ide shell', () => {
 
     await codeTab.click();
     await expect(codeTab).toHaveAttribute('aria-selected', 'true');
+    await page.waitForFunction(
+      (storageKey) => window.localStorage.getItem(storageKey)?.includes('"kind":"code"'),
+      IDE_PERSISTENCE_KEY
+    );
 
     const persistedBeforeReload = await page.evaluate((storageKey) => {
       return window.localStorage.getItem(storageKey);
     }, IDE_PERSISTENCE_KEY);
 
-    expect(persistedBeforeReload).toContain('"workspaceTab":"code"');
+    expect(persistedBeforeReload).toContain('"kind":"code"');
+    expect(persistedBeforeReload).toContain('"schemaVersion":2');
     expect(persistedBeforeReload).toContain(
       expectedTheme === 'dark' ? '"editorTheme":"M68K_DARK"' : '"editorTheme":"M68K_LIGHT"'
     );

@@ -20,7 +20,10 @@ import {
 import settingsReducer, { initialSettingsState } from '@/store/settingsSlice';
 import uiShellReducer, { initialUiShellState } from '@/store/uiShellSlice';
 import hardwareReducer, { initialHardwareState } from '@/store/hardwareSlice';
+import panelLayoutReducer, { initialPanelLayoutState } from '@/store/panelLayoutSlice';
+import { migrateLegacyPanelLayout, normalizePanelLayoutState } from '@/store/panelLayoutValidation';
 import { resetEmulatorState, setEditorCode } from '@/store/emulatorSlice';
+import { recordPanelWorkspaceCommit, recordPanelWorkspacePersistence } from '@/runtime/idePerformanceTelemetry';
 
 const combinedReducer = combineReducers({
   emulator: emulatorReducer,
@@ -28,6 +31,7 @@ const combinedReducer = combineReducers({
   settings: settingsReducer,
   uiShell: uiShellReducer,
   hardware: hardwareReducer,
+  panelLayout: panelLayoutReducer,
 });
 
 const SOURCE_PREVIEW_LENGTH = 80;
@@ -120,6 +124,29 @@ export function createActionSizeGuardMiddleware<RootState>(
   };
 }
 
+function createPanelWorkspaceTelemetryMiddleware(): Middleware<unknown, ReturnType<typeof combinedReducer>> {
+  return (api) => (next) => (action) => {
+    if (typeof action !== 'object' || action === null || !('type' in action) || !String(action.type).startsWith('panelLayout/')) return next(action);
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const previousOwner = api.getState().panelLayout.activeLayout.terminalOwnerPanelId;
+    const result = next(action);
+    const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+    const document = api.getState().panelLayout.activeLayout;
+    const panels = Object.values(document.instances);
+    const terminalCount = panels.filter((panel) => panel.kind === 'terminal').length;
+    recordPanelWorkspaceCommit({
+      durationMs,
+      visiblePanels: panels.length,
+      expandedPanels: panels.filter((panel) => !panel.minimized).length,
+      minimizedPanels: panels.filter((panel) => panel.minimized).length,
+      floatingPanels: document.floatingPanelIds.length,
+      terminalMirrors: Math.max(0, terminalCount - (document.terminalOwnerPanelId ? 1 : 0)),
+      ownershipTransfer: previousOwner !== document.terminalOwnerPanelId,
+    });
+    return result;
+  };
+}
+
 const rootReducer = (
   state: ReturnType<typeof combinedReducer> | undefined,
   action: Parameters<typeof combinedReducer>[1]
@@ -194,6 +221,11 @@ export function createIdeStore() {
           },
         }
       : initialState.uiShell,
+    panelLayout: persisted?.panelLayout
+      ? normalizePanelLayoutState(persisted.panelLayout)
+      : persisted?.uiShell
+        ? migrateLegacyPanelLayout(persisted.uiShell)
+        : initialPanelLayoutState,
   };
 
   const store = configureStore({
@@ -205,15 +237,26 @@ export function createIdeStore() {
     },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware().concat(
-        createActionSizeGuardMiddleware<ReturnType<typeof combinedReducer>>()
+        createActionSizeGuardMiddleware<ReturnType<typeof combinedReducer>>(),
+        createPanelWorkspaceTelemetryMiddleware()
       ),
   });
 
   let lastPersistedState = '';
+  let pendingLayoutWrite: number | null = null;
+  let previousPersistentSlices = {
+    files: store.getState().files,
+    settings: store.getState().settings,
+    uiShell: store.getState().uiShell,
+    hardware: store.getState().hardware,
+    panelLayout: store.getState().panelLayout,
+  };
 
-  store.subscribe(() => {
+  const persist = (): void => {
+    pendingLayoutWrite = null;
     const state = store.getState();
     const persistableState: PersistedIdeState = {
+      schemaVersion: 2,
       files: state.files,
       settings: {
         editorTheme: state.settings.editorTheme,
@@ -234,16 +277,51 @@ export function createIdeStore() {
         automaticInterruptLevels: state.hardware.automaticInterruptLevels,
         automaticInterruptIntervalMs: state.hardware.automaticInterruptIntervalMs,
       },
+      panelLayout: state.panelLayout,
     };
     const serialized = JSON.stringify(persistableState);
-
-    if (serialized === lastPersistedState) {
-      return;
-    }
-
+    if (serialized === lastPersistedState) return;
     lastPersistedState = serialized;
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     writePersistedIdeState(persistableState);
+    recordPanelWorkspacePersistence({
+      durationMs: (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt,
+      bytes: new TextEncoder().encode(serialized).length,
+    });
+  };
+
+  store.subscribe(() => {
+    const state = store.getState();
+    const nonLayoutChanged =
+      previousPersistentSlices.files !== state.files ||
+      previousPersistentSlices.settings !== state.settings ||
+      previousPersistentSlices.uiShell !== state.uiShell ||
+      previousPersistentSlices.hardware !== state.hardware;
+    const layoutChanged = previousPersistentSlices.panelLayout !== state.panelLayout;
+    previousPersistentSlices = {
+      files: state.files,
+      settings: state.settings,
+      uiShell: state.uiShell,
+      hardware: state.hardware,
+      panelLayout: state.panelLayout,
+    };
+    if (!nonLayoutChanged && !layoutChanged) return;
+    if (nonLayoutChanged) {
+      if (pendingLayoutWrite !== null && typeof window !== 'undefined') window.clearTimeout(pendingLayoutWrite);
+      persist();
+    } else if (typeof window !== 'undefined') {
+      if (pendingLayoutWrite !== null) window.clearTimeout(pendingLayoutWrite);
+      pendingLayoutWrite = window.setTimeout(persist, 250);
+    } else {
+      persist();
+    }
   });
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', () => {
+      if (pendingLayoutWrite !== null) persist();
+    }, { once: true });
+  }
 
   return store;
 }
@@ -266,3 +344,7 @@ export * from '@/store/flagsSelectors';
 export * from '@/store/navbarSelectors';
 export * from '@/store/registerSelectors';
 export * from '@/store/paneDescriptors';
+export * from '@/store/panelLayoutTypes';
+export * from '@/store/panelLayoutSlice';
+export * from '@/store/panelLayoutSelectors';
+export * from '@/store/panelLayoutValidation';

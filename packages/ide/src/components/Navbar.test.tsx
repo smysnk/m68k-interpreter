@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import Navbar from './Navbar';
 import { createIdeStore } from '@/store';
@@ -30,6 +30,9 @@ describe('Navbar', () => {
     expect(container.querySelector('.navbar-right')).toBeInTheDocument();
     expect(screen.queryByText('M68K IDE')).not.toBeInTheDocument();
     expect(screen.getByTestId('navbar-accent-mark')).toHaveTextContent('68');
+    const appMenuButton = screen.getByRole('button', { name: /open app menu/i });
+    const viewMenuButton = screen.getByRole('button', { name: /open view menu/i });
+    expect(appMenuButton.closest('.navbar-menu-wrap')?.nextElementSibling).toContainElement(viewMenuButton);
     expect(screen.queryByLabelText('Delay (s)')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Speed (x)')).toHaveValue(1);
 
@@ -48,7 +51,7 @@ describe('Navbar', () => {
     fireEvent.click(screen.getByRole('button', { name: /open app menu/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /line numbers/i }));
 
-    expect(store.getState().uiShell.workspaceTab).toBe('code');
+    expect(store.getState().panelLayout.activeLayout.instances[store.getState().panelLayout.activeLayout.focusedPanelId ?? '']?.kind).toBe('code');
     expect(store.getState().settings.editorTheme).toBe(EditorThemeEnum.M68K_DARK);
     expect(store.getState().settings.followSystemTheme).toBe(false);
     expect(store.getState().settings.lineNumbers).toBe(false);
@@ -69,6 +72,53 @@ describe('Navbar', () => {
     });
   });
 
+  it('changes columns and adds panels from the View menu', () => {
+    const store = createIdeStore();
+    renderWithIdeProviders(<Navbar />, { store });
+
+    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    expect(screen.getByRole('menu', { name: /view options/i })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitemradio', { name: '2 columns' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('menuitem', { name: /columns/i }));
+    expect(screen.getByRole('menuitemradio', { name: '2 columns' })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByRole('menuitemradio', { name: '3 columns' }));
+    expect(store.getState().panelLayout.activeLayout.columnCount).toBe(3);
+
+    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /add panel/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /add memory panel/i }));
+    expect(
+      Object.values(store.getState().panelLayout.activeLayout.instances).some(
+        (panel) => panel.kind === 'memory',
+      ),
+    ).toBe(true);
+    expect(screen.queryByRole('menu', { name: /view options/i })).not.toBeInTheDocument();
+  });
+
+  it('saves, applies, and restores workspace layouts from the View menu', () => {
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('My workspace');
+    const store = createIdeStore();
+    renderWithIdeProviders(<Navbar />, { store });
+
+    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /saved views/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /save view as/i }));
+    const viewId = store.getState().panelLayout.userViewOrder[0]!;
+    expect(store.getState().panelLayout.userViews[viewId]?.name).toBe('My workspace');
+
+    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /layouts/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Apply Debug layout' }));
+    expect(store.getState().panelLayout.activeLayout.columnCount).toBe(3);
+
+    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /saved views/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Restore My workspace layout' }));
+    expect(store.getState().panelLayout.activeLayout.columnCount).toBe(2);
+    expect(store.getState().panelLayout.activeSourceViewId).toBe(viewId);
+    prompt.mockRestore();
+  });
+
   it('shows mobile workspace tabs and hides runtime controls while terminal is active', () => {
     setViewportWidth(600);
     const store = createIdeStore();
@@ -86,7 +136,7 @@ describe('Navbar', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /code/i }));
 
-    expect(store.getState().uiShell.workspaceTab).toBe('code');
+    expect(store.getState().panelLayout.activeLayout.instances[store.getState().panelLayout.activeLayout.focusedPanelId ?? '']?.kind).toBe('code');
     expect(screen.getByRole('button', { name: /open app menu/i })).toBeInTheDocument();
     expect(screen.getByLabelText('Speed (x)')).toBeInTheDocument();
     expect(screen.getByLabelText('Run program')).toBeInTheDocument();

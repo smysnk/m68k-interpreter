@@ -9,7 +9,7 @@ import {
 } from './registers/registerDescriptors';
 import { selectRegisterFlagsHeadingModel, selectRegisterGroupsModel } from '@/store';
 
-const Registers: React.FC = () => {
+const Registers: React.FC<{ instanceId?: string }> = ({ instanceId }) => {
   useIdeRenderTelemetry('Registers');
   const { setRegisterInEmulator } = useEmulatorActions();
   const { currentFlags, ccrHex } = useSelector(selectRegisterFlagsHeadingModel);
@@ -20,6 +20,7 @@ const Registers: React.FC = () => {
     address: true,
     control: true,
   });
+  const idSuffix = instanceId ? `-${instanceId}` : '';
 
   const handleRegisterCommit = React.useCallback(
     (descriptor: RegisterDescriptor, value: number) => {
@@ -44,7 +45,7 @@ const Registers: React.FC = () => {
       <div className="registers-content registers-content-condensed">
         <section className="registers-group registers-group-flags" data-register-group="flags">
           <button
-            aria-controls="register-group-panel-flags"
+            aria-controls={`register-group-panel-flags${idSuffix}`}
             aria-expanded={!flagsCollapsed}
             className="registers-group-toggle"
             data-register-group="flags"
@@ -59,7 +60,7 @@ const Registers: React.FC = () => {
           </button>
           <div
             className="registers-group-panel"
-            id="register-group-panel-flags"
+            id={`register-group-panel-flags${idSuffix}`}
             hidden={flagsCollapsed}
           >
             {!flagsCollapsed ? (
@@ -88,17 +89,17 @@ const Registers: React.FC = () => {
 
           return (
             <section
-              aria-labelledby={`register-group-${group.id}`}
+              aria-labelledby={`register-group-${group.id}${idSuffix}`}
               className={`registers-group ${isCollapsed ? 'collapsed' : 'expanded'}`}
               data-register-group={group.id}
               key={group.id}
             >
               <button
-                aria-controls={`register-group-panel-${group.id}`}
+                aria-controls={`register-group-panel-${group.id}${idSuffix}`}
                 aria-expanded={!isCollapsed}
                 className="registers-group-toggle"
                 data-register-group={group.id}
-                id={`register-group-${group.id}`}
+                id={`register-group-${group.id}${idSuffix}`}
                 onClick={() => handleToggleGroup(group.id)}
                 type="button"
               >
@@ -110,7 +111,7 @@ const Registers: React.FC = () => {
               </button>
               <div
                 className="registers-group-panel"
-                id={`register-group-panel-${group.id}`}
+                id={`register-group-panel-${group.id}${idSuffix}`}
                 hidden={isCollapsed}
               >
                 {!isCollapsed

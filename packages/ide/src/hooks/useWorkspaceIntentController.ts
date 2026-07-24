@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { setWorkspaceTab, type AppDispatch, type RootState } from '@/store';
+import { revealPanelKind, type AppDispatch, type RootState } from '@/store';
 
 export function useWorkspaceIntentController(): void {
   const dispatch = useDispatch<AppDispatch>();
@@ -10,7 +10,7 @@ export function useWorkspaceIntentController(): void {
   const stepIntentRef = React.useRef(runtimeIntents.step);
 
   const showTerminalWorkspace = React.useCallback((): void => {
-    dispatch(setWorkspaceTab('terminal'));
+    dispatch(revealPanelKind('terminal'));
   }, [dispatch]);
 
   useEffect(() => {

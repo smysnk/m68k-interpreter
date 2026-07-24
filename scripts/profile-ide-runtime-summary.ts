@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import { createServer } from 'node:net';
 import { performance } from 'node:perf_hooks';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, devices, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import {
@@ -14,6 +16,8 @@ import {
 
 interface ProfileIdeRuntimeOptions {
   json: boolean;
+  outputPath: string | null;
+  scenarioIds: Set<string> | null;
 }
 
 interface RenderHotspotRow {
@@ -114,6 +118,33 @@ interface IdeRuntimeScenarioSummary {
   hardwareSurface: HardwareSurfaceSummary;
   terminalRepaint: TerminalRepaintSummary;
   touchLatency: TouchLatencySummary;
+  panelWorkspace: PanelWorkspaceSummary;
+}
+
+interface PanelWorkspaceSummary {
+  visiblePanels: number;
+  expandedPanels: number;
+  minimizedPanels: number;
+  floatingPanels: number;
+  terminalMirrors: number;
+  layoutCommits: number;
+  dragStarts: number;
+  dragCancels: number;
+  successfulDrops: number;
+  validDockDrops: number;
+  floatingDrops: number;
+  dragDurationCount: number;
+  totalDragDurationMs: number;
+  maxDragDurationMs: number;
+  previewFrameCount: number;
+  p95PreviewFrameIntervalMs: number;
+  maxPreviewFrameIntervalMs: number;
+  ownershipTransfers: number;
+  totalReducerDurationMs: number;
+  maxReducerDurationMs: number;
+  persistenceWrites: number;
+  persistenceBytes: number;
+  totalPersistenceDurationMs: number;
 }
 
 interface IdePerformanceSnapshot {
@@ -192,14 +223,22 @@ interface IdePerformanceSnapshot {
     maxLatencyMs: number;
     lastLatencyMs: number;
   };
+  panelWorkspace: PanelWorkspaceSummary;
 }
 
 const HOST = '127.0.0.1';
 const repoRoot = fileURLToPath(new URL('../', import.meta.url));
 
 function parseArgs(argv: string[]): ProfileIdeRuntimeOptions {
+  const outputIndex = argv.indexOf('--output');
+  const scenarioIndex = argv.indexOf('--scenario');
+  const scenarioIds = scenarioIndex >= 0
+    ? new Set((argv[scenarioIndex + 1] ?? '').split(',').map((value) => value.trim()).filter(Boolean))
+    : null;
   return {
     json: argv.includes('--json'),
+    outputPath: outputIndex >= 0 ? argv[outputIndex + 1] ?? null : null,
+    scenarioIds,
   };
 }
 
@@ -284,6 +323,16 @@ async function readIdePerformanceSnapshotFromPage(page: Page): Promise<IdePerfor
           totalLatencyMs: 0,
           maxLatencyMs: 0,
           lastLatencyMs: 0,
+        },
+        panelWorkspace: {
+          visiblePanels: 0, expandedPanels: 0, minimizedPanels: 0, floatingPanels: 0,
+          terminalMirrors: 0, layoutCommits: 0, dragStarts: 0, dragCancels: 0,
+          successfulDrops: 0, validDockDrops: 0, floatingDrops: 0,
+          dragDurationCount: 0, totalDragDurationMs: 0, maxDragDurationMs: 0,
+          previewFrameCount: 0, p95PreviewFrameIntervalMs: 0,
+          maxPreviewFrameIntervalMs: 0, ownershipTransfers: 0, totalReducerDurationMs: 0,
+          maxReducerDurationMs: 0, persistenceWrites: 0, persistenceBytes: 0,
+          totalPersistenceDurationMs: 0,
         },
       }
     );
@@ -395,12 +444,20 @@ async function main(): Promise<void> {
     const browser = await chromium.launch({ headless: true });
 
     try {
-      const scenarios = [
-        await profileDesktopScenario(browser, baseUrl),
-        await profileMobileScenario(browser, baseUrl),
-        await profileHardwareScenario(browser, baseUrl, false),
-        await profileHardwareScenario(browser, baseUrl, true),
-      ];
+      const scenarioRunners = [
+        ['desktop-nibbles-runtime', () => profileDesktopScenario(browser, baseUrl)],
+        ['mobile-nibbles-runtime', () => profileMobileScenario(browser, baseUrl)],
+        ['desktop-hardware-runtime', () => profileHardwareScenario(browser, baseUrl, false)],
+        ['compact-hardware-runtime', () => profileHardwareScenario(browser, baseUrl, true)],
+      ] as const;
+      const selectedRunners = options.scenarioIds
+        ? scenarioRunners.filter(([id]) => options.scenarioIds?.has(id))
+        : scenarioRunners;
+      if (selectedRunners.length === 0) {
+        throw new Error(`No profiler scenarios matched --scenario=${[...(options.scenarioIds ?? [])].join(',')}`);
+      }
+      const scenarios: IdeRuntimeScenarioSummary[] = [];
+      for (const [, runScenario] of selectedRunners) scenarios.push(await runScenario());
 
       const payload = {
         generatedAt: new Date().toISOString(),
@@ -408,8 +465,16 @@ async function main(): Promise<void> {
         scenarios,
       };
 
-      if (options.json) {
-        console.log(JSON.stringify(payload, null, 2));
+      if (options.json || options.outputPath) {
+        const json = `${JSON.stringify(payload, null, 2)}\n`;
+        if (options.outputPath) {
+          const outputPath = path.resolve(repoRoot, options.outputPath);
+          fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+          fs.writeFileSync(outputPath, json);
+        }
+        if (options.json) {
+          process.stdout.write(json);
+        }
         return;
       }
 
@@ -484,6 +549,13 @@ async function profileHardwareScenario(
     await page.evaluate(() => {
       (
         window as typeof window & {
+          __M68K_IDE_TEST_CONTROLS__?: { setPanelPreset?: (value: 'hardware-lab') => void };
+        }
+      ).__M68K_IDE_TEST_CONTROLS__?.setPanelPreset?.('hardware-lab');
+    });
+    await page.evaluate(() => {
+      (
+        window as typeof window & {
           __M68K_IDE_TEST_CONTROLS__?: { runProgram?: () => void };
         }
       ).__M68K_IDE_TEST_CONTROLS__?.runProgram?.();
@@ -515,8 +587,13 @@ async function profileHardwareScenario(
       ).__M68K_IDE_PERF__?.reset?.();
     });
     const introStartedAt = performance.now();
-    const hardwareTab = page.getByRole('tab', { name: /hardware/i }).last();
-    await hardwareTab.click();
+    await page.evaluate(() => {
+      (
+        window as typeof window & {
+          __M68K_IDE_TEST_CONTROLS__?: { setWorkspaceTab?: (value: 'hardware') => void };
+        }
+      ).__M68K_IDE_TEST_CONTROLS__?.setWorkspaceTab?.('hardware');
+    });
     await page.getByTestId('hardware-panel-preview').waitFor({ state: 'visible', timeout: 30_000 });
     await page.waitForTimeout(400);
     const introElapsedMs = performance.now() - introStartedAt;
@@ -529,25 +606,41 @@ async function profileHardwareScenario(
       await runtime?.controller?.requestRun?.({ delayMs: 0, speedMultiplier: 1 });
     }, HARDWARE_PROFILE_SOURCE);
 
-    for (const bit of [7, 6, 5, 4, 3, 2, 1, 0]) {
-      await page.getByRole('switch', { name: `Toggle switch ${bit}` }).click();
-      const button = page.getByRole('button', { name: `Push button ${bit}` });
-      await button.dispatchEvent('pointerdown');
-      await button.dispatchEvent('pointerup');
-    }
+    await page.evaluate(async () => {
+      for (const bit of [7, 6, 5, 4, 3, 2, 1, 0]) {
+        document.querySelector<HTMLButtonElement>(`[aria-label="Toggle switch ${bit}"]`)?.click();
+        const button = document.querySelector<HTMLButtonElement>(`[aria-label="Push button ${bit}"]`);
+        button?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, buttons: 1 }));
+        button?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      }
 
-    await page.getByRole('button', { name: 'Configure addresses' }).click();
-    const displayAddress = page.getByLabel('Display base address');
-    await displayAddress.fill('00E00100');
-    await displayAddress.press('Enter');
-    await displayAddress.fill('00E00000');
-    await displayAddress.press('Enter');
+      document.querySelector<HTMLButtonElement>('.hardware-configure-disclosure')?.click();
+      await new Promise(requestAnimationFrame);
+      await new Promise(requestAnimationFrame);
+      const displayAddress = document.querySelector<HTMLInputElement>('[aria-label="Display base address"]');
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      for (const value of ['00E00100', '00E00000']) {
+        if (!displayAddress) break;
+        valueSetter?.call(displayAddress, value);
+        displayAddress.dispatchEvent(new Event('input', { bubbles: true }));
+        await new Promise(requestAnimationFrame);
+        displayAddress.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
+        await new Promise(requestAnimationFrame);
+      }
 
-    await page.getByRole('button', { name: 'Request interrupt level 1' }).click();
-    await page.getByLabel('Automatic interrupt interval').fill('50');
-    await page.getByLabel('Automatic interrupt level 1').check();
+      document.querySelector<HTMLButtonElement>('[aria-label="Request interrupt level 1"]')?.click();
+      const interval = document.querySelector<HTMLInputElement>('[aria-label="Automatic interrupt interval"]');
+      if (interval) {
+        valueSetter?.call(interval, '50');
+        interval.dispatchEvent(new Event('input', { bubbles: true }));
+        interval.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      document.querySelector<HTMLInputElement>('[aria-label="Automatic interrupt level 1"]')?.click();
+    });
     await page.waitForTimeout(1_000);
-    await page.getByLabel('Automatic interrupt level 1').uncheck();
+    await page.evaluate(() => {
+      document.querySelector<HTMLInputElement>('[aria-label="Automatic interrupt level 1"]')?.click();
+    });
     await page.evaluate(async () => {
       const runtime = (window as typeof window & { emulatorInstance?: any }).emulatorInstance;
       await runtime?.controller?.requestCancelAutomaticInterrupts?.();
@@ -862,6 +955,7 @@ async function buildScenarioSummary(
           : 0,
       lastVisualLatencyMs: round(performanceSnapshot.touchLatency.lastVisualLatencyMs),
     },
+    panelWorkspace: { ...performanceSnapshot.panelWorkspace },
   };
 }
 

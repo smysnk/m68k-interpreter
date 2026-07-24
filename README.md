@@ -1,14 +1,14 @@
-[![M68K Interpreter Demo](https://raw.githubusercontent.com/smysnk/m68k-interpreter/main/docs/assets/m68k-interpreter-nibbles-demo.webp)](https://github.com/user-attachments/assets/5add396b-58c5-42df-a1c2-db1d2a415fa4)
+[![M68K Interpreter Demo](https://raw.githubusercontent.com/smysnk/m68k-interpreter/main/docs/assets/m68k-interpreter-nibbles-demo.webp)](https://smysnk.com/m68k-interpreter)
 
 This demo is running my old [m68k-nibbles](https://github.com/smysnk/m68k-nibbles) game, which I originally wrote for a college assembly class back in 2007. I always wished someone would eventually build a 68000 browser emulator so I could bring it back to life, so I was excited when I found [gianlucarea's m68k-interpreter project](https://github.com/gianlucarea/m68k-interpreter). I took a little liberty with this fork to adapt the interface, auto-load the game, and add a screen terminal emulator so the project could feel closer to the original experience. If you enjoy this version, please consider showing some support to the upstream project too.
 
-**[→ Play Nibbles](https://smysnk.github.io/m68k-interpreter/)**
+**[→ Play Nibbles](https://smysnk.com/m68k-interpreter)**
 
 # m68k-interpreter
 
 [![tests](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml)
 [![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fsmysnk.github.io%2Fm68k-interpreter%2Fbadges%2Fcoverage.json)](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml)
-[![site](https://img.shields.io/website?url=https%3A%2F%2Fsmysnk.github.io%2Fm68k-interpreter%2F&label=site)](https://smysnk.github.io/m68k-interpreter/)
+[![site](https://img.shields.io/website?url=https%3A%2F%2Fsmysnk.com%2Fm68k-interpreter&label=site)](https://smysnk.com/m68k-interpreter)
 
 A Motorola 68000 assembly emulator that runs entirely in the browser.  
 Write, step through, and debug m68k assembly — no installation needed.

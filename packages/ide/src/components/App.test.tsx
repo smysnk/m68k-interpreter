@@ -4,7 +4,7 @@ import App, { AppShell } from './App';
 import FileExplorerSidebar from './FileExplorerSidebar';
 import { nibblesSource } from '@/programs/nibbles';
 import { useEmulatorStore } from '@/stores/emulatorStore';
-import { createIdeStore, ideStore, resetFilesState, resetSettingsState, setActiveFile } from '@/store';
+import { createIdeStore, ideStore, resetFilesState, resetSettingsState, resetToPreset, setActiveFile } from '@/store';
 import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
 import { IDE_PERSISTENCE_KEY } from '@/store/persistence';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
@@ -57,6 +57,7 @@ describe('App', () => {
     useEmulatorStore.getState().reset();
     ideStore.dispatch(resetFilesState());
     ideStore.dispatch(resetSettingsState());
+    ideStore.dispatch(resetToPreset('classic'));
     window.editorCode = '';
     window.emulatorInstance = null;
   });
@@ -70,7 +71,8 @@ describe('App', () => {
     fireEvent.click(await screen.findByRole('button', { name: /scratch\.asm/i }));
 
     await waitFor(() => {
-      expect(store.getState().uiShell.workspaceTab).toBe('code');
+      const layout = store.getState().panelLayout.activeLayout;
+      expect(layout.instances[layout.focusedPanelId ?? '']?.kind).toBe('code');
       expect(store.getState().emulator.editorCode).toContain('Write your M68K assembly code here');
     });
 
@@ -103,7 +105,7 @@ describe('App', () => {
     expect(screen.getByTestId('assembly-editor')).toBeInTheDocument();
   });
 
-  it('activates the compact mobile shell and exposes terminal, code, registers, memory, and hardware views', () => {
+  it('activates the compact mobile projection and makes every panel kind available without mutating columns', () => {
     setViewportWidth(600);
 
     render(<App />);
@@ -116,19 +118,23 @@ describe('App', () => {
     expect(screen.queryByLabelText('Run program')).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: /registers/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /memory/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /hardware/i })).toBeInTheDocument();
-
     fireEvent.click(screen.getByRole('tab', { name: /registers/i }));
 
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-terminal-view-mode', 'standard');
     expect(screen.getByText('Flags')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /^add panel$/i }));
+    expect(screen.getByRole('menuitem', { name: /add memory panel/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /add hardware i\/o panel/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('menuitem', { name: /add memory panel/i }));
+    fireEvent.click(screen.getAllByRole('tab', { name: /memory/i }).at(-1)!);
 
     expect(screen.getByLabelText('Start Address')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('tab', { name: /hardware/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /^add panel$/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /add hardware i\/o panel/i }));
+    fireEvent.click(screen.getAllByRole('tab', { name: /hardware i\/o/i }).at(-1)!);
 
     expect(screen.getByTestId('hardware-panel-preview')).toBeInTheDocument();
   });
@@ -150,28 +156,16 @@ describe('App', () => {
     expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('switches the right pane between registers, memory, and hardware tabs', () => {
+  it('adds registers, memory, and hardware as independent panel instances', () => {
     render(<App />);
-
-    const registersTab = screen.getByRole('tab', { name: /registers/i });
-    const memoryTab = screen.getByRole('tab', { name: /memory/i });
-    const hardwareTab = screen.getByRole('tab', { name: /hardware/i });
-
-    expect(registersTab).toHaveAttribute('aria-selected', 'true');
-    expect(memoryTab).toHaveAttribute('aria-selected', 'false');
-    expect(hardwareTab).toHaveAttribute('aria-selected', 'false');
     expect(screen.getAllByText('Flags').length).toBeGreaterThan(0);
-
-    fireEvent.click(memoryTab);
-
-    expect(registersTab).toHaveAttribute('aria-selected', 'false');
-    expect(memoryTab).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /^add panel$/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /add memory panel/i }));
     expect(screen.getByLabelText('Start Address')).toBeInTheDocument();
-
-    fireEvent.click(hardwareTab);
-
-    expect(memoryTab).toHaveAttribute('aria-selected', 'false');
-    expect(hardwareTab).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /^add panel$/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /add hardware i\/o panel/i }));
     expect(screen.getByTestId('hardware-panel-preview')).toBeInTheDocument();
   });
 
@@ -221,8 +215,9 @@ describe('App', () => {
     renderWithIdeProviders(<AppShell />, { store });
 
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-theme', 'dark');
-    expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByLabelText('Compatibility notes')).toBeVisible();
+    expect(store.getState().panelLayout.activeLayout.columns).toHaveLength(3);
+    expect(Object.values(store.getState().panelLayout.activeLayout.instances).map((panel) => panel.kind)).toEqual(['code', 'memory', 'help']);
+    expect(screen.getByRole('heading', { name: 'Help' })).toBeVisible();
     expect(store.getState().files.activeFileId).toBe('example:nibbles.asm');
     expect(store.getState().emulator.editorCode).toBe(nibblesSource);
   });

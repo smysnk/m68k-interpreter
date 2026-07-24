@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Emulator, type ExecutionState, type UndoCaptureMode } from '@m68k/interpreter';
 import { createInProcessIdeRuntimeSession } from '@/runtime/ideRuntimeSession';
-import { ideStore, selectActiveFile } from '@/store';
+import { ideStore, selectActiveFile, selectPanelRuntimeSurfacePolicy } from '@/store';
 import { runEmulationFrame } from '@/runtime/executionLoop';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import {
@@ -25,6 +25,7 @@ import {
   supportsInterpreterWorkerRuntime,
 } from '@/runtime/worker/createWorkerIdeRuntimeSession';
 import type { RuntimeMetrics } from '@/stores/emulatorStore';
+import type { WorkspaceTab } from '@/store/uiShellSlice';
 import { useCompactShell } from '@/hooks/useCompactShell';
 import {
   NIBBLES_FILE_ID,
@@ -187,7 +188,12 @@ export const useEmulatorEvents = () => {
   const delay = useSelector((state: RootState) => state.emulator.delay);
   const speedMultiplier = useSelector((state: RootState) => state.emulator.speedMultiplier);
   const activeFileId = useSelector((state: RootState) => state.files.activeFileId);
-  const workspaceTab = useSelector((state: RootState) => state.uiShell.workspaceTab);
+  const panelSurfacePolicy = useSelector(selectPanelRuntimeSurfacePolicy);
+  const workspaceTab: WorkspaceTab = panelSurfacePolicy.memorySurfaceVisible
+    ? 'memory'
+    : panelSurfacePolicy.terminalFocusedPresentation
+      ? 'terminal'
+      : 'code';
   const terminalInputModePreference = useSelector(
     (state: RootState) => state.settings.terminalInputMode
   );
