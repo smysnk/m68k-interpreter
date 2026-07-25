@@ -42,6 +42,7 @@ function PanelFrameView({
 }: Props & { drag: ReturnType<typeof useDraggable> }): React.ReactElement {
   const dispatch = useDispatch<AppDispatch>();
   const entry = PANEL_REGISTRY[instance.kind];
+  const integratedHeader = instance.minimized ? undefined : entry.integratedHeader;
   const ids = getPanelDomIds(instance.id);
   const currentColumnIndex = columns.findIndex((column) => column.panelIds.includes(instance.id));
   const currentColumn = columns[currentColumnIndex];
@@ -67,7 +68,7 @@ function PanelFrameView({
       ref={drag.setNodeRef}
     >
       <header
-        className="panel-frame-header"
+        className={`panel-frame-header ${integratedHeader ? 'panel-frame-header-integrated' : ''}`.trim()}
         data-panel-drag-activator={instance.id}
         id={ids.headerId}
         onPointerDown={(event) => {
@@ -84,11 +85,21 @@ function PanelFrameView({
           {...drag.attributes}
           {...drag.listeners}
         >⠇</button>
-        <span aria-hidden="true" className="panel-kind-icon">{entry.icon}</span>
-        <h2>{instance.title}</h2>
-        {instance.kind === 'terminal' ? (
-          <span className={`panel-owner-badge ${interactive ? 'active' : ''}`}>{interactive ? 'Interactive' : 'Mirror'}</span>
-        ) : null}
+        {integratedHeader ? (
+          <div className="pane-title-group panel-frame-integrated-title">
+            <p className="pane-eyebrow">{integratedHeader.eyebrow}</p>
+            <h2 className="pane-title">{integratedHeader.title}</h2>
+            <p className="pane-caption">{integratedHeader.caption}</p>
+          </div>
+        ) : (
+          <>
+            <span aria-hidden="true" className="panel-kind-icon">{entry.icon}</span>
+            <h2>{instance.title}</h2>
+            {instance.kind === 'terminal' ? (
+              <span className={`panel-owner-badge ${interactive ? 'active' : ''}`}>{interactive ? 'Interactive' : 'Mirror'}</span>
+            ) : null}
+          </>
+        )}
         <div
           aria-label={`${instance.title} panel controls`}
           className="panel-frame-actions"

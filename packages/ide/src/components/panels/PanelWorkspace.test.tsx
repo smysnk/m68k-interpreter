@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
-import { createIdeStore, duplicatePanel, setColumnCount, type AppStore } from '@/store';
+import { createIdeStore, duplicatePanel, revealPanelKind, setColumnCount, type AppStore } from '@/store';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
 import PanelWorkspace from './PanelWorkspace';
 
@@ -61,5 +61,19 @@ describe('PanelWorkspace', () => {
     renderWithIdeProviders(<PanelWorkspace />, { store });
     expect(screen.queryByLabelText('Workspace layout controls')).not.toBeInTheDocument();
     expect(document.querySelector('.panel-workspace-toolbar')).not.toBeInTheDocument();
+  });
+
+  it('integrates the hardware title and window controls into one header', () => {
+    store.dispatch(revealPanelKind('hardware'));
+    renderWithIdeProviders(<PanelWorkspace />, { store });
+
+    const hardwareFrame = screen.getByTestId(/panel-instance-panel-hardware/);
+    expect(hardwareFrame.querySelectorAll('.panel-frame-header')).toHaveLength(1);
+    expect(screen.getByRole('heading', { name: 'I/O Board' })).toBeInTheDocument();
+    expect(screen.queryByText(/^Live$/i)).not.toBeInTheDocument();
+
+    const controls = screen.getByRole('toolbar', { name: 'Hardware I/O panel controls' });
+    expect(controls).toContainElement(screen.getByRole('button', { name: 'Minimize Hardware I/O' }));
+    expect(controls).toContainElement(screen.getByRole('button', { name: 'Close Hardware I/O' }));
   });
 });

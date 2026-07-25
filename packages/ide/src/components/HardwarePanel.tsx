@@ -22,7 +22,11 @@ function SectionHeading({ eyebrow, title, value }: { eyebrow: string; title: str
   );
 }
 
-const HardwarePanel: React.FC = () => {
+interface HardwarePanelProps {
+  embedded?: boolean;
+}
+
+const HardwarePanel: React.FC<HardwarePanelProps> = ({ embedded = false }) => {
   useIdeRenderTelemetry('HardwarePanel');
   const dispatch = useDispatch<AppDispatch>();
   const snapshot = useHardwareSurface();
@@ -49,15 +53,20 @@ const HardwarePanel: React.FC = () => {
 
   return (
     <RenderProfileBoundary id="HardwarePanel">
-      <section aria-label="EASy68K hardware panel" className="hardware-preview pane-surface" data-testid="hardware-panel-preview">
-        <header className="pane-header hardware-preview-header">
-          <div className="pane-title-group">
-            <p className="pane-eyebrow">Hardware</p>
-            <h2 className="pane-title">I/O Board</h2>
-            <p className="pane-caption">Live memory-mapped controls for the running simulator.</p>
-          </div>
-          <span className="hardware-preview-badge hardware-live-badge"><span aria-hidden="true" />Live</span>
-        </header>
+      <section
+        aria-label="EASy68K hardware panel"
+        className={`hardware-preview ${embedded ? 'hardware-preview-embedded' : 'pane-surface'}`}
+        data-testid="hardware-panel-preview"
+      >
+        {!embedded ? (
+          <header className="pane-header hardware-preview-header">
+            <div className="pane-title-group">
+              <p className="pane-eyebrow">Hardware</p>
+              <h2 className="pane-title">I/O Board</h2>
+              <p className="pane-caption">Live memory-mapped controls for the running simulator.</p>
+            </div>
+          </header>
+        ) : null}
 
         <div className="hardware-preview-content">
           <section className="hardware-board-section hardware-display-section">
