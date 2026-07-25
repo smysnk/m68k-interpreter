@@ -6,11 +6,14 @@ import { chromium } from '@playwright/test';
 const rootDir = process.cwd();
 const baseUrl = process.env.DEMO_BASE_URL || 'http://127.0.0.1:4173/';
 const outputDir = path.resolve(rootDir, '.test-results/readme-demo-video');
-const finalMp4Path = path.resolve(rootDir, 'assets/m68k-interpreter-demo.mp4');
-const finalPreviewPath = path.resolve(rootDir, 'assets/m68k-interpreter-demo.gif');
-const palettePath = path.resolve(outputDir, 'preview-palette.png');
+const finalMp4Path = path.resolve(outputDir, 'm68k-interpreter-demo-github.mp4');
+const finalPreviewPath = path.resolve(rootDir, 'assets/m68k-interpreter-demo.webp');
+const previewFramesDir = path.resolve(outputDir, 'webp-frames');
 const trimStartSeconds = process.env.DEMO_TRIM_START_SECONDS || '0.45';
 const viewport = { width: 1440, height: 810 };
+const videoSize = { width: 1920, height: 1080 };
+const outputFrameRate = 50;
+const menuSelectionHoverMs = 1_500;
 const skipToNibbles = process.env.DEMO_SKIP_TO_NIBBLES === '1';
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -19,6 +22,17 @@ function runFfmpeg(args) {
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], {
     stdio: 'inherit',
   });
+}
+
+function runImg2Webp(args) {
+  try {
+    execFileSync('img2webp', args, { stdio: 'inherit' });
+  } catch (error) {
+    throw new Error(
+      'Animated README preview generation requires img2webp from the WebP tools package.',
+      { cause: error }
+    );
+  }
 }
 
 function videoDuration(filePath) {
@@ -42,6 +56,17 @@ function videoDuration(filePath) {
 async function installDemoChrome(page) {
   await page.evaluate(() => {
     if (document.querySelector('#readme-demo-url')) return;
+
+    const style = document.createElement('style');
+    style.textContent = `
+      .readme-demo-menu-target {
+        background: rgba(37, 99, 235, 0.32) !important;
+        box-shadow:
+          inset 0 0 0 2px rgba(96, 165, 250, 0.95),
+          0 0 18px rgba(37, 99, 235, 0.52) !important;
+        border-radius: 8px !important;
+      }
+    `;
 
     const url = document.createElement('div');
     url.id = 'readme-demo-url';
@@ -103,6 +128,7 @@ async function installDemoChrome(page) {
       transform: 'translate(-2px, -2px)',
     });
 
+    document.head.append(style);
     document.body.append(url, chapter, cursor);
   });
 }
@@ -156,7 +182,7 @@ async function moveVisualCursor(page, x, y, durationMs = 420) {
   await wait(durationMs);
 }
 
-async function clickWithCursor(page, locator, pauseMs = 330, direct = false) {
+async function clickWithCursor(page, locator, pauseMs = 330, direct = false, preClickHoverMs = 0) {
   await locator.waitFor({ state: 'visible', timeout: 30_000 });
   const box = await locator.boundingBox();
   if (!box) throw new Error('Demo control has no visible bounds.');
@@ -165,6 +191,11 @@ async function clickWithCursor(page, locator, pauseMs = 330, direct = false) {
     await moveVisualCursor(page, point.x, point.y, 260);
   } else {
     await moveDemoCursor(page, point.x, point.y, 260);
+  }
+  if (preClickHoverMs > 0) {
+    await locator.evaluate((element) => element.classList.add('readme-demo-menu-target'));
+    await locator.hover();
+    await wait(preClickHoverMs);
   }
   await page.evaluate(() => {
     const cursor = document.querySelector('#readme-demo-cursor');
@@ -178,6 +209,11 @@ async function clickWithCursor(page, locator, pauseMs = 330, direct = false) {
   } else {
     await locator.click();
   }
+  await page.evaluate(() => {
+    for (const element of document.querySelectorAll('.readme-demo-menu-target')) {
+      element.classList.remove('readme-demo-menu-target');
+    }
+  });
   await wait(90);
   await page.evaluate(() => {
     const cursor = document.querySelector('#readme-demo-cursor');
@@ -189,7 +225,7 @@ async function clickWithCursor(page, locator, pauseMs = 330, direct = false) {
 async function openViewSubmenu(page, name) {
   await clickWithCursor(page, page.getByRole('button', { name: 'Open view menu' }), 160);
   const item = page.getByRole('menuitem', { name, exact: true });
-  await clickWithCursor(page, item, 120, true);
+  await clickWithCursor(page, item, 120, true, 500);
   await wait(260);
 }
 
@@ -201,7 +237,8 @@ async function setColumnCount(page, count) {
       name: `${count} ${count === 1 ? 'column' : 'columns'}`,
     }),
     600,
-    true
+    true,
+    menuSelectionHoverMs
   );
 }
 
@@ -211,7 +248,8 @@ async function addPanel(page, title) {
     page,
     page.getByRole('menuitem', { name: `Add ${title} panel` }),
     560,
-    true
+    true,
+    menuSelectionHoverMs
   );
 }
 
@@ -221,7 +259,8 @@ async function applyLayout(page, name) {
     page,
     page.getByRole('menuitem', { name: `Apply ${name} layout` }),
     650,
-    true
+    true,
+    menuSelectionHoverMs
   );
 }
 
@@ -316,7 +355,7 @@ const context = await browser.newContext({
   colorScheme: 'dark',
   recordVideo: {
     dir: outputDir,
-    size: viewport,
+    size: videoSize,
   },
 });
 const page = await context.newPage();
@@ -336,7 +375,13 @@ try {
     await setChapter(page, 'Display modes with one to four configurable columns', 320);
     await openViewSubmenu(page, 'Columns');
     await wait(1_050);
-    await clickWithCursor(page, page.getByRole('menuitemradio', { name: '4 columns' }), 750, true);
+    await clickWithCursor(
+      page,
+      page.getByRole('menuitemradio', { name: '4 columns' }),
+      750,
+      true,
+      menuSelectionHoverMs
+    );
 
     await setChapter(page, 'Grab any panel header and move it freely', 260);
     await dragPanelToEmptyColumn(page, 'Screen', 3);
@@ -527,13 +572,13 @@ runFfmpeg([
   '-i',
   capturedVideo,
   '-vf',
-  `fps=30,scale=${viewport.width}:${viewport.height}:flags=lanczos`,
+  `crop=${viewport.width}:${viewport.height}:0:0,minterpolate=fps=${outputFrameRate}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1,scale=${videoSize.width}:${videoSize.height}:flags=lanczos`,
   '-c:v',
   'libx264',
   '-preset',
   'slow',
   '-crf',
-  '21',
+  '20',
   '-pix_fmt',
   'yuv420p',
   '-movflags',
@@ -542,50 +587,43 @@ runFfmpeg([
   finalMp4Path,
 ]);
 
-runFfmpeg([
-  '-i',
-  finalMp4Path,
-  '-vf',
-  'fps=8,scale=800:-2:flags=lanczos,palettegen=max_colors=96:stats_mode=diff',
-  '-frames:v',
-  '1',
-  palettePath,
-]);
-
-runFfmpeg([
-  '-i',
-  finalMp4Path,
-  '-i',
-  palettePath,
-  '-lavfi',
-  'fps=8,scale=800:-2:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle',
-  '-loop',
-  '0',
-  finalPreviewPath,
-]);
-
-const previewLimitBytes = 9_500_000;
-if (fs.statSync(finalPreviewPath).size > previewLimitBytes) {
+fs.rmSync(previewFramesDir, { recursive: true, force: true });
+fs.mkdirSync(previewFramesDir, { recursive: true });
+try {
   runFfmpeg([
     '-i',
     finalMp4Path,
     '-vf',
-    'fps=6,scale=640:-2:flags=lanczos,palettegen=max_colors=64:stats_mode=diff',
-    '-frames:v',
-    '1',
-    palettePath,
+    'fps=12,scale=960:-2:flags=lanczos',
+    path.join(previewFramesDir, 'frame-%05d.png'),
   ]);
-  runFfmpeg([
-    '-i',
-    finalMp4Path,
-    '-i',
-    palettePath,
-    '-lavfi',
-    'fps=6,scale=640:-2:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=6:diff_mode=rectangle',
+
+  const previewFrames = fs
+    .readdirSync(previewFramesDir)
+    .filter((entry) => entry.endsWith('.png'))
+    .sort()
+    .map((entry) => path.join(previewFramesDir, entry));
+  if (previewFrames.length === 0) {
+    throw new Error('No animated README preview frames were produced.');
+  }
+
+  runImg2Webp([
     '-loop',
     '0',
+    '-min_size',
+    '-d',
+    '83',
+    '-lossy',
+    '-q',
+    '72',
+    '-m',
+    '4',
+    ...previewFrames,
+    '-o',
     finalPreviewPath,
   ]);
+} finally {
+  fs.rmSync(previewFramesDir, { recursive: true, force: true });
 }
 
 const duration = videoDuration(finalMp4Path);
@@ -594,8 +632,11 @@ const previewBytes = fs.statSync(finalPreviewPath).size;
 if (!Number.isFinite(duration) || duration < 20) {
   throw new Error(`Demo video is unexpectedly short (${duration.toFixed(2)} seconds).`);
 }
+if (mp4Bytes > 10_000_000) {
+  throw new Error(`GitHub-hosted demo video exceeds its 10 MB attachment budget.`);
+}
 if (previewBytes > 10_000_000) {
-  throw new Error(`Animated README preview exceeds 10 MB (${previewBytes} bytes).`);
+  throw new Error(`Animated README preview exceeds its 10 MB performance budget.`);
 }
 
 console.log(

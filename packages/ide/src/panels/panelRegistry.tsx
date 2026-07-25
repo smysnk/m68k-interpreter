@@ -17,6 +17,11 @@ export interface PanelRegistryEntry {
   kind: PanelKind;
   title: string;
   icon: string;
+  integratedHeader?: {
+    eyebrow: string;
+    title: string;
+    caption: string;
+  };
   canDuplicate: boolean;
   canFloat: boolean;
   minimumWidth: number;
@@ -46,7 +51,12 @@ export const PANEL_REGISTRY: Record<PanelKind, PanelRegistryEntry> = {
   },
   hardware: {
     kind: 'hardware', title: 'Hardware I/O', icon: 'I/O', canDuplicate: true, canFloat: true,
-    minimumWidth: 360, minimumFloatingSize: { width: 520, height: 420 }, render: () => <HardwarePanel />,
+    integratedHeader: {
+      eyebrow: 'Hardware',
+      title: 'I/O Board',
+      caption: 'Live memory-mapped controls for the running simulator.',
+    },
+    minimumWidth: 360, minimumFloatingSize: { width: 520, height: 420 }, render: () => <HardwarePanel embedded />,
   },
   help: {
     kind: 'help', title: 'Help', icon: '?', canDuplicate: true, canFloat: true,

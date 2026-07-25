@@ -4,15 +4,13 @@ import { getGitHubCookieFromBrowser } from "./github-cookie-browser.mjs";
 
 const rootDir = resolve(new URL("..", import.meta.url).pathname);
 const repositoryId = process.env.GITHUB_REPOSITORY_ID ?? "1184317870";
-const repositorySlug = process.env.GITHUB_REPOSITORY ?? "smysnk/m68k-interpreter";
-const readmeAssetBranch = process.env.README_ASSET_BRANCH ?? "main";
-
 const readmeFile = resolve(rootDir, "README.md");
 
 const videoEntries = [
   {
-    title: "M68K Interpreter Demo",
-    file: resolve(rootDir, "docs/assets/m68k-interpreter-nibbles-demo.mp4"),
+    title: "M68K Interpreter demo video",
+    file: resolve(rootDir, ".test-results/readme-demo-video/m68k-interpreter-demo-github.mp4"),
+    previewPath: "assets/m68k-interpreter-demo.webp",
   },
 ];
 
@@ -25,11 +23,6 @@ const defaultHeaders = {
 
 const filterHeaders = (headers) =>
   Object.fromEntries(Object.entries(headers).filter(([, value]) => value !== undefined && value !== null));
-
-const buildReadmePreviewUrl = (filePath) => {
-  const previewFileName = basename(filePath).replace(/\.mp4$/u, ".webp");
-  return `https://raw.githubusercontent.com/${repositorySlug}/${readmeAssetBranch}/docs/assets/${previewFileName}`;
-};
 
 const buildPreviewLink = (href, previewUrl, title) => `[![${title}](${previewUrl})](${href})`;
 
@@ -155,7 +148,7 @@ const main = async () => {
     uploads.push({
       title: entry.title,
       href,
-      previewUrl: buildReadmePreviewUrl(entry.file),
+      previewUrl: entry.previewPath,
     });
 
     console.log(`${entry.title}: ${href}`);
