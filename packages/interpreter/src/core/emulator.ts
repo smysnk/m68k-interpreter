@@ -54,6 +54,8 @@ import {
 import type { RuntimeSyncVersions } from '../types/emulator';
 import { enterInterruptStatus, isInterruptLevelEligible, isSupervisorMode } from './statusRegister';
 import { getEasy68kInterruptVectorAddress } from '../devices/easy68kHardware';
+import type { CpuDiagnostic, StepResult } from './execution';
+import type { CpuProfile } from '../isa/types';
 
 // Token type constants
 const TOKEN_IMMEDIATE = 0;
@@ -75,6 +77,7 @@ export type InterruptRequestResult = 'accepted' | 'masked' | 'rejected';
 export interface EmulatorOptions {
   columns?: number;
   rows?: number;
+  cpuProfile?: CpuProfile;
   undoMode?: UndoCaptureMode;
   undoCheckpointInterval?: number;
   hardwareConfig?: Easy68kHardwareConfig;
@@ -126,6 +129,7 @@ export class Emulator {
   private pendingInputTask: number | undefined;
   private pendingExternalInterruptAddress: number | undefined;
   private pendingInterruptLevels = new Set<number>();
+  private readonly cpuProfile: CpuProfile;
   private undoCaptureMode: UndoCaptureMode;
   private undoCheckpointInterval: number;
   private instructionsSinceUndoSnapshot = 0;
@@ -141,6 +145,7 @@ export class Emulator {
       rows: options.rows,
     });
     this.hardware = new Easy68kHardware(options.hardwareDevices ?? options.hardwareConfig);
+    this.cpuProfile = options.cpuProfile ?? 'easy68k';
     this.updateHardwareAddressWindow();
     this.undoCaptureMode = options.undoMode ?? 'full';
     this.undoCheckpointInterval = normalizeUndoCheckpointInterval(options.undoCheckpointInterval);
@@ -969,6 +974,50 @@ export class Emulator {
     } finally {
       this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
     }
+  }
+
+  stepInstruction(): StepResult {
+    const pcBefore = this.pc;
+    const shouldStop = this.emulationStep();
+
+    if (this.exception !== undefined) {
+      return {
+        kind: 'exception',
+        pc: this.pc,
+        fault: {
+          code: 'legacy-execution-exception',
+          message: this.exception,
+          source: this.line > 0 ? { line: this.line } : undefined,
+        },
+      };
+    }
+
+    if (this.waitingForInput) {
+      return {
+        kind: 'waiting',
+        pc: this.pc,
+      };
+    }
+
+    if (this.halted) {
+      return {
+        kind: 'halted',
+        pc: this.pc,
+      };
+    }
+
+    if (shouldStop) {
+      return {
+        kind: 'completed',
+        pc: this.pc,
+      };
+    }
+
+    return {
+      kind: 'executed',
+      pcBefore,
+      pcAfter: this.pc,
+    };
   }
 
   /**
@@ -2382,8 +2431,34 @@ export class Emulator {
     return this.errors;
   }
 
+  getDiagnostics(): CpuDiagnostic[] {
+    const diagnostics = this.errors.map((message): CpuDiagnostic => ({
+      code: 'legacy-execution-error',
+      severity: 'error',
+      message,
+      source: this.line > 0 ? { line: this.line } : undefined,
+      instructionAddress: this.pc,
+    }));
+
+    if (this.exception !== undefined) {
+      diagnostics.push({
+        code: 'legacy-execution-exception',
+        severity: 'error',
+        message: this.exception,
+        source: this.line > 0 ? { line: this.line } : undefined,
+        instructionAddress: this.pc,
+      });
+    }
+
+    return diagnostics;
+  }
+
   getException(): string | undefined {
     return this.exception;
+  }
+
+  getCpuProfile(): CpuProfile {
+    return this.cpuProfile;
   }
 
   getUndoCaptureMode(): UndoCaptureMode {

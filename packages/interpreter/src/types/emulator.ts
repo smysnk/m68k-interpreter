@@ -111,10 +111,13 @@ export interface Emulator {
   getMemory(): MemoryCell;
   getMemoryMeta(): MemoryMeta;
   getRuntimeSyncVersions(): RuntimeSyncVersions;
+  getCpuProfile(): import('../isa/types').CpuProfile;
+  getDiagnostics(): import('../core/execution').CpuDiagnostic[];
   readMemoryRange(address: number, length: number): Uint8Array;
   getFlags(): ConditionFlags;
   getPC(): number;
   step(): boolean; // Returns true if execution ended
+  stepInstruction(): import('../core/execution').StepResult;
   reset(): void;
   undo(): void;
   getLastInstruction(): string;

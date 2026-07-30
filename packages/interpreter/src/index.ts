@@ -34,6 +34,13 @@ export {
   tstOP,
 } from './core/operations';
 export { Strings } from './core/strings';
+export type {
+  CpuDiagnostic,
+  CpuFault,
+  DiagnosticSeverity,
+  SourceSpan,
+  StepResult,
+} from './core/execution';
 export * from './core/statusRegister';
 export { TerminalDevice } from './devices/terminal';
 export {

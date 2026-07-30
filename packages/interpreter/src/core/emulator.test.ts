@@ -431,6 +431,49 @@ START
   });
 });
 
+describe('Emulator - structured execution facade', () => {
+  it('preserves Easy68K as the compatibility default and accepts strict profiles', () => {
+    expect(new Emulator('START\n  END START').getCpuProfile()).toBe('easy68k');
+    expect(
+      new Emulator('START\n  END START', {
+        cpuProfile: 'm68000',
+      }).getCpuProfile()
+    ).toBe('m68000');
+  });
+
+  it('returns structured step results without changing emulationStep compatibility', () => {
+    const emulator = new Emulator(`
+START
+  MOVE.L #1,D0
+  END START
+`);
+
+    expect(emulator.stepInstruction()).toMatchObject({
+      kind: 'executed',
+      pcBefore: 0,
+      pcAfter: 4,
+    });
+    expect(emulator.getRegisters()[8]).toBe(1);
+  });
+
+  it('adapts legacy exceptions and diagnostics into machine-readable results', () => {
+    const emulator = new Emulator('START\n  MOVE.L #1,D0');
+
+    expect(emulator.stepInstruction()).toMatchObject({
+      kind: 'exception',
+      fault: {
+        code: 'legacy-execution-exception',
+      },
+    });
+    expect(emulator.getDiagnostics()).toEqual([
+      expect.objectContaining({
+        code: 'legacy-execution-exception',
+        severity: 'error',
+      }),
+    ]);
+  });
+});
+
 describe('Emulator - Phase 4 runtime support', () => {
   it('accepts initial terminal geometry and supports runtime terminal resizing', () => {
     const emulator = new Emulator(
