@@ -11,7 +11,7 @@ describe('Undo', () => {
 
     undo.push({
       cpu: { pc: 4, sr: 0x2001, usp: 0x1000, ssp: 0x2000, registers },
-      memory: memory.createSnapshot(),
+      memoryPages: [memory.captureUndoPage(0)],
       deviceOutputs: { display: new Array(8).fill(0), leds: 0, outputVersion: 1 },
       diagnostics: { errors },
       execution: { lastInstruction: 'MOVE.B', line: 3 },
@@ -29,6 +29,7 @@ describe('Undo', () => {
       },
       diagnostics: { errors: ['before'] },
       execution: { lastInstruction: 'MOVE.B', line: 3 },
+      memoryPages: [{ pageIndex: 0, previousWorkingPage: null }],
     });
   });
 });

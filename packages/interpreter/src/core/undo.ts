@@ -1,4 +1,4 @@
-import type { MemorySnapshot } from './memory';
+import type { MemoryUndoPageEntry } from './memory';
 import type { Easy68kHardwareOutputSnapshot } from '../devices/easy68kHardware';
 
 /**
@@ -25,7 +25,7 @@ export interface ExecutionUndoSnapshot {
 
 export interface UndoFrame {
   cpu: CpuUndoSnapshot;
-  memory: MemorySnapshot;
+  memoryPages: MemoryUndoPageEntry[];
   deviceOutputs: Easy68kHardwareOutputSnapshot;
   diagnostics: DiagnosticsUndoSnapshot;
   execution: ExecutionUndoSnapshot;
@@ -41,7 +41,7 @@ export class Undo {
         ...frame.cpu,
         registers: new Int32Array(frame.cpu.registers),
       },
-      memory: frame.memory,
+      memoryPages: [...frame.memoryPages],
       deviceOutputs: {
         display: [...frame.deviceOutputs.display],
         leds: frame.deviceOutputs.leds,
