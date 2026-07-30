@@ -2200,6 +2200,20 @@ export class Emulator {
     return this.registers;
   }
 
+  getRegisterSnapshot(): Int32Array {
+    return Int32Array.from(this.registers);
+  }
+
+  setRegisterValue(register: number, value: number): void {
+    if (!Number.isInteger(register) || register < 0 || register >= this.registers.length) {
+      throw new RangeError(`Register index must be an integer from 0 through 15: ${register}`);
+    }
+
+    const runtimeSyncSnapshot = this.snapshotRuntimeSyncState();
+    this.registers[register] = value | 0;
+    this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
+  }
+
   getCCR(): number {
     return this.ccr;
   }

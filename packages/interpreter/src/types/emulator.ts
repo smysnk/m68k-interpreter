@@ -104,6 +104,8 @@ export interface Emulator {
   flags: ConditionFlags;
   pc: number;
   getRegisters(): Registers;
+  getRegisterSnapshot(): Int32Array;
+  setRegisterValue(register: number, value: number): void;
   getCCR(): number;
   getSR(): number;
   getUSP(): number;

@@ -429,6 +429,20 @@ START
       invalidInitialVersions.diagnostics
     );
   });
+
+  it('supports explicit register mutation without exposing snapshot writes', () => {
+    const emulator = new Emulator('START\n  END START');
+    const initialVersions = emulator.getRuntimeSyncVersions();
+    const snapshot = emulator.getRegisterSnapshot();
+
+    snapshot[8] = 99;
+    expect(emulator.getRegisters()[8]).toBe(0);
+
+    emulator.setRegisterValue(8, 42);
+    expect(emulator.getRegisters()[8]).toBe(42);
+    expect(emulator.getRuntimeSyncVersions().registers).toBeGreaterThan(initialVersions.registers);
+    expect(() => emulator.setRegisterValue(16, 0)).toThrow(RangeError);
+  });
 });
 
 describe('Emulator - structured execution facade', () => {
