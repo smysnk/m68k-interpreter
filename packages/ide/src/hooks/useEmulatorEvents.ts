@@ -1,8 +1,18 @@
 import { useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Emulator, type ExecutionState, type UndoCaptureMode } from '@m68k/interpreter';
+import {
+  DEFAULT_EASY68K_HARDWARE_DEVICE_CONFIG,
+  Emulator,
+  type ExecutionState,
+  type UndoCaptureMode,
+} from '@m68k/interpreter';
 import { createInProcessIdeRuntimeSession } from '@/runtime/ideRuntimeSession';
-import { ideStore, selectActiveFile, selectPanelRuntimeSurfacePolicy } from '@/store';
+import {
+  getPanelHardwareDeviceConfigs,
+  ideStore,
+  selectActiveFile,
+  selectPanelRuntimeSurfacePolicy,
+} from '@/store';
 import { runEmulationFrame } from '@/runtime/executionLoop';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import {
@@ -68,6 +78,19 @@ function toWorkerDelayMs(delaySeconds: number): number {
   }
 
   return Math.max(Math.round(delaySeconds * 1000), FRAME_FALLBACK_MS);
+}
+
+function getConfiguredHardwareDevices() {
+  const state = ideStore.getState();
+  const devices = getPanelHardwareDeviceConfigs(
+    Object.values(state.panelLayout.activeLayout.instances)
+  );
+  return devices.length > 0
+    ? devices
+    : [{
+        ...DEFAULT_EASY68K_HARDWARE_DEVICE_CONFIG,
+        ...state.hardware.config,
+      }];
 }
 
 async function setRuntimeUndoCaptureModeAsync(
@@ -492,7 +515,7 @@ export const useEmulatorEvents = () => {
               new Emulator(code, {
                 columns,
                 rows,
-                hardwareConfig: ideStore.getState().hardware.config,
+                hardwareDevices: getConfiguredHardwareDevices(),
               })
             );
 
@@ -556,7 +579,7 @@ export const useEmulatorEvents = () => {
           await disposeRuntime(emulator);
           return null;
         }
-        await runtimeCommandPort.configureHardware(ideStore.getState().hardware.config);
+        await runtimeCommandPort.configureHardwareDevices(getConfiguredHardwareDevices());
       } else {
         syncRuntimeGeometryBridge(emulator, columns, rows);
       }

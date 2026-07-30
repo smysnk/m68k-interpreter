@@ -147,6 +147,49 @@ describe('InterpreterWorkerHost', () => {
       payload: { valid: true, conflicts: [], errors: [] },
     });
     expect(getLastFrameSnapshot(events).hardwareSnapshot?.config.displayBase).toBe(0xe00100);
+
+    await host.handleCommand({
+      id: 4,
+      type: 'configureHardwareDevices',
+      devices: [
+        {
+          id: 'display-a',
+          deviceType: 'display',
+          displayBase: 0xe00000,
+          ledAddress: 0,
+          switchAddress: 0,
+          buttonAddress: 0,
+        },
+        {
+          id: 'digital-a',
+          deviceType: 'digital-io',
+          displayBase: 0,
+          ledAddress: 0xe00040,
+          switchAddress: 0xe00040,
+          buttonAddress: 0xe00042,
+        },
+      ],
+    });
+    expect(events.at(-1)).toMatchObject({
+      type: 'reply',
+      id: 4,
+      ok: true,
+      payload: { valid: true, conflicts: [], errors: [] },
+    });
+    expect(getLastFrameSnapshot(events).hardwareSnapshot?.devices).toHaveLength(2);
+
+    await host.handleCommand({
+      id: 5,
+      type: 'setHardwareToggle',
+      deviceId: 'digital-a',
+      bit: 0,
+      enabled: true,
+    });
+    expect(
+      getLastFrameSnapshot(events).hardwareSnapshot?.devices.find(
+        (device) => device.id === 'digital-a'
+      )?.switches
+    ).toBe(1);
   });
 
   it('runs a bounded automatic IRQ scheduler and cancels it deterministically', async () => {

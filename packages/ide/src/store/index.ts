@@ -14,12 +14,13 @@ import filesReducer, {
 } from '@/store/filesSlice';
 import {
   readPersistedIdeState,
+  normalizePersistedHardwarePreferences,
   writePersistedIdeState,
   type PersistedIdeState,
 } from '@/store/persistence';
 import settingsReducer, { initialSettingsState } from '@/store/settingsSlice';
 import uiShellReducer, { initialUiShellState } from '@/store/uiShellSlice';
-import hardwareReducer, { initialHardwareState } from '@/store/hardwareSlice';
+import hardwareReducer from '@/store/hardwareSlice';
 import panelLayoutReducer, { initialPanelLayoutState } from '@/store/panelLayoutSlice';
 import { migrateLegacyPanelLayout, normalizePanelLayoutState } from '@/store/panelLayoutValidation';
 import { resetEmulatorState, setEditorCode } from '@/store/emulatorSlice';
@@ -192,6 +193,7 @@ export function createIdeStore() {
         ...persisted.settings,
       }
     : initialState.settings;
+  const hydratedHardware = normalizePersistedHardwarePreferences(persisted?.hardware);
   const preloadedState = {
     ...initialState,
     emulator: {
@@ -200,17 +202,7 @@ export function createIdeStore() {
     },
     files,
     settings: hydratedSettings,
-    hardware: persisted?.hardware
-      ? {
-          ...initialHardwareState,
-          ...persisted.hardware,
-          config: {
-            ...initialHardwareState.config,
-            ...persisted.hardware.config,
-          },
-          configurationOpen: false,
-        }
-      : initialState.hardware,
+    hardware: hydratedHardware ?? initialState.hardware,
     uiShell: persisted?.uiShell
       ? {
           ...initialUiShellState,

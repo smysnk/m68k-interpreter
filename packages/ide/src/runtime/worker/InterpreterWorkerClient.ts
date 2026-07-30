@@ -16,7 +16,9 @@ import {
   type TerminalSnapshot,
   type UndoCaptureMode,
   DEFAULT_EASY68K_HARDWARE_CONFIG,
+  DEFAULT_EASY68K_HARDWARE_DEVICE_ID,
   type Easy68kHardwareConfig,
+  type Easy68kHardwareDeviceConfig,
   type Easy68kHardwareSnapshot,
   type Easy68kHardwareValidationResult,
   type InterruptRequestResult,
@@ -155,6 +157,20 @@ function createEmptyWorkerClientCache(): WorkerClientCache {
       buttons: 0xff,
       version: 0,
       outputVersion: 0,
+      topologyVersion: 0,
+      devices: [
+        {
+          id: DEFAULT_EASY68K_HARDWARE_DEVICE_ID,
+          deviceType: 'board',
+          config: { ...DEFAULT_EASY68K_HARDWARE_CONFIG },
+          display: new Array(8).fill(0),
+          leds: 0,
+          switches: 0,
+          buttons: 0xff,
+          version: 0,
+          outputVersion: 0,
+        },
+      ],
     },
   };
 }
@@ -376,17 +392,31 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
     };
   }
 
-  requestSetHardwareToggle(bit: number, enabled: boolean): Promise<void> {
+  async requestConfigureHardwareDevices(
+    devices: readonly Easy68kHardwareDeviceConfig[]
+  ): Promise<Easy68kHardwareValidationResult> {
+    const payload = await this.postHardwareCommand<Easy68kHardwareValidationResult>({
+      type: 'configureHardwareDevices',
+      devices: devices.map((device) => ({ ...device })),
+    }, (result) => result?.valid === true, true);
+    return payload ?? {
+      valid: false,
+      conflicts: [],
+      errors: ['Hardware device configuration was not acknowledged'],
+    };
+  }
+
+  requestSetHardwareToggle(bit: number, enabled: boolean, deviceId?: string): Promise<void> {
     return this.postHardwareCommand<void>(
-      { type: 'setHardwareToggle', bit, enabled },
+      { type: 'setHardwareToggle', bit, enabled, ...(deviceId ? { deviceId } : {}) },
       () => true,
       true
     );
   }
 
-  requestSetHardwareButton(bit: number, pressed: boolean): Promise<void> {
+  requestSetHardwareButton(bit: number, pressed: boolean, deviceId?: string): Promise<void> {
     return this.postHardwareCommand<void>(
-      { type: 'setHardwareButton', bit, pressed },
+      { type: 'setHardwareButton', bit, pressed, ...(deviceId ? { deviceId } : {}) },
       () => true,
       true
     );
@@ -624,6 +654,11 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
       ...this.cache.hardwareSnapshot,
       config: { ...this.cache.hardwareSnapshot.config },
       display: [...this.cache.hardwareSnapshot.display],
+      devices: this.cache.hardwareSnapshot.devices.map((device) => ({
+        ...device,
+        config: { ...device.config },
+        display: [...device.display],
+      })),
     };
   }
 
@@ -771,6 +806,11 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
         ...snapshot.hardwareSnapshot,
         config: { ...snapshot.hardwareSnapshot.config },
         display: [...snapshot.hardwareSnapshot.display],
+        devices: snapshot.hardwareSnapshot.devices.map((device) => ({
+          ...device,
+          config: { ...device.config },
+          display: [...device.display],
+        })),
       };
       hardwareSurfaceStore.publish(this.cache.hardwareSnapshot);
       const visibleAtMs =

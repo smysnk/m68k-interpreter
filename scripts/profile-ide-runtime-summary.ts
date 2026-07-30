@@ -587,23 +587,32 @@ async function profileHardwareScenario(
       ).__M68K_IDE_PERF__?.reset?.();
     });
     const introStartedAt = performance.now();
-    await page.evaluate(() => {
-      (
-        window as typeof window & {
-          __M68K_IDE_TEST_CONTROLS__?: { setWorkspaceTab?: (value: 'hardware') => void };
-        }
-      ).__M68K_IDE_TEST_CONTROLS__?.setWorkspaceTab?.('hardware');
-    });
-    await page.getByTestId('hardware-panel-preview').waitFor({ state: 'visible', timeout: 30_000 });
+    if (compact) {
+      await page.evaluate(() => {
+        (
+          window as typeof window & {
+            __M68K_IDE_TEST_CONTROLS__?: { setWorkspaceTab?: (value: 'hardware') => void };
+          }
+        ).__M68K_IDE_TEST_CONTROLS__?.setWorkspaceTab?.('hardware');
+      });
+    }
+    await page.locator('[data-panel-kind="hardware-display"]').waitFor({ state: 'visible', timeout: 30_000 });
     await page.waitForTimeout(400);
     const introElapsedMs = performance.now() - introStartedAt;
     const heapBefore = await readHeapSize(page);
     const gameplayStartedAt = performance.now();
 
-    await page.evaluate(async (source) => {
-      const runtime = (window as typeof window & { emulatorInstance?: any }).emulatorInstance;
-      await runtime?.controller?.requestLoadProgram?.(source, 80, 25);
-      await runtime?.controller?.requestRun?.({ delayMs: 0, speedMultiplier: 1 });
+    await page.evaluate((source) => {
+      const controls = (
+        window as typeof window & {
+          __M68K_IDE_TEST_CONTROLS__?: {
+            loadSource?: (program: string) => void;
+            runProgram?: () => void;
+          };
+        }
+      ).__M68K_IDE_TEST_CONTROLS__;
+      controls?.loadSource?.(source);
+      controls?.runProgram?.();
     }, HARDWARE_PROFILE_SOURCE);
 
     await page.evaluate(async () => {
@@ -614,9 +623,6 @@ async function profileHardwareScenario(
         button?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
       }
 
-      document.querySelector<HTMLButtonElement>('.hardware-configure-disclosure')?.click();
-      await new Promise(requestAnimationFrame);
-      await new Promise(requestAnimationFrame);
       const displayAddress = document.querySelector<HTMLInputElement>('[aria-label="Display base address"]');
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
       for (const value of ['00E00100', '00E00000']) {

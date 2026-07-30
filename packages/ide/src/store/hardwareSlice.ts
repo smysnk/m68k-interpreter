@@ -9,14 +9,12 @@ export interface HardwarePreferencesState {
   config: Easy68kHardwareConfig;
   automaticInterruptLevels: number[];
   automaticInterruptIntervalMs: number;
-  configurationOpen: boolean;
 }
 
 export const initialHardwareState: HardwarePreferencesState = {
   config: { ...DEFAULT_EASY68K_HARDWARE_CONFIG },
   automaticInterruptLevels: [],
   automaticInterruptIntervalMs: 1000,
-  configurationOpen: false,
 };
 
 const hardwareSlice = createSlice({
@@ -25,12 +23,6 @@ const hardwareSlice = createSlice({
   reducers: {
     setHardwareConfig(state, action: PayloadAction<Easy68kHardwareConfig>) {
       state.config = { ...action.payload };
-    },
-    restoreHardwareDefaults(state) {
-      state.config = { ...DEFAULT_EASY68K_HARDWARE_CONFIG };
-    },
-    setHardwareConfigurationOpen(state, action: PayloadAction<boolean>) {
-      state.configurationOpen = action.payload;
     },
     toggleAutomaticInterruptLevel(state, action: PayloadAction<number>) {
       const level = action.payload;
@@ -55,8 +47,6 @@ const hardwareSlice = createSlice({
 
 export const {
   setHardwareConfig,
-  restoreHardwareDefaults,
-  setHardwareConfigurationOpen,
   toggleAutomaticInterruptLevel,
   setAutomaticInterruptInterval,
   resetHardwarePreferences,

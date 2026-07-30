@@ -4,6 +4,7 @@ import { runtimeSessionStore } from '@/runtime/runtimeSessionStore';
 import type { TerminalTouchPacket, TerminalTouchProtocolSymbols } from '@/runtime/terminalTouchProtocol';
 import type {
   Easy68kHardwareConfig,
+  Easy68kHardwareDeviceConfig,
   Easy68kHardwareValidationResult,
   InterruptRequestResult,
   UndoCaptureMode,
@@ -29,6 +30,8 @@ export class RuntimeCommandPort {
   private automaticInterruptTimer: ReturnType<typeof setTimeout> | null = null;
   private automaticInterruptLevels: number[] = [];
   private automaticInterruptIntervalMs = 1000;
+  private automaticInterruptConfigurationKey = '';
+  private hardwareDeviceConfigurationKey = '';
 
   constructor(private readonly sessions: RuntimeSessionStore) {}
 
@@ -64,6 +67,7 @@ export class RuntimeCommandPort {
   }
 
   loadProgram(source: string, columns: number, rows: number): Promise<void> {
+    this.hardwareDeviceConfigurationKey = '';
     return this.enqueue(async (runtime) => {
       await runtime.controller?.requestLoadProgram(source, columns, rows);
     });
@@ -138,23 +142,86 @@ export class RuntimeCommandPort {
     });
   }
 
-  setHardwareToggle(bit: number, enabled: boolean): Promise<void> {
+  configureHardwareDevices(
+    devices: readonly Easy68kHardwareDeviceConfig[]
+  ): Promise<Easy68kHardwareValidationResult> {
+    const normalized = devices.map((device) => ({ ...device }));
+    const signature = normalized
+      .map(
+        (device) =>
+          `${device.id}:${device.deviceType ?? 'board'}:${device.displayBase}:${device.ledAddress}:${device.switchAddress}:${device.buttonAddress}`
+      )
+      .join('|');
+    const key = `${this.sessions.getSnapshot().epoch}:${signature}`;
+    if (key === this.hardwareDeviceConfigurationKey) {
+      return Promise.resolve({
+        valid: true,
+        devices: normalized,
+        conflicts: [],
+        errors: [],
+      });
+    }
+    this.hardwareDeviceConfigurationKey = key;
+    const operation = this.enqueue(async (runtime) => {
+      if (runtime.controller) {
+        return await runtime.controller.requestConfigureHardwareDevices(normalized);
+      }
+      if (!runtime.configureHardwareDevices) {
+        return { valid: false, conflicts: [], errors: ['Hardware device runtime is unavailable'] };
+      }
+      const result = runtime.configureHardwareDevices(normalized);
+      publishInProcessHardware(runtime);
+      return result;
+    });
+    return operation.then(
+      (result) => {
+        if (!result.valid && this.hardwareDeviceConfigurationKey === key) {
+          this.hardwareDeviceConfigurationKey = '';
+        }
+        return result;
+      },
+      (error) => {
+        if (this.hardwareDeviceConfigurationKey === key) {
+          this.hardwareDeviceConfigurationKey = '';
+        }
+        throw error;
+      }
+    );
+  }
+
+  setHardwareToggle(bit: number, enabled: boolean, deviceId?: string): Promise<void> {
     return this.enqueue(async (runtime) => {
       if (runtime.controller) {
-        await runtime.controller.requestSetHardwareToggle(bit, enabled);
+        if (deviceId) {
+          await runtime.controller.requestSetHardwareToggle(bit, enabled, deviceId);
+        } else {
+          await runtime.controller.requestSetHardwareToggle(bit, enabled);
+        }
       } else {
-        runtime.setHardwareToggle?.(bit, enabled);
+        if (deviceId) {
+          runtime.setHardwareToggle?.(bit, enabled, deviceId);
+        } else {
+          runtime.setHardwareToggle?.(bit, enabled);
+        }
         publishInProcessHardware(runtime);
       }
     });
   }
 
-  setHardwareButton(bit: number, pressed: boolean): Promise<void> {
+  setHardwareButton(bit: number, pressed: boolean, deviceId?: string): Promise<void> {
     return this.enqueue(async (runtime) => {
       if (runtime.controller) {
-        await runtime.controller.requestSetHardwareButton(bit, pressed);
+        if (deviceId) {
+          await runtime.controller.requestSetHardwareButton(bit, pressed, deviceId);
+        } else {
+          await runtime.controller.requestSetHardwareButton(bit, pressed);
+        }
       } else {
-        runtime.setHardwareButton?.(bit, pressed);
+        if (deviceId) {
+          runtime.setHardwareButton?.(bit, pressed, deviceId);
+        } else {
+          runtime.setHardwareButton?.(bit, pressed);
+        }
         publishInProcessHardware(runtime);
       }
     });
@@ -170,22 +237,36 @@ export class RuntimeCommandPort {
   }
 
   configureAutomaticInterrupts(levels: number[], intervalMs: number): Promise<void> {
-    return this.enqueue(async (runtime) => {
+    const normalizedLevels = [...new Set(levels)]
+      .filter((level) => Number.isInteger(level) && level >= 1 && level <= 7)
+      .sort((left, right) => right - left);
+    const normalizedInterval = Math.max(50, Math.round(intervalMs) || 50);
+    const key = `${this.sessions.getSnapshot().epoch}:${normalizedLevels.join(',')}:${normalizedInterval}`;
+    if (key === this.automaticInterruptConfigurationKey) {
+      return Promise.resolve();
+    }
+    this.automaticInterruptConfigurationKey = key;
+    const operation = this.enqueue(async (runtime) => {
       if (runtime.controller) {
-        await runtime.controller.requestConfigureAutomaticInterrupts(levels, intervalMs);
+        await runtime.controller.requestConfigureAutomaticInterrupts(normalizedLevels, normalizedInterval);
         return;
       }
       this.cancelLocalAutomaticInterrupts();
-      this.automaticInterruptLevels = [...new Set(levels)]
-        .filter((level) => Number.isInteger(level) && level >= 1 && level <= 7)
-        .sort((left, right) => right - left);
-      this.automaticInterruptIntervalMs = Math.max(50, Math.round(intervalMs) || 50);
+      this.automaticInterruptLevels = normalizedLevels;
+      this.automaticInterruptIntervalMs = normalizedInterval;
       this.scheduleLocalAutomaticInterruptTick();
+    });
+    return operation.catch((error) => {
+      if (this.automaticInterruptConfigurationKey === key) {
+        this.automaticInterruptConfigurationKey = '';
+      }
+      throw error;
     });
   }
 
   cancelAutomaticInterrupts(): Promise<void> {
     this.cancelLocalAutomaticInterrupts();
+    this.automaticInterruptConfigurationKey = '';
     return this.enqueue(async (runtime) => {
       await runtime.controller?.requestCancelAutomaticInterrupts();
     });
@@ -235,6 +316,8 @@ export class RuntimeCommandPort {
 
   reset(): Promise<void> {
     this.cancelLocalAutomaticInterrupts();
+    this.automaticInterruptConfigurationKey = '';
+    this.hardwareDeviceConfigurationKey = '';
     return this.enqueue(async (runtime) => {
       if (runtime.controller) {
         await runtime.controller.requestCancelAutomaticInterrupts();

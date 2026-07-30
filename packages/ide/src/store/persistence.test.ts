@@ -93,15 +93,15 @@ describe('store persistence', () => {
 
   it('debounces panel-only writes and restores the versioned active workspace', async () => {
     const store = createIdeStore();
-    store.dispatch(createPanel({ kind: 'hardware' }));
+    store.dispatch(createPanel({ kind: 'hardware-display' }));
 
     await new Promise((resolve) => window.setTimeout(resolve, 280));
 
     const persisted = readPersistedIdeState();
     expect(persisted?.schemaVersion).toBe(2);
-    expect(Object.values(persisted?.panelLayout?.activeLayout.instances ?? {}).some((panel) => panel.kind === 'hardware')).toBe(true);
+    expect(Object.values(persisted?.panelLayout?.activeLayout.instances ?? {}).some((panel) => panel.kind === 'hardware-display')).toBe(true);
 
     const hydrated = createIdeStore();
-    expect(Object.values(hydrated.getState().panelLayout.activeLayout.instances).some((panel) => panel.kind === 'hardware')).toBe(true);
+    expect(Object.values(hydrated.getState().panelLayout.activeLayout.instances).some((panel) => panel.kind === 'hardware-display')).toBe(true);
   });
 });

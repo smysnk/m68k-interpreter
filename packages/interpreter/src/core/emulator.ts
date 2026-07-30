@@ -13,6 +13,7 @@ import { TerminalDevice, type TerminalMeta, type TerminalSnapshot } from '../dev
 import {
   Easy68kHardware,
   type Easy68kHardwareConfig,
+  type Easy68kHardwareDeviceConfig,
   type Easy68kHardwareSnapshot,
   type Easy68kHardwareValidationResult,
 } from '../devices/easy68kHardware';
@@ -51,12 +52,10 @@ import {
   rorOP,
 } from './operations';
 import type { RuntimeSyncVersions } from '../types/emulator';
-import {
-  enterInterruptStatus,
-  isInterruptLevelEligible,
-  isSupervisorMode,
-} from './statusRegister';
+import { enterInterruptStatus, isInterruptLevelEligible, isSupervisorMode } from './statusRegister';
 import { getEasy68kInterruptVectorAddress } from '../devices/easy68kHardware';
+import type { CpuDiagnostic, StepResult } from './execution';
+import type { CpuProfile } from '../isa/types';
 
 // Token type constants
 const TOKEN_IMMEDIATE = 0;
@@ -78,9 +77,11 @@ export type InterruptRequestResult = 'accepted' | 'masked' | 'rejected';
 export interface EmulatorOptions {
   columns?: number;
   rows?: number;
+  cpuProfile?: CpuProfile;
   undoMode?: UndoCaptureMode;
   undoCheckpointInterval?: number;
   hardwareConfig?: Easy68kHardwareConfig;
+  hardwareDevices?: readonly Easy68kHardwareDeviceConfig[];
 }
 
 function normalizeUndoCheckpointInterval(value: number | undefined): number {
@@ -128,6 +129,7 @@ export class Emulator {
   private pendingInputTask: number | undefined;
   private pendingExternalInterruptAddress: number | undefined;
   private pendingInterruptLevels = new Set<number>();
+  private readonly cpuProfile: CpuProfile;
   private undoCaptureMode: UndoCaptureMode;
   private undoCheckpointInterval: number;
   private instructionsSinceUndoSnapshot = 0;
@@ -135,17 +137,15 @@ export class Emulator {
   private executionSyncVersion = 1;
   private diagnosticsSyncVersion = 1;
 
-  constructor(
-    program: ProgramSource = '',
-    options: EmulatorOptions = {}
-  ) {
+  constructor(program: ProgramSource = '', options: EmulatorOptions = {}) {
     this.memory = new Memory();
     this.undo = new Undo();
     this.terminal = new TerminalDevice({
       columns: options.columns,
       rows: options.rows,
     });
-    this.hardware = new Easy68kHardware(options.hardwareConfig);
+    this.hardware = new Easy68kHardware(options.hardwareDevices ?? options.hardwareConfig);
+    this.cpuProfile = options.cpuProfile ?? 'easy68k';
     this.updateHardwareAddressWindow();
     this.undoCaptureMode = options.undoMode ?? 'full';
     this.undoCheckpointInterval = normalizeUndoCheckpointInterval(options.undoCheckpointInterval);
@@ -284,7 +284,7 @@ export class Emulator {
     }
 
     for (const [symbolName, symbolAddress] of Object.entries(this.symbolLookup)) {
-      if ((symbolAddress >>> 0) !== normalizedAddress) {
+      if (symbolAddress >>> 0 !== normalizedAddress) {
         continue;
       }
 
@@ -298,10 +298,6 @@ export class Emulator {
   }
 
   private pushUndoSnapshot(lastInstruction = this.lastInstruction, line = this.line): void {
-    if (this.undo.isAtCapacity()) {
-      return;
-    }
-
     this.undo.push({
       cpu: {
         pc: this.pc,
@@ -310,7 +306,7 @@ export class Emulator {
         ssp: this.getSSP(),
         registers: this.registers,
       },
-      memory: this.memory.createSnapshot(),
+      memoryPages: [],
       deviceOutputs: this.hardware.getOutputSnapshot(),
       diagnostics: {
         errors: this.errors,
@@ -499,11 +495,12 @@ export class Emulator {
 
   private readBusLong(address: number): number {
     return (
-      (this.readBusByte(address) << 24) |
-      (this.readBusByte(address + 1) << 16) |
-      (this.readBusByte(address + 2) << 8) |
-      this.readBusByte(address + 3)
-    ) >>> 0;
+      ((this.readBusByte(address) << 24) |
+        (this.readBusByte(address + 1) << 16) |
+        (this.readBusByte(address + 2) << 8) |
+        this.readBusByte(address + 3)) >>>
+      0
+    );
   }
 
   private writeBusByte(address: number, value: number): void {
@@ -513,21 +510,24 @@ export class Emulator {
       normalized > this.hardwareAddressMax ||
       !this.hardware.writeByte(normalized, value)
     ) {
+      const undoFrame = this.undo.peek();
+      if (undoFrame !== undefined) {
+        const pageIndex = Math.floor(normalized / this.memory.getPageSize());
+        const pageAlreadyCaptured = undoFrame.memoryPages.some(
+          (entry) => entry.pageIndex === pageIndex
+        );
+        if (!pageAlreadyCaptured) {
+          undoFrame.memoryPages.push(this.memory.captureUndoPage(pageIndex));
+        }
+      }
       this.memory.setByte(normalized, value & BYTE_MASK);
     }
   }
 
   private updateHardwareAddressWindow(): void {
-    const config = this.hardware.getSnapshot().config;
-    const addresses = [
-      config.displayBase,
-      config.displayBase + 14,
-      config.ledAddress,
-      config.switchAddress,
-      config.buttonAddress,
-    ];
-    this.hardwareAddressMin = Math.min(...addresses);
-    this.hardwareAddressMax = Math.max(...addresses);
+    const range = this.hardware.getAddressRange();
+    this.hardwareAddressMin = range?.minAddress ?? 1;
+    this.hardwareAddressMax = range?.maxAddress ?? 0;
   }
 
   private writeBusWord(address: number, value: number): void {
@@ -611,6 +611,65 @@ export class Emulator {
         this.registers[baseRegister] += step;
       }
 
+      return;
+    }
+
+    this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
+  }
+
+  private prepareReadModifyWriteAddress(op: Operand, size: number): number | null | undefined {
+    if (op.type === TOKEN_OFFSET) {
+      return op.value;
+    }
+
+    if (op.type !== TOKEN_OFFSET_ADDR) {
+      return undefined;
+    }
+
+    if (op.preDecrement) {
+      this.registers[op.value] -= this.getTransferSize(size, op.value);
+    }
+
+    const address = this.resolveOperandAddress(op);
+    return address === undefined ? null : address;
+  }
+
+  private readReadModifyWriteOperand(
+    op: Operand,
+    size: number,
+    address: number | undefined
+  ): number | undefined {
+    let value: number | undefined;
+
+    if (op.type === TOKEN_REG_DATA || op.type === TOKEN_REG_ADDR) {
+      value = this.registers[op.value];
+    } else if (op.type === TOKEN_OFFSET || op.type === TOKEN_OFFSET_ADDR) {
+      value = address === undefined ? undefined : this.readMemoryValue(address, size);
+    } else {
+      this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
+      return undefined;
+    }
+
+    if (op.type === TOKEN_OFFSET_ADDR && op.postIncrement) {
+      this.registers[op.value] += this.getTransferSize(size, op.value);
+    }
+
+    return value;
+  }
+
+  private writeReadModifyWriteOperand(
+    op: Operand,
+    size: number,
+    address: number | undefined,
+    value: number
+  ): void {
+    if (op.type === TOKEN_REG_DATA || op.type === TOKEN_REG_ADDR) {
+      this.registers[op.value] = value;
+      return;
+    }
+
+    if ((op.type === TOKEN_OFFSET || op.type === TOKEN_OFFSET_ADDR) && address !== undefined) {
+      this.writeMemoryValue(address, size, value);
       return;
     }
 
@@ -748,7 +807,7 @@ export class Emulator {
 
     this.maybeCaptureUndoSnapshot(true);
 
-    const nextStackPointer = (((this.registers[STACK_POINTER_REGISTER] >>> 0) - 4) >>> 0);
+    const nextStackPointer = ((this.registers[STACK_POINTER_REGISTER] >>> 0) - 4) >>> 0;
     this.registers[STACK_POINTER_REGISTER] = nextStackPointer;
     this.writeBusLong(nextStackPointer, this.pc >>> 0);
     this.waitingForInput = false;
@@ -915,6 +974,50 @@ export class Emulator {
     } finally {
       this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
     }
+  }
+
+  stepInstruction(): StepResult {
+    const pcBefore = this.pc;
+    const shouldStop = this.emulationStep();
+
+    if (this.exception !== undefined) {
+      return {
+        kind: 'exception',
+        pc: this.pc,
+        fault: {
+          code: 'legacy-execution-exception',
+          message: this.exception,
+          source: this.line > 0 ? { line: this.line } : undefined,
+        },
+      };
+    }
+
+    if (this.waitingForInput) {
+      return {
+        kind: 'waiting',
+        pc: this.pc,
+      };
+    }
+
+    if (this.halted) {
+      return {
+        kind: 'halted',
+        pc: this.pc,
+      };
+    }
+
+    if (shouldStop) {
+      return {
+        kind: 'completed',
+        pc: this.pc,
+      };
+    }
+
+    return {
+      kind: 'executed',
+      pcBefore,
+      pcAfter: this.pc,
+    };
   }
 
   /**
@@ -1318,14 +1421,16 @@ export class Emulator {
     if (op1 === undefined || op2 === undefined) return;
 
     const src = this.readOperandValue(op1, size);
-    const dest = this.readOperandValue(op2, size);
+    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
+    if (destAddress === null) return;
+    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
 
     if (src === undefined || dest === undefined) {
       return;
     }
 
     const [result, newCCR] = addOP(src, dest, this.ccr, size, isSub);
-    this.writeOperandValue(op2, size, result);
+    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
     this.ccr = newCCR;
   }
 
@@ -1352,13 +1457,15 @@ export class Emulator {
       return;
     }
 
-    const dest = this.readOperandValue(op2, size);
+    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
+    if (destAddress === null) return;
+    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
     if (dest === undefined) {
       return;
     }
 
     const [result, newCCR] = addOP(op1.value, dest, this.ccr, size, false);
-    this.writeOperandValue(op2, size, result);
+    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
     this.ccr = newCCR;
   }
 
@@ -1376,13 +1483,15 @@ export class Emulator {
       return;
     }
 
-    const dest = this.readOperandValue(op2, size);
+    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
+    if (destAddress === null) return;
+    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
     if (dest === undefined) {
       return;
     }
 
     const [result, newCCR] = addOP(op1.value, dest, this.ccr, size, false);
-    this.writeOperandValue(op2, size, result);
+    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
     this.ccr = newCCR;
   }
 
@@ -1408,13 +1517,15 @@ export class Emulator {
       return;
     }
 
-    const dest = this.readOperandValue(op2, size);
+    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
+    if (destAddress === null) return;
+    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
     if (dest === undefined) {
       return;
     }
 
     const [result, newCCR] = addOP(op1.value, dest, this.ccr, size, true);
-    this.writeOperandValue(op2, size, result);
+    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
     this.ccr = newCCR;
   }
 
@@ -1432,13 +1543,15 @@ export class Emulator {
       return;
     }
 
-    const dest = this.readOperandValue(op2, size);
+    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
+    if (destAddress === null) return;
+    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
     if (dest === undefined) {
       return;
     }
 
     const [result, newCCR] = addOP(op1.value, dest, this.ccr, size, true);
-    this.writeOperandValue(op2, size, result);
+    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
     this.ccr = newCCR;
   }
 
@@ -1528,13 +1641,15 @@ export class Emulator {
   }
 
   private clr(size: number, op: Operand): void {
-    const currentValue = this.readOperandValue(op, size);
+    const address = this.prepareReadModifyWriteAddress(op, size);
+    if (address === null) return;
+    const currentValue = this.readReadModifyWriteOperand(op, size, address);
     if (currentValue === undefined) {
       return;
     }
 
     const [result, newCCR] = clrOP(size, currentValue, this.ccr);
-    this.writeOperandValue(op, size, result);
+    this.writeReadModifyWriteOperand(op, size, address, result);
     this.ccr = newCCR;
   }
 
@@ -1590,13 +1705,15 @@ export class Emulator {
     if (op1 === undefined || op2 === undefined) return;
 
     const src = this.readOperandValue(op1, size);
-    const dest = this.readOperandValue(op2, size);
+    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
+    if (destAddress === null) return;
+    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
     if (src === undefined || dest === undefined) {
       return;
     }
 
     const [result, newCCR] = andOP(size, src, dest, this.ccr);
-    this.writeOperandValue(op2, size, result);
+    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
     this.ccr = newCCR;
   }
 
@@ -1604,13 +1721,15 @@ export class Emulator {
     if (op1 === undefined || op2 === undefined) return;
 
     const src = this.readOperandValue(op1, size);
-    const dest = this.readOperandValue(op2, size);
+    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
+    if (destAddress === null) return;
+    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
     if (src === undefined || dest === undefined) {
       return;
     }
 
     const [result, newCCR] = andOP(size, src, dest, this.ccr);
-    this.writeOperandValue(op2, size, result);
+    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
     this.ccr = newCCR;
   }
 
@@ -1618,13 +1737,15 @@ export class Emulator {
     if (op1 === undefined || op2 === undefined) return;
 
     const src = this.readOperandValue(op1, size);
-    const dest = this.readOperandValue(op2, size);
+    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
+    if (destAddress === null) return;
+    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
     if (src === undefined || dest === undefined) {
       return;
     }
 
     const [result, newCCR] = orOP(size, src, dest, this.ccr);
-    this.writeOperandValue(op2, size, result);
+    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
     this.ccr = newCCR;
   }
 
@@ -1632,13 +1753,15 @@ export class Emulator {
     if (op1 === undefined || op2 === undefined) return;
 
     const src = this.readOperandValue(op1, size);
-    const dest = this.readOperandValue(op2, size);
+    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
+    if (destAddress === null) return;
+    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
     if (src === undefined || dest === undefined) {
       return;
     }
 
     const [result, newCCR] = orOP(size, src, dest, this.ccr);
-    this.writeOperandValue(op2, size, result);
+    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
     this.ccr = newCCR;
   }
 
@@ -1646,13 +1769,15 @@ export class Emulator {
     if (op1 === undefined || op2 === undefined) return;
 
     const src = this.readOperandValue(op1, size);
-    const dest = this.readOperandValue(op2, size);
+    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
+    if (destAddress === null) return;
+    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
     if (src === undefined || dest === undefined) {
       return;
     }
 
     const [result, newCCR] = eorOP(size, src, dest, this.ccr);
-    this.writeOperandValue(op2, size, result);
+    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
     this.ccr = newCCR;
   }
 
@@ -1660,39 +1785,45 @@ export class Emulator {
     if (op1 === undefined || op2 === undefined) return;
 
     const src = this.readOperandValue(op1, size);
-    const dest = this.readOperandValue(op2, size);
+    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
+    if (destAddress === null) return;
+    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
     if (src === undefined || dest === undefined) {
       return;
     }
 
     const [result, newCCR] = eorOP(size, src, dest, this.ccr);
-    this.writeOperandValue(op2, size, result);
+    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
     this.ccr = newCCR;
   }
 
   private not(size: number, op: Operand): void {
     if (op === undefined) return;
 
-    const currentValue = this.readOperandValue(op, size);
+    const address = this.prepareReadModifyWriteAddress(op, size);
+    if (address === null) return;
+    const currentValue = this.readReadModifyWriteOperand(op, size, address);
     if (currentValue === undefined) {
       return;
     }
 
     const [result, newCCR] = notOP(size, currentValue, this.ccr);
-    this.writeOperandValue(op, size, result);
+    this.writeReadModifyWriteOperand(op, size, address, result);
     this.ccr = newCCR;
   }
 
   private neg(size: number, op: Operand): void {
     if (op === undefined) return;
 
-    const currentValue = this.readOperandValue(op, size);
+    const address = this.prepareReadModifyWriteAddress(op, size);
+    if (address === null) return;
+    const currentValue = this.readReadModifyWriteOperand(op, size, address);
     if (currentValue === undefined) {
       return;
     }
 
     const [result, newCCR] = negOP(size, currentValue, this.ccr);
-    this.writeOperandValue(op, size, result);
+    this.writeReadModifyWriteOperand(op, size, address, result);
     this.ccr = newCCR;
   }
 
@@ -2069,6 +2200,20 @@ export class Emulator {
     return this.registers;
   }
 
+  getRegisterSnapshot(): Int32Array {
+    return Int32Array.from(this.registers);
+  }
+
+  setRegisterValue(register: number, value: number): void {
+    if (!Number.isInteger(register) || register < 0 || register >= this.registers.length) {
+      throw new RangeError(`Register index must be an integer from 0 through 15: ${register}`);
+    }
+
+    const runtimeSyncSnapshot = this.snapshotRuntimeSyncState();
+    this.registers[register] = value | 0;
+    this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
+  }
+
   getCCR(): number {
     return this.ccr;
   }
@@ -2138,12 +2283,33 @@ export class Emulator {
     return result;
   }
 
-  setHardwareToggle(bit: number, enabled: boolean): void {
-    this.hardware.setToggle(bit, enabled);
+  configureHardwareDevices(
+    configs: readonly Easy68kHardwareDeviceConfig[]
+  ): Easy68kHardwareValidationResult {
+    const result = this.hardware.configureDevices(configs);
+    if (result.valid) {
+      this.updateHardwareAddressWindow();
+    }
+    return result;
   }
 
-  setHardwareButton(bit: number, pressed: boolean): void {
-    this.hardware.setButton(bit, pressed);
+  configureHardwareDevice(
+    deviceId: string,
+    config: Easy68kHardwareConfig
+  ): Easy68kHardwareValidationResult {
+    const result = this.hardware.configureDevice(deviceId, config);
+    if (result.valid) {
+      this.updateHardwareAddressWindow();
+    }
+    return result;
+  }
+
+  setHardwareToggle(bit: number, enabled: boolean, deviceId?: string): void {
+    this.hardware.setToggle(bit, enabled, deviceId);
+  }
+
+  setHardwareButton(bit: number, pressed: boolean, deviceId?: string): void {
+    this.hardware.setButton(bit, pressed, deviceId);
   }
 
   getTerminalSnapshot(): TerminalSnapshot {
@@ -2279,8 +2445,34 @@ export class Emulator {
     return this.errors;
   }
 
+  getDiagnostics(): CpuDiagnostic[] {
+    const diagnostics = this.errors.map((message): CpuDiagnostic => ({
+      code: 'legacy-execution-error',
+      severity: 'error',
+      message,
+      source: this.line > 0 ? { line: this.line } : undefined,
+      instructionAddress: this.pc,
+    }));
+
+    if (this.exception !== undefined) {
+      diagnostics.push({
+        code: 'legacy-execution-exception',
+        severity: 'error',
+        message: this.exception,
+        source: this.line > 0 ? { line: this.line } : undefined,
+        instructionAddress: this.pc,
+      });
+    }
+
+    return diagnostics;
+  }
+
   getException(): string | undefined {
     return this.exception;
+  }
+
+  getCpuProfile(): CpuProfile {
+    return this.cpuProfile;
   }
 
   getUndoCaptureMode(): UndoCaptureMode {
@@ -2324,7 +2516,7 @@ export class Emulator {
     this.lastInstruction = frame.execution.lastInstruction;
     this.line = frame.execution.line;
     this.registers = new Int32Array(frame.cpu.registers);
-    this.memory.restoreSnapshot(frame.memory);
+    this.memory.restoreUndoPages(frame.memoryPages);
     this.hardware.restoreOutputSnapshot(frame.deviceOutputs);
     this.errors = [...frame.diagnostics.errors];
     this.waitingForInput = false;

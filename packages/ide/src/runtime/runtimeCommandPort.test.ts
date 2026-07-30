@@ -64,4 +64,45 @@ describe('RuntimeCommandPort', () => {
     expect(requestSetHardwareToggle).toHaveBeenCalledWith(7, true);
     expect(requestSetHardwareButton).toHaveBeenCalledWith(0, true);
   });
+
+  it('deduplicates identical topology and automatic interrupt configuration per runtime epoch', async () => {
+    const sessions = createRuntimeSessionStore();
+    const requestConfigureHardwareDevices = vi.fn().mockResolvedValue({
+      valid: true,
+      conflicts: [],
+      errors: [],
+    });
+    const requestConfigureAutomaticInterrupts = vi.fn().mockResolvedValue(undefined);
+    const session = {
+      controller: {
+        requestConfigureHardwareDevices,
+        requestConfigureAutomaticInterrupts,
+      },
+    } as unknown as IdeRuntimeSession;
+    sessions.replace(session);
+    const port = new RuntimeCommandPort(sessions);
+    const devices = [
+      {
+        id: 'display-a',
+        deviceType: 'display' as const,
+        displayBase: 0xe00000,
+        ledAddress: 0,
+        switchAddress: 0,
+        buttonAddress: 0,
+      },
+    ];
+
+    await port.configureHardwareDevices(devices);
+    await port.configureHardwareDevices(devices);
+    await port.configureAutomaticInterrupts([3, 1], 250);
+    await port.configureAutomaticInterrupts([1, 3, 3], 250);
+    expect(requestConfigureHardwareDevices).toHaveBeenCalledTimes(1);
+    expect(requestConfigureAutomaticInterrupts).toHaveBeenCalledTimes(1);
+
+    sessions.replace({ ...session } as IdeRuntimeSession);
+    await port.configureHardwareDevices(devices);
+    await port.configureAutomaticInterrupts([3, 1], 250);
+    expect(requestConfigureHardwareDevices).toHaveBeenCalledTimes(2);
+    expect(requestConfigureAutomaticInterrupts).toHaveBeenCalledTimes(2);
+  });
 });

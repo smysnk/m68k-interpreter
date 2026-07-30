@@ -34,6 +34,13 @@ export {
   tstOP,
 } from './core/operations';
 export { Strings } from './core/strings';
+export type {
+  CpuDiagnostic,
+  CpuFault,
+  DiagnosticSeverity,
+  SourceSpan,
+  StepResult,
+} from './core/execution';
 export * from './core/statusRegister';
 export { TerminalDevice } from './devices/terminal';
 export {
@@ -60,12 +67,49 @@ export {
   resolveDecodedInstruction,
 } from './instructionDecoder';
 export { loadProgramSource } from './programLoader';
+export { createProgramImage, findProgramSource } from './assembler/programImage';
+export {
+  encodeBranch,
+  encodeIllegal,
+  encodeMoveq,
+  encodeNop,
+  encodeReset,
+  encodeRte,
+  encodeRts,
+  encodeStop,
+  encodeTrap,
+} from './assembler/encoder';
+export { decodeBinaryInstruction } from './cpu/decoder';
+export { evaluateBranchCondition } from './cpu/conditions';
+export { StrictM68000Core } from './cpu/core';
+export { BusFault, RamBus } from './cpu/memoryBus';
+export { M68000State } from './cpu/state';
+export type {
+  ProgramImage,
+  ProgramImageChunk,
+  ProgramSourceMapEntry,
+} from './assembler/programImage';
+export type { BranchCondition } from './assembler/encoder';
+export type { DecodedBinaryInstruction } from './cpu/decoder';
+export type { StrictM68000CoreOptions } from './cpu/core';
+export type { BusAccess, BusAccessSize, BusAccessType, MemoryBus } from './cpu/memoryBus';
+export type { M68000StateOptions } from './cpu/state';
+export { M68000_ISA_MANIFEST, summarizeIsaCoverage, validateIsaManifest } from './isa/manifest';
+export type {
+  CpuProfile,
+  EffectiveAddressClass,
+  FlagEffect,
+  InstructionEncoding,
+  InstructionForm,
+  InstructionSize,
+  InstructionSupport,
+  IsaCoverageSummary,
+  IsaManifestValidationIssue,
+  StatusFlag,
+} from './isa/types';
 export * from './devices/deviceAddressMap';
 export * from './devices/easy68kHardware';
-export type {
-  MemorySnapshot,
-  MemoryUndoPageEntry,
-} from './core/memory';
+export type { MemorySnapshot, MemoryUndoPageEntry } from './core/memory';
 export type {
   MemoryBuffer,
   MemoryBufferAddressRange,

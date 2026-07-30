@@ -3,7 +3,7 @@ export const M68K_ADDRESS_MASK = 0x00ff_ffff;
 export type DeviceAccessDirection = 'read' | 'write';
 
 export interface DeviceAddressDescriptor {
-  device: 'display' | 'leds' | 'switches' | 'buttons';
+  device: string;
   direction: DeviceAccessDirection;
   addresses: readonly number[];
 }
@@ -11,7 +11,7 @@ export interface DeviceAddressDescriptor {
 export interface DeviceAddressConflict {
   address: number;
   direction: DeviceAccessDirection;
-  devices: readonly [DeviceAddressDescriptor['device'], DeviceAddressDescriptor['device']];
+  devices: readonly [string, string];
 }
 
 export function normalizeDeviceAddress(address: number): number {

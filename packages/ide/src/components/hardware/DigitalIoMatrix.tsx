@@ -1,4 +1,8 @@
-import { EASY68K_BIT_ORDER, type Easy68kHardwareSnapshot } from '@m68k/interpreter';
+import {
+  EASY68K_BIT_ORDER,
+  type Easy68kHardwareDeviceSnapshot,
+  type Easy68kHardwareSnapshot,
+} from '@m68k/interpreter';
 import { RenderProfileBoundary } from '@/runtime/idePerformanceTelemetry';
 import { ToggleSwitch } from './ToggleSwitch';
 import { LedIndicator } from './LedIndicator';
@@ -25,7 +29,7 @@ export function DigitalIoMatrix({
   onToggle,
   onButton,
 }: {
-  snapshot: Easy68kHardwareSnapshot;
+  snapshot: Easy68kHardwareSnapshot | Easy68kHardwareDeviceSnapshot;
   onToggle: (bit: number, enabled: boolean) => void;
   onButton: (bit: number, pressed: boolean) => void;
 }) {

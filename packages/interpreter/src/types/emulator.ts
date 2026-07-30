@@ -104,6 +104,8 @@ export interface Emulator {
   flags: ConditionFlags;
   pc: number;
   getRegisters(): Registers;
+  getRegisterSnapshot(): Int32Array;
+  setRegisterValue(register: number, value: number): void;
   getCCR(): number;
   getSR(): number;
   getUSP(): number;
@@ -111,10 +113,13 @@ export interface Emulator {
   getMemory(): MemoryCell;
   getMemoryMeta(): MemoryMeta;
   getRuntimeSyncVersions(): RuntimeSyncVersions;
+  getCpuProfile(): import('../isa/types').CpuProfile;
+  getDiagnostics(): import('../core/execution').CpuDiagnostic[];
   readMemoryRange(address: number, length: number): Uint8Array;
   getFlags(): ConditionFlags;
   getPC(): number;
   step(): boolean; // Returns true if execution ended
+  stepInstruction(): import('../core/execution').StepResult;
   reset(): void;
   undo(): void;
   getLastInstruction(): string;
@@ -127,8 +132,15 @@ export interface Emulator {
   configureHardware(
     config: import('../devices/easy68kHardware').Easy68kHardwareConfig
   ): import('../devices/easy68kHardware').Easy68kHardwareValidationResult;
-  setHardwareToggle(bit: number, enabled: boolean): void;
-  setHardwareButton(bit: number, pressed: boolean): void;
+  configureHardwareDevices(
+    configs: readonly import('../devices/easy68kHardware').Easy68kHardwareDeviceConfig[]
+  ): import('../devices/easy68kHardware').Easy68kHardwareValidationResult;
+  configureHardwareDevice(
+    deviceId: string,
+    config: import('../devices/easy68kHardware').Easy68kHardwareConfig
+  ): import('../devices/easy68kHardware').Easy68kHardwareValidationResult;
+  setHardwareToggle(bit: number, enabled: boolean, deviceId?: string): void;
+  setHardwareButton(bit: number, pressed: boolean, deviceId?: string): void;
   requestInterruptLevel(level: number): import('../core/emulator').InterruptRequestResult;
   getPendingInterruptLevels(): number[];
   raiseExternalInterrupt(handlerAddress: number): boolean;

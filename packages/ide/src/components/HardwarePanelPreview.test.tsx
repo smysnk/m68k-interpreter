@@ -76,10 +76,9 @@ describe('HardwarePanelPreview', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Request interrupt level 5' }));
     await waitFor(() => expect(screen.getByText('IRQ 5 accepted')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: 'Configure addresses' }));
     expect(screen.getByTestId('hardware-address-configuration')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reset hardware' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset simulator' }));
     await waitFor(() => expect(screen.getByRole('img', { name: 'LED output 0x00' })).toBeInTheDocument());
   });
 });

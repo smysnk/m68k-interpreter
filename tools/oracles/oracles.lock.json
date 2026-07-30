@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "oracles": [
+    {
+      "id": "moira",
+      "repository": "https://github.com/dirkwhoffmann/Moira.git",
+      "commit": "1efd69467ca13b27b2fb40febd5cb31dbecdea5f",
+      "license": "MIT",
+      "checkoutPath": "references/moira",
+      "purpose": "Primary functional, cycle, and bus-order oracle",
+      "cpuProfile": "M68000",
+      "options": {
+        "musashiCompatibilityMode": false
+      }
+    },
+    {
+      "id": "musashi",
+      "repository": "https://github.com/kstenerud/Musashi.git",
+      "commit": "313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd",
+      "license": "MIT",
+      "checkoutPath": "references/musashi",
+      "purpose": "Independent mature functional oracle",
+      "cpuProfile": "M68000",
+      "options": {
+        "prefetch": true,
+        "addressError": true
+      }
+    },
+    {
+      "id": "mame-vectors",
+      "repository": "https://github.com/SingleStepTests/m68000.git",
+      "commit": "64b253116a3de04aaac4346c43680960dc9b67e5",
+      "license": "MIT",
+      "checkoutPath": "references/m68000-vectors",
+      "purpose": "MAME-generated single-step state and bus-transaction corpus",
+      "cpuProfile": "M68000",
+      "options": {
+        "quarantinedFamilies": ["TAS", "TRAPV"]
+      }
+    }
+  ]
+}
