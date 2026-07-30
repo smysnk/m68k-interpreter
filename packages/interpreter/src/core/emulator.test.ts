@@ -107,7 +107,10 @@ function expectFixedLinePosition(
   expect(lines[row]?.indexOf(marker)).toBe(column);
 }
 
-function expectBoxedButton(lines: string[], marker: string): {
+function expectBoxedButton(
+  lines: string[],
+  marker: string
+): {
   row: number;
   leftBorder: number;
   rightBorder: number;
@@ -145,7 +148,7 @@ function readArenaWord(emulator: Emulator, x: number, y: number): number {
     throw new Error('Missing symbol: SNK_SCR');
   }
 
-  const offset = boardAddress + ((y * columns + x) * 2);
+  const offset = boardAddress + (y * columns + x) * 2;
   const bytes = emulator.readMemoryRange(offset, 2);
   return ((bytes[0] ?? 0) << 8) | (bytes[1] ?? 0);
 }
@@ -172,7 +175,7 @@ function writeArenaWord(emulator: Emulator, x: number, y: number, value: number)
     throw new Error('Missing symbol: SNK_SCR');
   }
 
-  const offset = boardAddress + ((y * columns + x) * 2);
+  const offset = boardAddress + (y * columns + x) * 2;
   emulator.writeMemoryByte(offset, (value >> 8) & 0xff);
   emulator.writeMemoryByte(offset + 1, value & 0xff);
 }
@@ -318,6 +321,78 @@ START
     expect(emulator.getException()).toBeUndefined();
     expect(emulator.getErrors()).toEqual([]);
     expect(emulator.getRegisters()[8]).toBe(2);
+  });
+});
+
+describe('Emulator - known MC68000 conformance gaps', () => {
+  it.fails('applies postincrement once for a read-modify-write destination', () => {
+    const emulator = new Emulator(`
+VALUE DC.W 1
+START
+  LEA VALUE,A0
+  MOVE.L #1,D0
+  ADD.W D0,(A0)+
+  END START
+`);
+
+    runProgram(emulator);
+
+    const valueAddress = emulator.getSymbolAddress('VALUE');
+    expect(valueAddress).toBeDefined();
+    expect(emulator.getRegisters()[0]).toBe((valueAddress ?? 0) + 2);
+    expect(readSymbolWord(emulator, 'VALUE')).toBe(2);
+  });
+
+  it.fails('applies predecrement once for a read-modify-write destination', () => {
+    const emulator = new Emulator(`
+VALUE DC.W 1
+START
+  CLR.W -(A0)
+  END START
+`);
+    const valueAddress = emulator.getSymbolAddress('VALUE');
+    expect(valueAddress).toBeDefined();
+    emulator.getRegisters()[0] = (valueAddress ?? 0) + 2;
+
+    runProgram(emulator);
+
+    expect(emulator.getRegisters()[0]).toBe(valueAddress);
+    expect(readSymbolWord(emulator, 'VALUE')).toBe(0);
+  });
+
+  it.fails('uses the two-byte A7 step for byte-sized postincrement', () => {
+    const emulator = new Emulator(`
+VALUE DC.B 1
+START
+  CLR.B (A7)+
+  END START
+`);
+    const valueAddress = emulator.getSymbolAddress('VALUE');
+    expect(valueAddress).toBeDefined();
+    emulator.getRegisters()[7] = valueAddress ?? 0;
+
+    runProgram(emulator);
+
+    expect(emulator.getRegisters()[7]).toBe((valueAddress ?? 0) + 2);
+    expect(readSymbolByte(emulator, 'VALUE')).toBe(0);
+  });
+
+  it.fails('keeps undo history rolling after the frame limit is reached', () => {
+    const emulator = new Emulator(`
+START
+  ADDQ.L #1,D0
+  BRA START
+`);
+
+    for (let step = 0; step < 300; step += 1) {
+      emulator.emulationStep();
+    }
+
+    const registerBeforeUndo = emulator.getRegisters()[8];
+    emulator.undoFromStack();
+
+    expect(registerBeforeUndo).toBe(150);
+    expect(emulator.getRegisters()[8]).toBe(registerBeforeUndo);
   });
 });
 
@@ -498,11 +573,7 @@ DONE
   it('executes the real Nibbles startup display path up to the first terminal trap', () => {
     const sourceBytes = new Uint8Array(readFileSync(nibblesPath));
     const emulator = new Emulator(sourceBytes);
-    runUntil(
-      emulator,
-      (instance) => instance.getTerminalMeta().output.length > 0,
-      200
-    );
+    runUntil(emulator, (instance) => instance.getTerminalMeta().output.length > 0, 200);
 
     expect(emulator.getException()).toBeUndefined();
     expect(emulator.getErrors()).toEqual([]);
@@ -700,9 +771,7 @@ _SGETCH
     expectFixedLinePosition(renderedLines, 'SELECT DIFFICULTY', 6, 10);
     expectFixedLinePosition(renderedLines, 'smysnk.com', 21, 3);
     expectFixedLinePosition(renderedLines, 'Joshua Bellamy', 22, 3);
-    expect(renderedLines.findIndex((line) => line.includes('EASY'))).toBeGreaterThan(
-      6
-    );
+    expect(renderedLines.findIndex((line) => line.includes('EASY'))).toBeGreaterThan(6);
     expect(renderedLines.findIndex((line) => line.includes('MEDIUM'))).toBe(
       renderedLines.findIndex((line) => line.includes('EASY')) + 2
     );
@@ -759,7 +828,8 @@ _SGETCH
 
     runUntil(
       emulator,
-      (instance) => instance.getTerminalText().includes('LEVEL:') && instance.getTerminalText().includes('█'),
+      (instance) =>
+        instance.getTerminalText().includes('LEVEL:') && instance.getTerminalText().includes('█'),
       500000
     );
 
@@ -876,7 +946,8 @@ _SGETCH
 
     runUntil(
       emulator,
-      (instance) => instance.getTerminalText().includes('Lv:1') && instance.getTerminalText().includes('█'),
+      (instance) =>
+        instance.getTerminalText().includes('Lv:1') && instance.getTerminalText().includes('█'),
       500000
     );
 
@@ -921,7 +992,8 @@ _SGETCH
 
     runUntil(
       emulator,
-      (instance) => instance.getTerminalText().includes('Lv:1') && instance.getTerminalText().includes('█'),
+      (instance) =>
+        instance.getTerminalText().includes('Lv:1') && instance.getTerminalText().includes('█'),
       500000
     );
 
@@ -977,7 +1049,8 @@ _SGETCH
 
     runUntil(
       emulator,
-      (instance) => instance.getTerminalText().includes('Lv:1') && instance.getTerminalText().includes('█'),
+      (instance) =>
+        instance.getTerminalText().includes('Lv:1') && instance.getTerminalText().includes('█'),
       500000
     );
 
@@ -992,8 +1065,10 @@ _SGETCH
       emulator,
       (instance) =>
         readSymbolByte(instance, 'LIVES') === 4 &&
-        readSymbolByte(instance, 'POS_X') === Math.floor(readSymbolByte(instance, 'BOARD_COLS') / 2) &&
-        readSymbolByte(instance, 'POS_Y') === Math.floor(readSymbolByte(instance, 'BOARD_ROWS') / 2) &&
+        readSymbolByte(instance, 'POS_X') ===
+          Math.floor(readSymbolByte(instance, 'BOARD_COLS') / 2) &&
+        readSymbolByte(instance, 'POS_Y') ===
+          Math.floor(readSymbolByte(instance, 'BOARD_ROWS') / 2) &&
         readSymbolByte(instance, 'FOOD_AVAIL') === 1,
       500000
     );
@@ -1025,7 +1100,8 @@ _SGETCH
 
     runUntil(
       emulator,
-      (instance) => instance.getTerminalText().includes('LEVEL:') && instance.getTerminalText().includes('█'),
+      (instance) =>
+        instance.getTerminalText().includes('LEVEL:') && instance.getTerminalText().includes('█'),
       500000
     );
 
@@ -1040,8 +1116,10 @@ _SGETCH
       emulator,
       (instance) =>
         readSymbolByte(instance, 'LIVES') === 4 &&
-        readSymbolByte(instance, 'POS_X') === Math.floor(readSymbolByte(instance, 'BOARD_COLS') / 2) &&
-        readSymbolByte(instance, 'POS_Y') === Math.floor(readSymbolByte(instance, 'BOARD_ROWS') / 2) &&
+        readSymbolByte(instance, 'POS_X') ===
+          Math.floor(readSymbolByte(instance, 'BOARD_COLS') / 2) &&
+        readSymbolByte(instance, 'POS_Y') ===
+          Math.floor(readSymbolByte(instance, 'BOARD_ROWS') / 2) &&
         readSymbolByte(instance, 'FOOD_AVAIL') === 1,
       500000
     );
@@ -1071,11 +1149,7 @@ _SGETCH
       col: 30,
     });
 
-    runUntil(
-      emulator,
-      (instance) => instance.getTerminalText().includes('Lv:1'),
-      500000
-    );
+    runUntil(emulator, (instance) => instance.getTerminalText().includes('Lv:1'), 500000);
 
     const renderedText = emulator.getTerminalText();
 
@@ -1115,7 +1189,10 @@ IRQ7_COUNT DC.B 0
 
   it('services an autovector with an SR/PC frame and returns through RTE', () => {
     const emulator = new Emulator(irqSource);
-    runUntil(emulator, (runtime) => normalizeInstruction(runtime.getLastInstruction()) === 'BRA START');
+    runUntil(
+      emulator,
+      (runtime) => normalizeInstruction(runtime.getLastInstruction()) === 'BRA START'
+    );
     const returnPc = emulator.getPC();
     const originalUsp = emulator.getUSP();
 
@@ -1136,7 +1213,10 @@ IRQ7_COUNT DC.B 0
 
   it('coalesces masked levels and always admits level seven', () => {
     const emulator = new Emulator(irqSource);
-    runUntil(emulator, (runtime) => normalizeInstruction(runtime.getLastInstruction()) === 'BRA START');
+    runUntil(
+      emulator,
+      (runtime) => normalizeInstruction(runtime.getLastInstruction()) === 'BRA START'
+    );
     expect(emulator.requestInterruptLevel(6)).toBe('accepted');
     emulator.emulationStep();
     expect(emulator.requestInterruptLevel(1)).toBe('masked');
