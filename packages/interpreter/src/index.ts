@@ -67,6 +67,26 @@ export {
   resolveDecodedInstruction,
 } from './instructionDecoder';
 export { loadProgramSource } from './programLoader';
+export { createProgramImage, findProgramSource } from './assembler/programImage';
+export {
+  encodeBranch,
+  encodeIllegal,
+  encodeMoveq,
+  encodeNop,
+  encodeReset,
+  encodeRte,
+  encodeRts,
+  encodeStop,
+  encodeTrap,
+} from './assembler/encoder';
+export { decodeBinaryInstruction } from './cpu/decoder';
+export type {
+  ProgramImage,
+  ProgramImageChunk,
+  ProgramSourceMapEntry,
+} from './assembler/programImage';
+export type { BranchCondition } from './assembler/encoder';
+export type { DecodedBinaryInstruction } from './cpu/decoder';
 export { M68000_ISA_MANIFEST, summarizeIsaCoverage, validateIsaManifest } from './isa/manifest';
 export type {
   CpuProfile,
