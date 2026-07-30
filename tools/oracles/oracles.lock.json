@@ -25,6 +25,18 @@
         "prefetch": true,
         "addressError": true
       }
+    },
+    {
+      "id": "mame-vectors",
+      "repository": "https://github.com/SingleStepTests/m68000.git",
+      "commit": "64b253116a3de04aaac4346c43680960dc9b67e5",
+      "license": "MIT",
+      "checkoutPath": "references/m68000-vectors",
+      "purpose": "MAME-generated single-step state and bus-transaction corpus",
+      "cpuProfile": "M68000",
+      "options": {
+        "quarantinedFamilies": ["TAS", "TRAPV"]
+      }
     }
   ]
 }
