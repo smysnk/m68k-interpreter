@@ -80,6 +80,10 @@ export {
   encodeTrap,
 } from './assembler/encoder';
 export { decodeBinaryInstruction } from './cpu/decoder';
+export { evaluateBranchCondition } from './cpu/conditions';
+export { StrictM68000Core } from './cpu/core';
+export { BusFault, RamBus } from './cpu/memoryBus';
+export { M68000State } from './cpu/state';
 export type {
   ProgramImage,
   ProgramImageChunk,
@@ -87,6 +91,9 @@ export type {
 } from './assembler/programImage';
 export type { BranchCondition } from './assembler/encoder';
 export type { DecodedBinaryInstruction } from './cpu/decoder';
+export type { StrictM68000CoreOptions } from './cpu/core';
+export type { BusAccess, BusAccessSize, BusAccessType, MemoryBus } from './cpu/memoryBus';
+export type { M68000StateOptions } from './cpu/state';
 export { M68000_ISA_MANIFEST, summarizeIsaCoverage, validateIsaManifest } from './isa/manifest';
 export type {
   CpuProfile,
