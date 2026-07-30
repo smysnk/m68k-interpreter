@@ -253,8 +253,24 @@ export class InterpreterWorkerHost {
           this.emitEvent(createReplyEvent(command.id, true, validation));
           return;
         }
+        case 'configureHardwareDevices': {
+          const validation = this.requireEmulator().configureHardwareDevices(command.devices);
+          this.publishFrame(
+            {
+              lastFrameInstructions: 0,
+              lastFrameDurationMs: 0,
+              lastStopReason: validation.valid
+                ? 'hardware_devices_configured'
+                : 'hardware_device_configuration_rejected',
+            },
+            undefined,
+            'hardware'
+          );
+          this.emitEvent(createReplyEvent(command.id, true, validation));
+          return;
+        }
         case 'setHardwareToggle':
-          this.requireEmulator().setHardwareToggle(command.bit, command.enabled);
+          this.requireEmulator().setHardwareToggle(command.bit, command.enabled, command.deviceId);
           this.publishFrame(
             {
               lastFrameInstructions: 0,
@@ -267,7 +283,7 @@ export class InterpreterWorkerHost {
           this.emitEvent(createReplyEvent(command.id, true));
           return;
         case 'setHardwareButton':
-          this.requireEmulator().setHardwareButton(command.bit, command.pressed);
+          this.requireEmulator().setHardwareButton(command.bit, command.pressed, command.deviceId);
           this.publishFrame(
             {
               lastFrameInstructions: 0,

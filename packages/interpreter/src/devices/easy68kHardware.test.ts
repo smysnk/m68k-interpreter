@@ -4,6 +4,7 @@ import {
   Easy68kHardware,
   getEasy68kDisplayAddress,
   getEasy68kInterruptVectorAddress,
+  validateEasy68kHardwareDevices,
   validateEasy68kHardwareConfig,
 } from './easy68kHardware';
 
@@ -56,5 +57,47 @@ describe('Easy68kHardware', () => {
   it('computes the level autovector addresses', () => {
     expect(getEasy68kInterruptVectorAddress(1)).toBe(0x64);
     expect(getEasy68kInterruptVectorAddress(7)).toBe(0x7c);
+  });
+
+  it('routes independently mapped device instances without state aliasing', () => {
+    const hardware = new Easy68kHardware([
+      { id: 'device-a', ...DEFAULT_EASY68K_HARDWARE_CONFIG },
+      {
+        id: 'device-b',
+        displayBase: 0xe00020,
+        ledAddress: 0xe00030,
+        switchAddress: 0xe00030,
+        buttonAddress: 0xe00032,
+      },
+    ]);
+
+    hardware.writeByte(0xe00000, 0x3f);
+    hardware.writeByte(0xe00020, 0x06);
+    hardware.writeByte(0xe00010, 0x11);
+    hardware.writeByte(0xe00030, 0x22);
+    hardware.setToggle(7, true, 'device-a');
+    hardware.setToggle(0, true, 'device-b');
+
+    const [deviceA, deviceB] = hardware.getSnapshot().devices;
+    expect(deviceA).toMatchObject({ id: 'device-a', display: [0x3f, 0, 0, 0, 0, 0, 0, 0], leds: 0x11, switches: 0x80 });
+    expect(deviceB).toMatchObject({ id: 'device-b', display: [0x06, 0, 0, 0, 0, 0, 0, 0], leds: 0x22, switches: 0x01 });
+    expect(hardware.readByte(0xe00010)).toBe(0x80);
+    expect(hardware.readByte(0xe00030)).toBe(0x01);
+  });
+
+  it('rejects same-direction conflicts across device instances', () => {
+    const result = validateEasy68kHardwareDevices([
+      { id: 'device-a', ...DEFAULT_EASY68K_HARDWARE_CONFIG },
+      {
+        id: 'device-b',
+        displayBase: 0xe00020,
+        ledAddress: 0xe00010,
+        switchAddress: 0xe00030,
+        buttonAddress: 0xe00032,
+      },
+    ]);
+
+    expect(result.valid).toBe(false);
+    expect(result.conflicts).toHaveLength(1);
   });
 });

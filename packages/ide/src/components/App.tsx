@@ -10,6 +10,7 @@ import PanelWorkspace from './panels/PanelWorkspace';
 import { useAppShellController } from '@/hooks/useAppShellController';
 import { useCompactShell } from '@/hooks/useCompactShell';
 import { useEmulatorEvents } from '@/hooks/useEmulatorEvents';
+import HardwareRuntimeBridge from '@/runtime/HardwareRuntimeBridge';
 import {
   getIdePerformanceSnapshot,
   RenderProfileBoundary,
@@ -34,6 +35,7 @@ declare global {
   interface Window {
     __M68K_IDE_TEST_CONTROLS__?: {
       activateNibblesSource: () => void;
+      loadSource: (source: string) => void;
       focusTerminal: () => void;
       runProgram: () => void;
       setSpeedMultiplier: (value: number) => void;
@@ -43,9 +45,9 @@ declare global {
   }
 }
 
-function RuntimeDriver(): null {
+function RuntimeDriver(): React.ReactElement {
   useEmulatorEvents();
-  return null;
+  return <HardwareRuntimeBridge />;
 }
 
 function IdePerformanceProbe(): React.ReactElement | null {
@@ -95,6 +97,11 @@ function IdePerformanceProbe(): React.ReactElement | null {
           window.editorCode = nibblesFile.content;
         }
       },
+      loadSource: (source: string) => {
+        ideStore.dispatch(revealPanelKind('code'));
+        ideStore.dispatch(setEditorCode(source));
+        window.editorCode = source;
+      },
       focusTerminal: () => {
         ideStore.dispatch(requestFocusTerminal());
       },
@@ -107,7 +114,9 @@ function IdePerformanceProbe(): React.ReactElement | null {
         ideStore.dispatch(setSpeedMultiplier(value));
       },
       setWorkspaceTab: (value) => {
-        ideStore.dispatch(revealPanelKind(value));
+        ideStore.dispatch(
+          revealPanelKind(value === 'hardware' ? 'hardware-display' : value)
+        );
       },
       setPanelPreset: (value) => {
         ideStore.dispatch(resetToPreset(value));
@@ -184,7 +193,7 @@ function AppShell(): React.ReactElement {
         </div>
       ) : null}
       <IdePerformanceProbe />
-      <Analytics />
+      {import.meta.env.VITE_IDE_ANALYTICS !== 'false' ? <Analytics /> : null}
     </div>
   );
 }

@@ -64,16 +64,16 @@ describe('PanelWorkspace', () => {
   });
 
   it('integrates the hardware title and window controls into one header', () => {
-    store.dispatch(revealPanelKind('hardware'));
+    store.dispatch(revealPanelKind('hardware-display'));
     renderWithIdeProviders(<PanelWorkspace />, { store });
 
-    const hardwareFrame = screen.getByTestId(/panel-instance-panel-hardware/);
+    const hardwareFrame = screen.getByTestId(/panel-instance-panel-hardware-display/);
     expect(hardwareFrame.querySelectorAll('.panel-frame-header')).toHaveLength(1);
-    expect(screen.getByRole('heading', { name: 'I/O Board' })).toBeInTheDocument();
-    expect(screen.queryByText(/^Live$/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Seven-segment display' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Display base address' })).toBeInTheDocument();
 
-    const controls = screen.getByRole('toolbar', { name: 'Hardware I/O panel controls' });
-    expect(controls).toContainElement(screen.getByRole('button', { name: 'Minimize Hardware I/O' }));
-    expect(controls).toContainElement(screen.getByRole('button', { name: 'Close Hardware I/O' }));
+    const controls = screen.getByRole('toolbar', { name: 'Seven-segment display panel controls' });
+    expect(controls).toContainElement(screen.getByRole('button', { name: 'Minimize Seven-segment display' }));
+    expect(controls).toContainElement(screen.getByRole('button', { name: 'Close Seven-segment display' }));
   });
 });

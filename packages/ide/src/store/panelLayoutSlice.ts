@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import { createPanelPreset, getPanelDefaultTitle } from '@/panels/panelPresets';
+import { createPanelPreset } from '@/panels/panelPresets';
 import { clampFloatingRect, normalizePanelLayoutDocument, normalizePanelLayoutState } from '@/store/panelLayoutValidation';
 import {
   MAX_PANEL_COLUMNS,
@@ -7,6 +7,8 @@ import {
   MAX_SAVED_PANEL_VIEWS,
   MIN_PANEL_COLUMNS,
   createPanelConfiguration,
+  getPanelDefaultTitle,
+  getPanelHardwareDeviceConfigs,
   type FloatingPanelRect,
   type PanelCreateTarget,
   type PanelInstanceId,
@@ -31,7 +33,16 @@ function visibleTerminalReplacement(document: PanelLayoutDocument): string | nul
 function addInstance(document: PanelLayoutDocument, kind: PanelKind, target: PanelCreateTarget = {}): string | null {
   if (Object.keys(document.instances).length >= MAX_PANEL_INSTANCES) return null;
   const id = `panel-${kind}-${document.nextInstanceSequence++}`;
-  document.instances[id] = { id, kind, title: getPanelDefaultTitle(kind), minimized: false, config: createPanelConfiguration(kind) };
+  let config;
+  try {
+    config = createPanelConfiguration(kind, {
+      instanceId: id,
+      existingDevices: getPanelHardwareDeviceConfigs(Object.values(document.instances)),
+    });
+  } catch {
+    return null;
+  }
+  document.instances[id] = { id, kind, title: getPanelDefaultTitle(kind), minimized: false, config };
   if (target.floatingRect) {
     document.instances[id]!.floatingRect = clampFloatingRect(target.floatingRect);
     document.floatingPanelIds.push(id);
@@ -79,9 +90,41 @@ const panelLayoutSlice = createSlice({
       const id = addInstance(state.activeLayout, source.kind, action.payload.target);
       if (id) {
         state.activeLayout.instances[id]!.title = source.title;
-        state.activeLayout.instances[id]!.config = { ...source.config };
+        if (
+          source.config.kind !== 'hardware-display' &&
+          source.config.kind !== 'hardware-digital-io'
+        ) {
+          state.activeLayout.instances[id]!.config = { ...source.config };
+        }
         markDirty(state);
       }
+    },
+    commitHardwarePanelConfiguration(
+      state,
+      action: PayloadAction<{
+        panelId: string;
+        config:
+          | Extract<PanelLayoutDocument['instances'][string]['config'], { kind: 'hardware-display' }>
+          | Extract<PanelLayoutDocument['instances'][string]['config'], { kind: 'hardware-digital-io' }>;
+      }>
+    ) {
+      const panel = state.activeLayout.instances[action.payload.panelId];
+      if (!panel || panel.kind !== action.payload.config.kind) return;
+      const previousDeviceId =
+        panel.config.kind === 'hardware-display' ||
+        panel.config.kind === 'hardware-digital-io'
+          ? panel.config.deviceId
+          : undefined;
+      for (const candidate of Object.values(state.activeLayout.instances)) {
+        if (
+          previousDeviceId &&
+          candidate.config.kind === action.payload.config.kind &&
+          candidate.config.deviceId === previousDeviceId
+        ) {
+          candidate.config = { ...action.payload.config };
+        }
+      }
+      markDirty(state);
     },
     closePanel(state, action: PayloadAction<PanelInstanceId>) {
       const id = action.payload;
@@ -222,6 +265,7 @@ const panelLayoutSlice = createSlice({
 
 export const {
   hydratePanelLayout, createPanel, duplicatePanel, closePanel, togglePanelMinimized, focusPanel,
+  commitHardwarePanelConfiguration,
   setTerminalOwner, revealPanelKind, setColumnCount, commitColumnWidths, movePanel, floatPanel,
   moveFloatingPanel, bringFloatingPanelToFront, resetToPreset, replaceActiveLayout, saveView,
   restoreView, renameView, deleteView,

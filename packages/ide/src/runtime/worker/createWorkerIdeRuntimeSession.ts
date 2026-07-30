@@ -35,11 +35,21 @@ export function createWorkerIdeRuntimeSession(
       };
       return optimisticResult;
     },
-    setHardwareToggle: (bit, enabled) => {
-      void client.requestSetHardwareToggle(bit, enabled);
+    configureHardwareDevices: (devices) => {
+      void client.requestConfigureHardwareDevices(devices);
+      const optimisticResult: Easy68kHardwareValidationResult = {
+        valid: true,
+        devices: devices.map((device) => ({ ...device })),
+        conflicts: [],
+        errors: [],
+      };
+      return optimisticResult;
     },
-    setHardwareButton: (bit, pressed) => {
-      void client.requestSetHardwareButton(bit, pressed);
+    setHardwareToggle: (bit, enabled, deviceId) => {
+      void client.requestSetHardwareToggle(bit, enabled, deviceId);
+    },
+    setHardwareButton: (bit, pressed, deviceId) => {
+      void client.requestSetHardwareButton(bit, pressed, deviceId);
     },
     requestInterruptLevel: () => 'accepted',
     emulationStep: () => {

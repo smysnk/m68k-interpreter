@@ -6,6 +6,7 @@ import type {
   TerminalSnapshot,
   UndoCaptureMode,
   Easy68kHardwareConfig,
+  Easy68kHardwareDeviceConfig,
   Easy68kHardwareSnapshot,
   Easy68kHardwareValidationResult,
   InterruptRequestResult,
@@ -69,8 +70,11 @@ export interface IdeRuntimeController {
   requestQueueInput(input: string | number | number[]): Promise<void>;
   requestClearInputQueue(): Promise<void>;
   requestConfigureHardware(config: Easy68kHardwareConfig): Promise<Easy68kHardwareValidationResult>;
-  requestSetHardwareToggle(bit: number, enabled: boolean): Promise<void>;
-  requestSetHardwareButton(bit: number, pressed: boolean): Promise<void>;
+  requestConfigureHardwareDevices(
+    devices: readonly Easy68kHardwareDeviceConfig[]
+  ): Promise<Easy68kHardwareValidationResult>;
+  requestSetHardwareToggle(bit: number, enabled: boolean, deviceId?: string): Promise<void>;
+  requestSetHardwareButton(bit: number, pressed: boolean, deviceId?: string): Promise<void>;
   requestInterruptLevel(level: number): Promise<InterruptRequestResult>;
   requestConfigureAutomaticInterrupts(levels: number[], intervalMs: number): Promise<void>;
   requestCancelAutomaticInterrupts(): Promise<void>;
@@ -111,8 +115,11 @@ export interface IdeRuntimeSession extends IdeRuntimeCachedReadApi {
   getUndoCaptureMode?: () => UndoCaptureMode;
   forceUndoCheckpoint?: () => void;
   configureHardware?(config: Easy68kHardwareConfig): Easy68kHardwareValidationResult;
-  setHardwareToggle?(bit: number, enabled: boolean): void;
-  setHardwareButton?(bit: number, pressed: boolean): void;
+  configureHardwareDevices?(
+    devices: readonly Easy68kHardwareDeviceConfig[]
+  ): Easy68kHardwareValidationResult;
+  setHardwareToggle?(bit: number, enabled: boolean, deviceId?: string): void;
+  setHardwareButton?(bit: number, pressed: boolean, deviceId?: string): void;
   requestInterruptLevel?(level: number): InterruptRequestResult;
   controller?: IdeRuntimeController;
 }

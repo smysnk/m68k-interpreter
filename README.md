@@ -32,7 +32,7 @@ Write, step through, and debug m68k assembly — no installation needed.
 - Export register and memory state to file
 - Terminal-mode execution path for `nibbles.asm`
 - Runtime batching and keyboard capture for browser-playable terminal programs
-- Live EASy68K Hardware I/O Board with eight aligned switches, LEDs, active-low buttons, and seven-segment outputs
+- Independently addressable EASy68K panels for seven-segment displays, aligned switches/LEDs/active-low buttons, and CPU interrupt requests
 - Level 1–7 autovector interrupts, SR masking, automatic IRQ scheduling, and `RTE`
 
 ## Supported instructions

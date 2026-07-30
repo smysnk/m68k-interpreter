@@ -100,6 +100,14 @@ function PanelFrameView({
             ) : null}
           </>
         )}
+        {!instance.minimized && entry.HeaderAccessory ? (
+          <div
+            className="panel-frame-header-accessory"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <entry.HeaderAccessory instance={instance} />
+          </div>
+        ) : null}
         <div
           aria-label={`${instance.title} panel controls`}
           className="panel-frame-actions"
@@ -109,8 +117,12 @@ function PanelFrameView({
           <button aria-controls={ids.bodyId} aria-expanded={!instance.minimized} aria-label={`${instance.minimized ? 'Restore' : 'Minimize'} ${instance.title}`} onClick={() => dispatch(togglePanelMinimized(instance.id))} type="button">
             {instance.minimized ? '+' : '−'}
           </button>
-          <button aria-label={`Duplicate ${instance.title}`} onClick={() => dispatch(duplicatePanel({ sourcePanelId: instance.id, target: currentColumn ? { columnId: currentColumn.id, index: currentRow + 1 } : undefined }))} type="button">□</button>
-          <button aria-label={`${floating ? 'Dock' : 'Float'} ${instance.title}`} onClick={() => floating ? dispatch(movePanel({ panelId: instance.id, columnId: columns[0]!.id })) : dispatch(floatPanel({ panelId: instance.id }))} type="button">{floating ? '↲' : '↗'}</button>
+          {entry.canDuplicate ? (
+            <button aria-label={`Duplicate ${instance.title}`} onClick={() => dispatch(duplicatePanel({ sourcePanelId: instance.id, target: currentColumn ? { columnId: currentColumn.id, index: currentRow + 1 } : undefined }))} type="button">□</button>
+          ) : null}
+          {entry.canFloat ? (
+            <button aria-label={`${floating ? 'Dock' : 'Float'} ${instance.title}`} onClick={() => floating ? dispatch(movePanel({ panelId: instance.id, columnId: columns[0]!.id })) : dispatch(floatPanel({ panelId: instance.id }))} type="button">{floating ? '↲' : '↗'}</button>
+          ) : null}
           <details className="panel-action-menu">
             <summary aria-label={`More actions for ${instance.title}`}>⋮</summary>
             <div className="panel-action-menu-popover">

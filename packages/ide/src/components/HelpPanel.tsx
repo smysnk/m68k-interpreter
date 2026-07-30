@@ -14,9 +14,9 @@ const HelpPanel: React.FC = () => {
       <div className="help-panel-section">
         <h3>Panel Workspace</h3>
         <ul className="help-panel-list">
-          <li>Choose one to four columns, then add Screen, Code, Registers, Memory, Hardware I/O, or Help panels from the workspace toolbar.</li>
+          <li>Choose one to four columns, then add Screen, Code, Registers, Memory, Seven-segment, Digital I/O, Interrupt, or Help panels from the View menu.</li>
           <li>Drag a panel by its dotted header handle to reorder it. The More menu provides keyboard-friendly move-up, move-down, and move-to-column commands.</li>
-          <li>Minimize retains a header, Duplicate creates another view of the same simulator, and Float creates an in-app window that can be moved, resized, or dragged back over a column to dock.</li>
+          <li>Minimize retains a header. Duplicating addressable hardware creates an independently mapped device; other duplicate panels remain views of shared simulator state. Float creates an in-app window that can be moved, resized, or dragged back over a column to dock.</li>
           <li>Only the Screen marked Interactive owns keyboard, touch, focus, and terminal geometry. Other Screen panels are passive mirrors; use Make interactive to transfer ownership.</li>
           <li>The Layouts menu applies immutable built-in views and saves, restores, renames, or deletes personal views. The active draft resumes automatically after reload.</li>
           <li>On compact screens, the desktop layout is preserved and projected through a single-panel switcher.</li>
@@ -37,7 +37,7 @@ const HelpPanel: React.FC = () => {
           <li>Runtime support for the Nibbles instruction subset including `MOVE`, `MOVEA`, `LEA`, `BRA/Bxx`, `BSR`, `JSR`, `RTS`, `MULU`, `DIVU`, `MOVEM`, and `BTST`.</li>
           <li>Easy68K trap tasks used by Nibbles: `TRAP #15` tasks `1`, `3`, and `4`, plus `TRAP #11` task `0` for halt.</li>
           <li>Terminal rendering for clear screen, cursor motion, carriage return, line feed, and ANSI SGR color/style sequences used by the game.</li>
-          <li>Memory-mapped EASy68K hardware: eight seven-segment bytes, shared switch/LED byte, active-low buttons, and configurable 24-bit addresses.</li>
+          <li>Memory-mapped EASy68K hardware: independently addressable eight-byte seven-segment displays and digital I/O boards with shared switch/LED bytes, active-low buttons, and configurable 24-bit addresses.</li>
           <li>Level 1–7 autovector interrupts with SR masking, supervisor stack frames, automatic scheduling, and `RTE`.</li>
         </ul>
       </div>

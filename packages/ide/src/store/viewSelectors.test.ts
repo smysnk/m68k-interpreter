@@ -20,6 +20,7 @@ describe('viewSelectors', () => {
     expect(model.activeFileId).toBe('workspace:scratch.asm');
     expect(model.groupedFiles.map((group) => group.label)).toEqual(['Workspace', 'Examples']);
     expect(model.groupedFiles[1]?.items.map((item) => item.name)).toEqual([
+      'hardware-multi-device.asm',
       'hardware-led-switches.asm',
       'hardware-buttons.asm',
       'hardware-seven-segment.asm',

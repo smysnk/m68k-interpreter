@@ -125,7 +125,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /^add panel$/i }));
     expect(screen.getByRole('menuitem', { name: /add memory panel/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /add hardware i\/o panel/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /add seven-segment display panel/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('menuitem', { name: /add memory panel/i }));
     fireEvent.click(screen.getAllByRole('tab', { name: /memory/i }).at(-1)!);
 
@@ -133,10 +133,10 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /^add panel$/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /add hardware i\/o panel/i }));
-    fireEvent.click(screen.getAllByRole('tab', { name: /hardware i\/o/i }).at(-1)!);
+    fireEvent.click(screen.getByRole('menuitem', { name: /add seven-segment display panel/i }));
+    fireEvent.click(screen.getAllByRole('tab', { name: /seven-segment display/i }).at(-1)!);
 
-    expect(screen.getByTestId('hardware-panel-preview')).toBeInTheDocument();
+    expect(screen.getByTestId(/hardware-display-device-/)).toBeInTheDocument();
   });
 
   it('keeps Nibbles selected in the persisted file state', () => {
@@ -165,8 +165,8 @@ describe('App', () => {
     expect(screen.getByLabelText('Start Address')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /^add panel$/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /add hardware i\/o panel/i }));
-    expect(screen.getByTestId('hardware-panel-preview')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('menuitem', { name: /add seven-segment display panel/i }));
+    expect(screen.getByTestId(/hardware-display-device-/)).toBeInTheDocument();
   });
 
   it('hydrates theme and shell preferences from persisted storage', () => {

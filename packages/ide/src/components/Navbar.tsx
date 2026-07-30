@@ -172,7 +172,7 @@ const Navbar: React.FC = () => {
   };
 
   const handleWorkspaceSelection = (tab: (typeof workspaceTabs)[number]['id']): void => {
-    dispatch(revealPanelKind(tab));
+    dispatch(revealPanelKind(tab === 'hardware' ? 'hardware-display' : tab));
   };
 
   const handleStep = (): void => {

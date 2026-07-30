@@ -6,6 +6,7 @@ import type {
   TerminalSnapshot,
   UndoCaptureMode,
   Easy68kHardwareConfig,
+  Easy68kHardwareDeviceConfig,
   Easy68kHardwareSnapshot,
 } from '@m68k/interpreter';
 import type { RuntimeFrameSyncPayload } from '@/runtime/runtimeFramePayload';
@@ -90,8 +91,9 @@ export type InterpreterWorkerCommand =
   | { id: number; type: 'queueInput'; input: string | number | number[] }
   | { id: number; type: 'clearInputQueue' }
   | { id: number; type: 'configureHardware'; config: Easy68kHardwareConfig }
-  | { id: number; type: 'setHardwareToggle'; bit: number; enabled: boolean }
-  | { id: number; type: 'setHardwareButton'; bit: number; pressed: boolean }
+  | { id: number; type: 'configureHardwareDevices'; devices: Easy68kHardwareDeviceConfig[] }
+  | { id: number; type: 'setHardwareToggle'; bit: number; enabled: boolean; deviceId?: string }
+  | { id: number; type: 'setHardwareButton'; bit: number; pressed: boolean; deviceId?: string }
   | { id: number; type: 'requestInterruptLevel'; level: number }
   | { id: number; type: 'configureAutomaticInterrupts'; config: WorkerAutomaticInterruptConfig }
   | { id: number; type: 'cancelAutomaticInterrupts' }

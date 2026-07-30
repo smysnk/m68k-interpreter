@@ -26,6 +26,7 @@ export default defineConfig({
     env: {
       ...process.env,
       VITE_IDE_AUTOPLAY: 'false',
+      VITE_IDE_ANALYTICS: 'false',
       WEB_HOST: '127.0.0.1',
       WEB_PORT: String(PORT),
     },

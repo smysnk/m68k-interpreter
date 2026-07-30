@@ -1,6 +1,8 @@
 import {
   PANEL_LAYOUT_SCHEMA_VERSION,
   createPanelConfiguration,
+  getPanelDefaultTitle,
+  getPanelHardwareDeviceConfigs,
   type PanelColumn,
   type PanelKind,
   type PanelLayoutDocument,
@@ -13,15 +15,6 @@ export interface PanelPresetDefinition {
   description: string;
   create: () => PanelLayoutDocument;
 }
-
-const TITLES: Record<PanelKind, string> = {
-  terminal: 'Screen',
-  code: 'Code',
-  registers: 'Registers',
-  memory: 'Memory',
-  hardware: 'Hardware I/O',
-  help: 'Help',
-};
 
 function buildPreset(
   name: string,
@@ -37,9 +30,12 @@ function buildPreset(
       instances[id] = {
         id,
         kind,
-        title: TITLES[kind],
+        title: getPanelDefaultTitle(kind),
         minimized,
-        config: createPanelConfiguration(kind),
+        config: createPanelConfiguration(kind, {
+          instanceId: id,
+          existingDevices: getPanelHardwareDeviceConfigs(Object.values(instances)),
+        }),
       };
       return id;
     });
@@ -84,7 +80,15 @@ export const PANEL_PRESETS: readonly PanelPresetDefinition[] = [
     name: 'Hardware Lab',
     description: 'Screen beside hardware with diagnostic panels one click away.',
     create: () =>
-      buildPreset('Hardware Lab', [[{ kind: 'terminal' }], [{ kind: 'hardware' }, { kind: 'registers', minimized: true }, { kind: 'memory', minimized: true }]], [57, 43]),
+      buildPreset(
+        'Hardware Lab',
+        [
+          [{ kind: 'terminal' }],
+          [{ kind: 'hardware-display' }, { kind: 'hardware-interrupts' }],
+          [{ kind: 'hardware-digital-io' }],
+        ],
+        [42, 26, 32]
+      ),
   },
   {
     id: 'debug',
@@ -103,8 +107,4 @@ export const PANEL_PRESETS: readonly PanelPresetDefinition[] = [
 
 export function createPanelPreset(id: PanelPresetId): PanelLayoutDocument {
   return (PANEL_PRESETS.find((preset) => preset.id === id) ?? PANEL_PRESETS[0]!).create();
-}
-
-export function getPanelDefaultTitle(kind: PanelKind): string {
-  return TITLES[kind];
 }

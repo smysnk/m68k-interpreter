@@ -61,6 +61,53 @@ function buildTerminalFrameBufferSnapshot(text: string) {
 }
 
 describe('InterpreterWorkerClient', () => {
+  it('sends device-scoped topology and input commands', async () => {
+    const worker = new MockWorker();
+    const client = new InterpreterWorkerClient(worker);
+    const topology = client.requestConfigureHardwareDevices([
+      {
+        id: 'digital-a',
+        deviceType: 'digital-io',
+        displayBase: 0,
+        ledAddress: 0xe00040,
+        switchAddress: 0xe00040,
+        buttonAddress: 0xe00042,
+      },
+    ]);
+    expect(worker.postMessage).toHaveBeenLastCalledWith({
+      id: 1,
+      type: 'configureHardwareDevices',
+      devices: [
+        {
+          id: 'digital-a',
+          deviceType: 'digital-io',
+          displayBase: 0,
+          ledAddress: 0xe00040,
+          switchAddress: 0xe00040,
+          buttonAddress: 0xe00042,
+        },
+      ],
+    });
+    worker.emit({
+      type: 'reply',
+      id: 1,
+      ok: true,
+      payload: { valid: true, conflicts: [], errors: [] },
+    });
+    await expect(topology).resolves.toMatchObject({ valid: true });
+
+    const toggle = client.requestSetHardwareToggle(7, true, 'digital-a');
+    expect(worker.postMessage).toHaveBeenLastCalledWith({
+      id: 2,
+      type: 'setHardwareToggle',
+      deviceId: 'digital-a',
+      bit: 7,
+      enabled: true,
+    });
+    worker.emit({ type: 'reply', id: 2, ok: true });
+    await expect(toggle).resolves.toBeUndefined();
+  });
+
   it('routes hardware commands and publishes versioned hardware frames to the surface store', async () => {
     hardwareSurfaceStore.reset();
     const worker = new MockWorker();
@@ -94,6 +141,25 @@ describe('InterpreterWorkerClient', () => {
           buttons: 0xff,
           version: 2,
           outputVersion: 1,
+          topologyVersion: 1,
+          devices: [
+            {
+              id: 'easy68k-default',
+              deviceType: 'board',
+              config: {
+                displayBase: 0xe00000,
+                ledAddress: 0xe00010,
+                switchAddress: 0xe00010,
+                buttonAddress: 0xe00012,
+              },
+              display: [1, 2, 3, 4, 5, 6, 7, 8],
+              leds: 0xa5,
+              switches: 0x08,
+              buttons: 0xff,
+              version: 2,
+              outputVersion: 1,
+            },
+          ],
         },
       },
     });

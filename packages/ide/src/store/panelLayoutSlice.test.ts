@@ -54,7 +54,7 @@ describe('panelLayoutSlice', () => {
   });
 
   it('saves immutable snapshots and resets to built-in views', () => {
-    let state = reduce([createPanel({ kind: 'hardware' }), saveView({ name: 'Lab' })]);
+    let state = reduce([createPanel({ kind: 'hardware-display' }), saveView({ name: 'Lab' })]);
     const viewId = state.userViewOrder[0]!;
     const savedCount = Object.keys(state.userViews[viewId]!.document.instances).length;
     state = panelLayoutReducer(state, createPanel({ kind: 'help' }));
@@ -93,5 +93,66 @@ describe('panelLayoutSlice', () => {
     });
     expect(state.activeLayout.floatingPanelIds.at(-1)).toBe('panel-terminal-1');
     expect(state.activeLayout.focusedPanelId).toBe('panel-terminal-1');
+  });
+
+  it('duplicates addressable hardware panels with independent device mappings', () => {
+    let state = panelLayoutReducer(
+      structuredClone(initialPanelLayoutState),
+      resetToPreset('hardware-lab')
+    );
+    const source = Object.values(state.activeLayout.instances).find(
+      (panel) => panel.kind === 'hardware-display'
+    )!;
+    state = panelLayoutReducer(
+      state,
+      duplicatePanel({ sourcePanelId: source.id })
+    );
+    const displays = Object.values(state.activeLayout.instances)
+      .map((panel) => panel.config)
+      .filter(
+        (
+          config
+        ): config is Extract<
+          (typeof config),
+          { kind: 'hardware-display' }
+        > => config.kind === 'hardware-display'
+      );
+
+    expect(displays).toHaveLength(2);
+    expect(new Set(displays.map((config) => config.deviceId)).size).toBe(2);
+    expect(new Set(displays.map((config) => config.displayBase)).size).toBe(2);
+    expect(getPanelLayoutInvariantErrors(state.activeLayout)).toEqual([]);
+  });
+
+  it('migrates a legacy composite hardware panel into three stable panel kinds', () => {
+    const migrated = normalizePanelLayoutDocument({
+      schemaVersion: 1,
+      name: 'Legacy lab',
+      columnCount: 1,
+      columns: [{ id: 'column-1', width: 100, panelIds: ['legacy-hardware'] }],
+      floatingPanelIds: [],
+      instances: {
+        'legacy-hardware': {
+          id: 'legacy-hardware',
+          kind: 'hardware',
+          title: 'Hardware I/O',
+          minimized: false,
+          config: { kind: 'hardware' },
+        },
+      },
+      focusedPanelId: 'legacy-hardware',
+      terminalOwnerPanelId: null,
+      nextInstanceSequence: 2,
+      nextColumnSequence: 2,
+    });
+
+    expect(migrated.schemaVersion).toBe(2);
+    expect(Object.values(migrated.instances).map((panel) => panel.kind)).toEqual([
+      'hardware-display',
+      'hardware-digital-io',
+      'hardware-interrupts',
+    ]);
+    expect(migrated.columns[0]?.panelIds).toHaveLength(3);
+    expect(normalizePanelLayoutDocument(migrated)).toEqual(migrated);
   });
 });

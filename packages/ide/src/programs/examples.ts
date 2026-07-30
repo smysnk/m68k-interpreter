@@ -11,6 +11,7 @@ import hardwareLedSwitchesSource from '@/fixtures/hardware-led-switches.asm';
 import hardwareButtonsSource from '@/fixtures/hardware-buttons.asm';
 import hardwareSevenSegmentSource from '@/fixtures/hardware-seven-segment.asm';
 import hardwareInterruptsSource from '@/fixtures/hardware-interrupts.asm';
+import hardwareMultiDeviceSource from '@/fixtures/hardware-multi-device.asm';
 
 interface BundledExampleFile {
   id: string;
@@ -21,6 +22,13 @@ interface BundledExampleFile {
 }
 
 export const bundledExampleFiles: BundledExampleFile[] = [
+  {
+    id: 'example:hardware-multi-device.asm',
+    name: 'hardware-multi-device.asm',
+    path: 'fixtures/hardware-multi-device.asm',
+    kind: 'example',
+    content: hardwareMultiDeviceSource,
+  },
   {
     id: 'example:hardware-led-switches.asm',
     name: 'hardware-led-switches.asm',
