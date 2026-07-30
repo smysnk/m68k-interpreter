@@ -17,7 +17,22 @@ export function runMusashiStep(
   instructionBytes: Uint8Array,
   state: OracleCpuState
 ): OracleStepResult {
-  const runner = resolve('.tmp/oracles/musashi-runner');
+  return runOracleStep('musashi-runner', instructionBytes, state);
+}
+
+export function runMoiraStep(
+  instructionBytes: Uint8Array,
+  state: OracleCpuState
+): OracleStepResult {
+  return runOracleStep('moira-runner', instructionBytes, state);
+}
+
+function runOracleStep(
+  executable: string,
+  instructionBytes: Uint8Array,
+  state: OracleCpuState
+): OracleStepResult {
+  const runner = resolve('.tmp/oracles', executable);
   const hex = Array.from(instructionBytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
   const args = [
     hex,

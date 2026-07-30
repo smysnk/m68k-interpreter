@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { encodeMoveq, encodeNop } from '../../packages/interpreter/src/assembler/encoder';
 import { createProgramImage } from '../../packages/interpreter/src/assembler/programImage';
 import { StrictM68000Core } from '../../packages/interpreter/src/cpu/core';
-import { runMusashiStep } from './musashiRunner';
+import { runMoiraStep, runMusashiStep } from './musashiRunner';
 
 function initialState() {
   return {
@@ -28,6 +28,13 @@ describe('pinned Musashi single-step runner', () => {
     expect(result.d[3]).toBe(0xffffffff);
     expect(result.sr & 0x1f).toBe(0x08);
     expect(result.cycles).toBe(4);
+  });
+
+  it('agrees with the independently pinned Moira core for the initial slice', () => {
+    for (const bytes of [encodeNop(), encodeMoveq(0, -128), encodeMoveq(7, 127)]) {
+      const state = initialState();
+      expect(runMoiraStep(bytes, state)).toMatchObject(runMusashiStep(bytes, state));
+    }
   });
 
   it('matches the strict core for MOVEQ register and signed-byte boundaries', () => {
