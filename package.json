@@ -39,6 +39,7 @@
     "profile:panel-drag": "tsx ./scripts/profile-panel-drag-summary.ts",
     "profile:panel-workspace:compare": "tsx ./scripts/compare-panel-workspace-profiles.ts",
     "profile:panel-workspace:test-station": "tsx ./scripts/emit-panel-workspace-profile-suite.ts",
+    "generate:isa-report": "tsx ./scripts/generate-isa-report.ts",
     "test:panel-workspace:performance:station": "node ./scripts/test-station/run-cli.mjs run --config ./test-station.panel-workspace.config.mjs --no-coverage",
     "test:integration": "vitest run --config vitest.config.ts",
     "test:e2e": "playwright test --config playwright.config.ts",
