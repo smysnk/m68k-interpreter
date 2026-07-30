@@ -3,14 +3,20 @@ import { expect, test } from '@playwright/test';
 const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v2';
 
 test.describe('browser e2e ide shell', () => {
-  test('removes the workspace toolbar and lets docked columns meet the content edges', async ({ page }) => {
+  test('uses a minimal workspace gutter and keeps panel content flush with its frame', async ({
+    page,
+  }) => {
     await page.goto('/');
 
     await expect(page.locator('.panel-workspace-toolbar')).toHaveCount(0);
     const mainContent = page.locator('.main-content');
+    const columnGroup = page.locator('.panel-column-group');
     const firstColumn = page.getByTestId('panel-column-1');
     const lastColumn = page.getByTestId('panel-column-2');
     const firstPanel = page.getByTestId('panel-instance-panel-terminal-1');
+    const gutter = await columnGroup.evaluate((element) =>
+      Number.parseFloat(window.getComputedStyle(element).paddingLeft)
+    );
     const [mainBox, firstColumnBox, lastColumnBox, firstPanelBox] = await Promise.all([
       mainContent.boundingBox(),
       firstColumn.boundingBox(),
@@ -22,11 +28,58 @@ test.describe('browser e2e ide shell', () => {
     expect(firstColumnBox).not.toBeNull();
     expect(lastColumnBox).not.toBeNull();
     expect(firstPanelBox).not.toBeNull();
-    expect(Math.abs(firstColumnBox!.x - mainBox!.x)).toBeLessThanOrEqual(1);
-    expect(Math.abs(firstColumnBox!.y - mainBox!.y)).toBeLessThanOrEqual(1);
-    expect(Math.abs((lastColumnBox!.x + lastColumnBox!.width) - (mainBox!.x + mainBox!.width))).toBeLessThanOrEqual(1);
+    expect(gutter).toBeGreaterThan(0);
+    expect(gutter).toBeLessThan(3);
+    expect(Math.abs(firstColumnBox!.x - mainBox!.x - gutter)).toBeLessThanOrEqual(1);
+    expect(Math.abs(firstColumnBox!.y - mainBox!.y - gutter)).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(mainBox!.x + mainBox!.width - (lastColumnBox!.x + lastColumnBox!.width) - gutter)
+    ).toBeLessThanOrEqual(1);
     expect(Math.abs(firstPanelBox!.x - firstColumnBox!.x)).toBeLessThanOrEqual(1);
     expect(Math.abs(firstPanelBox!.y - firstColumnBox!.y)).toBeLessThanOrEqual(1);
+
+    await page.getByRole('button', { name: /open view menu/i }).click();
+    await page.getByRole('menuitem', { name: /^add panel/i }).click();
+    await page.getByRole('menuitem', { name: /add code panel/i }).click();
+
+    const surfaceStyle = async (selector: string) =>
+      page
+        .locator(selector)
+        .first()
+        .evaluate((element) => {
+          const styles = window.getComputedStyle(element);
+          return {
+            backdropFilter: styles.backdropFilter,
+            borderRadius: styles.borderRadius,
+            borderTopWidth: styles.borderTopWidth,
+            boxShadow: styles.boxShadow,
+          };
+        });
+    const [terminalSurface, registerSurface, editorSurface, panelFrameRadius, controlRadius] =
+      await Promise.all([
+        surfaceStyle('.panel-body > .terminal-container'),
+        surfaceStyle('.panel-body > .registers-container'),
+        surfaceStyle('.panel-body > .editor-container'),
+        page
+          .locator('.panel-frame')
+          .first()
+          .evaluate((element) => window.getComputedStyle(element).borderRadius),
+        page
+          .locator('.registers-group-toggle')
+          .first()
+          .evaluate((element) => window.getComputedStyle(element).borderRadius),
+      ]);
+
+    for (const surface of [terminalSurface, registerSurface, editorSurface]) {
+      expect(surface).toEqual({
+        backdropFilter: 'none',
+        borderRadius: '0px',
+        borderTopWidth: '0px',
+        boxShadow: 'none',
+      });
+    }
+    expect(panelFrameRadius).not.toBe('0px');
+    expect(controlRadius).not.toBe('0px');
   });
 
   test('keeps View compact and reveals one contextual submenu at a time', async ({ page }) => {
@@ -168,7 +221,7 @@ test.describe('browser e2e ide shell', () => {
 
     expect((labelBox?.x ?? 0) + (labelBox?.width ?? 0)).toBeLessThan(fullHexBox?.x ?? 0);
     expect((badgeBox?.x ?? 0) + (badgeBox?.width ?? 0)).toBeLessThan(fullHexBox?.x ?? 0);
-    expect((badgeBox?.y ?? 0)).toBeGreaterThan((labelBox?.y ?? 0) + (labelBox?.height ?? 0) - 2);
+    expect(badgeBox?.y ?? 0).toBeGreaterThan((labelBox?.y ?? 0) + (labelBox?.height ?? 0) - 2);
     expect(Math.abs((fullHexBox?.x ?? 0) - (lowerHexBox?.x ?? 0))).toBeLessThan(4);
 
     const [fullHexFont, lowerHexFont, decimalFont] = await Promise.all([

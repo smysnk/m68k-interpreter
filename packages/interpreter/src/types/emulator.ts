@@ -127,8 +127,15 @@ export interface Emulator {
   configureHardware(
     config: import('../devices/easy68kHardware').Easy68kHardwareConfig
   ): import('../devices/easy68kHardware').Easy68kHardwareValidationResult;
-  setHardwareToggle(bit: number, enabled: boolean): void;
-  setHardwareButton(bit: number, pressed: boolean): void;
+  configureHardwareDevices(
+    configs: readonly import('../devices/easy68kHardware').Easy68kHardwareDeviceConfig[]
+  ): import('../devices/easy68kHardware').Easy68kHardwareValidationResult;
+  configureHardwareDevice(
+    deviceId: string,
+    config: import('../devices/easy68kHardware').Easy68kHardwareConfig
+  ): import('../devices/easy68kHardware').Easy68kHardwareValidationResult;
+  setHardwareToggle(bit: number, enabled: boolean, deviceId?: string): void;
+  setHardwareButton(bit: number, pressed: boolean, deviceId?: string): void;
   requestInterruptLevel(level: number): import('../core/emulator').InterruptRequestResult;
   getPendingInterruptLevels(): number[];
   raiseExternalInterrupt(handlerAddress: number): boolean;

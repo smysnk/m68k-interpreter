@@ -1,13 +1,12 @@
 import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import type {
-  Easy68kHardwareConfig,
-  Easy68kHardwareValidationResult,
+import {
+  DEFAULT_EASY68K_HARDWARE_CONFIG,
+  type Easy68kHardwareConfig,
+  type Easy68kHardwareValidationResult,
 } from '@m68k/interpreter';
 import { runtimeCommandPort } from '@/runtime/runtimeCommandPort';
-import { useRuntimeSession } from '@/runtime/useRuntimeSession';
 import {
-  restoreHardwareDefaults,
   selectHardwarePreferences,
   setHardwareConfig,
   type AppDispatch,
@@ -16,7 +15,6 @@ import {
 export function useHardwareController() {
   const dispatch = useDispatch<AppDispatch>();
   const preferences = useSelector(selectHardwarePreferences);
-  const runtimeSession = useRuntimeSession();
   const [status, setStatus] = React.useState('Hardware ready');
 
   const configure = React.useCallback(
@@ -40,14 +38,8 @@ export function useHardwareController() {
   );
 
   const restoreDefaults = React.useCallback(async () => {
-    dispatch(restoreHardwareDefaults());
-    await configure({
-      displayBase: 0xe00000,
-      ledAddress: 0xe00010,
-      switchAddress: 0xe00010,
-      buttonAddress: 0xe00012,
-    });
-  }, [configure, dispatch]);
+    await configure({ ...DEFAULT_EASY68K_HARDWARE_CONFIG });
+  }, [configure]);
 
   const setToggle = React.useCallback(async (bit: number, enabled: boolean) => {
     try {
@@ -75,19 +67,6 @@ export function useHardwareController() {
       setStatus(error instanceof Error ? error.message : String(error));
     }
   }, []);
-
-  React.useEffect(() => {
-    if (!runtimeSession.ready) return;
-    void runtimeCommandPort.configureAutomaticInterrupts(
-      preferences.automaticInterruptLevels,
-      preferences.automaticInterruptIntervalMs
-    );
-  }, [
-    preferences.automaticInterruptIntervalMs,
-    preferences.automaticInterruptLevels,
-    runtimeSession.epoch,
-    runtimeSession.ready,
-  ]);
 
   const requestInterrupt = React.useCallback(async (level: number) => {
     try {

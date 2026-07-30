@@ -67,4 +67,5 @@ todo.md
 # Custom
 /packages/ide/out
 /references
-/docs
+/.planning/
+/docs/assets/

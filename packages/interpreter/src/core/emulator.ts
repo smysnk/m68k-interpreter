@@ -13,6 +13,7 @@ import { TerminalDevice, type TerminalMeta, type TerminalSnapshot } from '../dev
 import {
   Easy68kHardware,
   type Easy68kHardwareConfig,
+  type Easy68kHardwareDeviceConfig,
   type Easy68kHardwareSnapshot,
   type Easy68kHardwareValidationResult,
 } from '../devices/easy68kHardware';
@@ -81,6 +82,7 @@ export interface EmulatorOptions {
   undoMode?: UndoCaptureMode;
   undoCheckpointInterval?: number;
   hardwareConfig?: Easy68kHardwareConfig;
+  hardwareDevices?: readonly Easy68kHardwareDeviceConfig[];
 }
 
 function normalizeUndoCheckpointInterval(value: number | undefined): number {
@@ -145,7 +147,7 @@ export class Emulator {
       columns: options.columns,
       rows: options.rows,
     });
-    this.hardware = new Easy68kHardware(options.hardwareConfig);
+    this.hardware = new Easy68kHardware(options.hardwareDevices ?? options.hardwareConfig);
     this.updateHardwareAddressWindow();
     this.undoCaptureMode = options.undoMode ?? 'full';
     this.undoCheckpointInterval = normalizeUndoCheckpointInterval(options.undoCheckpointInterval);
@@ -518,16 +520,9 @@ export class Emulator {
   }
 
   private updateHardwareAddressWindow(): void {
-    const config = this.hardware.getSnapshot().config;
-    const addresses = [
-      config.displayBase,
-      config.displayBase + 14,
-      config.ledAddress,
-      config.switchAddress,
-      config.buttonAddress,
-    ];
-    this.hardwareAddressMin = Math.min(...addresses);
-    this.hardwareAddressMax = Math.max(...addresses);
+    const range = this.hardware.getAddressRange();
+    this.hardwareAddressMin = range?.minAddress ?? 1;
+    this.hardwareAddressMax = range?.maxAddress ?? 0;
   }
 
   private writeBusWord(address: number, value: number): void {
@@ -2138,12 +2133,41 @@ export class Emulator {
     return result;
   }
 
-  setHardwareToggle(bit: number, enabled: boolean): void {
-    this.hardware.setToggle(bit, enabled);
+  configureHardwareDevices(
+    configs: readonly Easy68kHardwareDeviceConfig[]
+  ): Easy68kHardwareValidationResult {
+    const result = this.hardware.configureDevices(configs);
+    if (result.valid) {
+      this.updateHardwareAddressWindow();
+    }
+    return result;
   }
 
-  setHardwareButton(bit: number, pressed: boolean): void {
-    this.hardware.setButton(bit, pressed);
+  configureHardwareDevice(
+    deviceId: string,
+    config: Easy68kHardwareConfig
+  ): Easy68kHardwareValidationResult {
+    const result = this.hardware.configureDevice(deviceId, config);
+    if (result.valid) {
+      this.updateHardwareAddressWindow();
+    }
+    return result;
+  }
+
+  setHardwareToggle(
+    bit: number,
+    enabled: boolean,
+    deviceId?: string
+  ): void {
+    this.hardware.setToggle(bit, enabled, deviceId);
+  }
+
+  setHardwareButton(
+    bit: number,
+    pressed: boolean,
+    deviceId?: string
+  ): void {
+    this.hardware.setButton(bit, pressed, deviceId);
   }
 
   getTerminalSnapshot(): TerminalSnapshot {

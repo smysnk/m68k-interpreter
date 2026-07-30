@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   createIdeStore,
-  restoreHardwareDefaults,
+  resetHardwarePreferences,
   setAutomaticInterruptInterval,
   setHardwareConfig,
   toggleAutomaticInterruptLevel,
@@ -38,7 +38,33 @@ describe('hardware preferences', () => {
       automaticInterruptIntervalMs: 50,
     });
 
-    store.dispatch(restoreHardwareDefaults());
+    store.dispatch(resetHardwarePreferences());
     expect(store.getState().hardware.config.displayBase).toBe(0xe00000);
+  });
+
+  it('recovers invalid persisted hardware preferences to bounded defaults', () => {
+    window.localStorage.setItem(
+      IDE_PERSISTENCE_KEY,
+      JSON.stringify({
+        schemaVersion: 2,
+        hardware: {
+          config: {
+            displayBase: 0xe00001,
+            ledAddress: 0xe00000,
+            switchAddress: 0xe00010,
+            buttonAddress: 0xe00012,
+          },
+          automaticInterruptLevels: [9, 3, 3, 'bad'],
+          automaticInterruptIntervalMs: -100,
+        },
+      })
+    );
+
+    const store = createIdeStore();
+    expect(store.getState().hardware).toMatchObject({
+      config: { displayBase: 0xe00000, ledAddress: 0xe00010 },
+      automaticInterruptLevels: [3],
+      automaticInterruptIntervalMs: 50,
+    });
   });
 });

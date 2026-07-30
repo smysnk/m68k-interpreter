@@ -17,4 +17,34 @@ describe('hardwareSurfaceStore', () => {
     expect(store.getSnapshot().switches).toBe(4);
     expect(listener).toHaveBeenCalledTimes(2);
   });
+
+  it('preserves unrelated device snapshot identity for selector isolation', () => {
+    const store = createHardwareSurfaceStore();
+    const hardware = new Easy68kHardware([
+      {
+        id: 'display-a',
+        deviceType: 'display',
+        displayBase: 0xe00000,
+        ledAddress: 0,
+        switchAddress: 0,
+        buttonAddress: 0,
+      },
+      {
+        id: 'display-b',
+        deviceType: 'display',
+        displayBase: 0xe00020,
+        ledAddress: 0,
+        switchAddress: 0,
+        buttonAddress: 0,
+      },
+    ]);
+    store.publish(hardware.getSnapshot());
+    const previousB = store.getDeviceSnapshot('display-b');
+
+    hardware.writeByte(0xe00000, 0x3f);
+    store.publish(hardware.getSnapshot());
+
+    expect(store.getDeviceSnapshot('display-a')?.display[0]).toBe(0x3f);
+    expect(store.getDeviceSnapshot('display-b')).toBe(previousB);
+  });
 });

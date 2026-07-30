@@ -63,7 +63,7 @@ export const selectNavbarPresentationModel = createSelector([selectNavbarViewMod
   ...model,
   registersMenuActive: model.activeWorkspaceTab === 'registers',
   memoryMenuActive: model.activeWorkspaceTab === 'memory',
-  hardwareMenuActive: model.activeWorkspaceTab === 'hardware',
+  hardwareMenuActive: model.activeWorkspaceTab.startsWith('hardware-'),
   helpMenuActive: model.showHelp,
   followSystemActive: model.followSystemTheme,
   lightThemeActive: !model.followSystemTheme && model.editorTheme === EditorThemeEnum.M68K_LIGHT,

@@ -386,14 +386,14 @@ try {
     await setChapter(page, 'Grab any panel header and move it freely', 260);
     await dragPanelToEmptyColumn(page, 'Screen', 3);
     await setChapter(page, 'Highlighted targets make docking deliberate', 680);
-    await addPanel(page, 'Hardware I/O');
+    await addPanel(page, 'LEDs / Switches / Buttons');
     await wait(1_000);
 
     await setChapter(page, 'Live assembly code beside the EASy68K I/O Board', 300);
     await applyLayout(page, 'Code and Run');
     await clickWithCursor(page, page.getByRole('button', { name: 'Close Screen' }), 260);
     await clickWithCursor(page, page.getByRole('button', { name: 'Close Registers' }), 260);
-    await addPanel(page, 'Hardware I/O');
+    await addPanel(page, 'LEDs / Switches / Buttons');
     await openFixture(page, 'hardware-led-switches.asm');
     await runProgram(page);
 
