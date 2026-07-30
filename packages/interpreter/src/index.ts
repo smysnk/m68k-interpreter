@@ -60,12 +60,22 @@ export {
   resolveDecodedInstruction,
 } from './instructionDecoder';
 export { loadProgramSource } from './programLoader';
+export { M68000_ISA_MANIFEST, summarizeIsaCoverage, validateIsaManifest } from './isa/manifest';
+export type {
+  CpuProfile,
+  EffectiveAddressClass,
+  FlagEffect,
+  InstructionEncoding,
+  InstructionForm,
+  InstructionSize,
+  InstructionSupport,
+  IsaCoverageSummary,
+  IsaManifestValidationIssue,
+  StatusFlag,
+} from './isa/types';
 export * from './devices/deviceAddressMap';
 export * from './devices/easy68kHardware';
-export type {
-  MemorySnapshot,
-  MemoryUndoPageEntry,
-} from './core/memory';
+export type { MemorySnapshot, MemoryUndoPageEntry } from './core/memory';
 export type {
   MemoryBuffer,
   MemoryBufferAddressRange,
