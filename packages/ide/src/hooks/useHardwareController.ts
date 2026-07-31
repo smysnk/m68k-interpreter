@@ -15,7 +15,6 @@ import {
 export function useHardwareController() {
   const dispatch = useDispatch<AppDispatch>();
   const preferences = useSelector(selectHardwarePreferences);
-  const [status, setStatus] = React.useState('Hardware ready');
 
   const configure = React.useCallback(
     async (config: Easy68kHardwareConfig): Promise<Easy68kHardwareValidationResult> => {
@@ -23,14 +22,10 @@ export function useHardwareController() {
         const result = await runtimeCommandPort.configureHardware(config);
         if (result.valid) {
           dispatch(setHardwareConfig(result.config ?? config));
-          setStatus('Hardware addresses updated');
-        } else {
-          setStatus(result.errors[0] ?? 'Hardware address configuration is invalid');
         }
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        setStatus(message);
         return { valid: false, conflicts: [], errors: [message] };
       }
     },
@@ -44,56 +39,33 @@ export function useHardwareController() {
   const setToggle = React.useCallback(async (bit: number, enabled: boolean) => {
     try {
       await runtimeCommandPort.setHardwareToggle(bit, enabled);
-      setStatus(`Switch ${bit} ${enabled ? 'on' : 'off'}`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+    } catch {
+      // The hardware control surface is best-effort when no runtime is active.
     }
   }, []);
 
   const setButton = React.useCallback(async (bit: number, pressed: boolean) => {
     try {
       await runtimeCommandPort.setHardwareButton(bit, pressed);
-      setStatus(`Button ${bit} ${pressed ? 'pressed' : 'released'}`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }, []);
-
-  const reset = React.useCallback(async () => {
-    try {
-      await runtimeCommandPort.reset();
-      setStatus('Hardware and emulator reset');
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+    } catch {
+      // The hardware control surface is best-effort when no runtime is active.
     }
   }, []);
 
   const requestInterrupt = React.useCallback(async (level: number) => {
     try {
-      const result = await runtimeCommandPort.requestInterruptLevel(level);
-      setStatus(
-        result === 'accepted'
-          ? `IRQ ${level} accepted`
-          : result === 'masked'
-            ? `IRQ ${level} queued but masked by the current SR`
-            : `IRQ ${level} rejected`
-      );
-      return result;
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+      return await runtimeCommandPort.requestInterruptLevel(level);
+    } catch {
       return 'rejected' as const;
     }
   }, []);
 
   return {
     preferences,
-    status,
-    setStatus,
     configure,
     restoreDefaults,
     setToggle,
     setButton,
-    reset,
     requestInterrupt,
   };
 }

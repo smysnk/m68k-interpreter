@@ -92,17 +92,12 @@ describe('App', () => {
     });
   });
 
-  it('defaults the workspace to the terminal tab and lets the user switch to code', () => {
+  it('omits the compact workspace switcher from the desktop navbar', () => {
     render(<App />);
 
-    expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'false');
-
-    fireEvent.click(screen.getByRole('tab', { name: /code/i }));
-
-    expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'false');
-    expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByTestId('assembly-editor')).toBeInTheDocument();
+    expect(screen.queryByRole('tablist', { name: 'Workspace views' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /terminal/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /code/i })).not.toBeInTheDocument();
   });
 
   it('activates the compact mobile projection and makes every panel kind available without mutating columns', () => {
@@ -145,7 +140,7 @@ describe('App', () => {
     expect(ideStore.getState().files.activeFileId).toBe('example:nibbles.asm');
   });
 
-  it('keeps the code workspace selected when opening Nibbles from the sidebar', () => {
+  it('focuses the code panel when opening Nibbles from the sidebar', () => {
     ideStore.dispatch(setActiveFile('workspace:scratch.asm'));
 
     render(<App />);
@@ -153,7 +148,9 @@ describe('App', () => {
     fireEvent.mouseEnter(screen.getByRole('button', { name: /open file explorer/i }));
     fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
 
-    expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
+    const layout = ideStore.getState().panelLayout.activeLayout;
+    expect(layout.instances[layout.focusedPanelId ?? '']?.kind).toBe('code');
+    expect(screen.getByTestId('assembly-editor')).toBeInTheDocument();
   });
 
   it('adds registers, memory, and hardware as independent panel instances', () => {

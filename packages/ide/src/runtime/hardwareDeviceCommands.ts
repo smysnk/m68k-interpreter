@@ -2,7 +2,10 @@ import type {
   Easy68kHardwareConfig,
   Easy68kHardwareValidationResult,
 } from '@m68k/interpreter';
-import { validateEasy68kHardwareDevices } from '@m68k/interpreter';
+import {
+  M68K_ADDRESS_MASK,
+  validateEasy68kHardwareDevices,
+} from '@m68k/interpreter';
 import { runtimeCommandPort } from '@/runtime/runtimeCommandPort';
 import { runtimeSessionStore } from '@/runtime/runtimeSessionStore';
 import {
@@ -93,4 +96,25 @@ export function patchHardwarePanelConfiguration(
     () => undefined
   );
   return operation;
+}
+
+export function patchDigitalIoBaseConfiguration(
+  panelId: string,
+  baseAddress: number
+): Promise<Easy68kHardwareValidationResult> {
+  if (
+    !Number.isInteger(baseAddress) ||
+    baseAddress < 0 ||
+    baseAddress > M68K_ADDRESS_MASK - 2
+  ) {
+    return Promise.resolve(
+      rejected('The digital I/O base must leave room for the button register at base + 2.')
+    );
+  }
+
+  return patchHardwarePanelConfiguration(panelId, {
+    ledAddress: baseAddress,
+    switchAddress: baseAddress,
+    buttonAddress: baseAddress + 2,
+  });
 }

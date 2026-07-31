@@ -53,31 +53,16 @@ export function DigitalIoHeaderAccessory({
     { kind: 'hardware-digital-io' }
   >;
   const controller = useHardwareDeviceController(instance.id, config.deviceId);
-  const commit = async (
-    patch: Partial<Easy68kHardwareConfig>
-  ): Promise<HardwareAddressCommitResult> => {
-    const validation = await controller.configure(patch);
-    return result(validation.valid, validation.errors);
-  };
   return (
-    <div className="hardware-header-address-cluster hardware-header-address-cluster-digital">
+    <div className="hardware-header-address-cluster">
       <HardwareAddressField
         compact
-        label="LED"
+        label="I/O base"
         value={config.ledAddress}
-        onCommit={(value) => commit({ ledAddress: value })}
-      />
-      <HardwareAddressField
-        compact
-        label="Switch"
-        value={config.switchAddress}
-        onCommit={(value) => commit({ switchAddress: value })}
-      />
-      <HardwareAddressField
-        compact
-        label="Button"
-        value={config.buttonAddress}
-        onCommit={(value) => commit({ buttonAddress: value })}
+        onCommit={async (value) => {
+          const validation = await controller.configureDigitalIoBase(value);
+          return result(validation.valid, validation.errors);
+        }}
       />
     </div>
   );

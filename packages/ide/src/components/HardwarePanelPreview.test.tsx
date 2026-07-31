@@ -59,7 +59,7 @@ describe('HardwarePanelPreview', () => {
     expect(screen.getByRole('img', { name: 'Display digit 1, pattern 0x7D' })).toBeInTheDocument();
   });
 
-  it('models active-low buttons, interrupt feedback, configuration, and reset behavior', async () => {
+  it('models active-low buttons, interrupt selection, and configuration', async () => {
     renderPanel();
 
     const buttonRow = screen.getByTestId('hardware-matrix-button-row');
@@ -73,12 +73,12 @@ describe('HardwarePanelPreview', () => {
     fireEvent.pointerUp(pushButton);
     await waitFor(() => expect(within(buttonRow).getByText('0xFF')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: 'Request interrupt level 5' }));
-    await waitFor(() => expect(screen.getByText('IRQ 5 accepted')).toBeInTheDocument());
+    const interruptButton = screen.getByRole('button', { name: 'Request interrupt level 5' });
+    fireEvent.click(interruptButton);
+    expect(interruptButton).toHaveClass('active');
 
     expect(screen.getByTestId('hardware-address-configuration')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Reset simulator' }));
-    await waitFor(() => expect(screen.getByRole('img', { name: 'LED output 0x00' })).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Reset simulator' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Hardware ready')).not.toBeInTheDocument();
   });
 });

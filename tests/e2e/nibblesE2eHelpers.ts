@@ -598,7 +598,7 @@ export async function loadNibbles(
   const runButton = page.getByRole('button', { name: /run program/i });
   const speedInput = page.getByLabel('Speed (x)');
 
-  await terminalTab.waitFor({ state: 'visible', timeout: 30_000 });
+  await page.getByTestId('app-container').waitFor({ state: 'visible', timeout: 30_000 });
   const controlsReady = await waitForTestControls(page).catch(() => false);
 
   if (controlsReady) {

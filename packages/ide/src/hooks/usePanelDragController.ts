@@ -207,7 +207,7 @@ export function usePanelDragController(document: PanelLayoutDocument) {
     window.requestAnimationFrame(() => {
       window.document
         .getElementById(getPanelDomIds(activeSession.panelId).frameId)
-        ?.querySelector<HTMLElement>('.panel-drag-handle')
+        ?.querySelector<HTMLElement>('.panel-drag-activator-sr-only')
         ?.focus();
     });
     clearSession();

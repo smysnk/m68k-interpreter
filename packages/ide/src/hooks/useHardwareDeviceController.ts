@@ -3,7 +3,10 @@ import type {
   Easy68kHardwareConfig,
   Easy68kHardwareValidationResult,
 } from '@m68k/interpreter';
-import { patchHardwarePanelConfiguration } from '@/runtime/hardwareDeviceCommands';
+import {
+  patchDigitalIoBaseConfiguration,
+  patchHardwarePanelConfiguration,
+} from '@/runtime/hardwareDeviceCommands';
 import { runtimeCommandPort } from '@/runtime/runtimeCommandPort';
 
 function messageFromResult(result: Easy68kHardwareValidationResult): string {
@@ -52,5 +55,20 @@ export function useHardwareDeviceController(panelId: string, deviceId: string) {
     [deviceId]
   );
 
-  return { configure, setButton, setToggle, status };
+  const configureDigitalIoBase = React.useCallback(
+    async (baseAddress: number) => {
+      try {
+        const result = await patchDigitalIoBaseConfiguration(panelId, baseAddress);
+        setStatus(result.valid ? 'Digital I/O address updated' : messageFromResult(result));
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(message);
+        return { valid: false, conflicts: [], errors: [message] };
+      }
+    },
+    [panelId]
+  );
+
+  return { configure, configureDigitalIoBase, setButton, setToggle, status };
 }

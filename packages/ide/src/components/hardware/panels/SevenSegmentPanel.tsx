@@ -45,14 +45,7 @@ export default function SevenSegmentPanel({ instance }: { instance: PanelInstanc
       data-hardware-device-id={config.deviceId}
       data-testid={`hardware-display-${config.deviceId}`}
     >
-      <div className="hardware-panel-summary">
-        <span>Write output</span>
-        <output>8 × byte</output>
-      </div>
       <SevenSegmentBank values={snapshot.display} />
-      <p className="hardware-preview-note">
-        CPU byte writes at successive even addresses drive digits left to right.
-      </p>
     </section>
   );
 }

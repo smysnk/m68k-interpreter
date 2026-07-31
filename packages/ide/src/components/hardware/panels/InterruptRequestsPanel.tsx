@@ -6,8 +6,6 @@ export default function InterruptRequestsPanel() {
   const {
     preferences,
     requestInterrupt,
-    reset,
-    status,
   } = useHardwareController();
   const [lastInterrupt, setLastInterrupt] = React.useState<number | null>(null);
 
@@ -30,16 +28,6 @@ export default function InterruptRequestsPanel() {
           void requestInterrupt(level);
         }}
       />
-      <div className="hardware-interrupt-footer">
-        <button
-          className="hardware-reset-button"
-          onClick={() => void reset()}
-          type="button"
-        >
-          Reset simulator
-        </button>
-      </div>
-      <p aria-live="polite" className="hardware-interrupt-status">{status}</p>
     </section>
   );
 }

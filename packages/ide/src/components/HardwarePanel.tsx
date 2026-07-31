@@ -26,12 +26,10 @@ const HardwarePanel: React.FC<HardwarePanelProps> = ({ embedded = false }) => {
   const snapshot = useHardwareSurface();
   const {
     preferences,
-    status,
     configure,
     restoreDefaults,
     setToggle,
     setButton,
-    reset,
     requestInterrupt,
   } = useHardwareController();
   const [lastInterrupt, setLastInterrupt] = React.useState<number | null>(null);
@@ -91,10 +89,6 @@ const HardwarePanel: React.FC<HardwarePanelProps> = ({ embedded = false }) => {
           <section className="hardware-board-section hardware-interrupt-section">
             <SectionHeading eyebrow="CPU control" title="Interrupt requests" value="Levels 7–1" />
             <InterruptControls automaticLevels={preferences.automaticInterruptLevels} intervalMs={preferences.automaticInterruptIntervalMs} lastInterrupt={lastInterrupt} onRequest={handleInterruptRequest} />
-            <div className="hardware-interrupt-footer">
-              <button className="hardware-reset-button" onClick={() => void reset()} type="button">Reset simulator</button>
-            </div>
-            <p aria-live="polite" className="hardware-interrupt-status">{status}</p>
           </section>
 
           <p className="hardware-preview-note">Inputs are active immediately. LED and display output reflect CPU writes through the device bus.</p>

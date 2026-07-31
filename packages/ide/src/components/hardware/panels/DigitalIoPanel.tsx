@@ -44,19 +44,11 @@ export default function DigitalIoPanel({ instance }: { instance: PanelInstance }
       data-hardware-device-id={config.deviceId}
       data-testid={`hardware-digital-io-${config.deviceId}`}
     >
-      <div className="hardware-panel-summary">
-        <span>Digital I/O</span>
-        <output>8 columns</output>
-      </div>
       <DigitalIoMatrix
         snapshot={snapshot}
         onToggle={(bit, enabled) => void controller.setToggle(bit, enabled)}
         onButton={(bit, pressed) => void controller.setButton(bit, pressed)}
       />
-      <p className="hardware-io-matrix-note">
-        Each vertical column is one bit: switch → LED → button.
-      </p>
-      <p aria-live="polite" className="hardware-interrupt-status">{controller.status}</p>
     </section>
   );
 }
