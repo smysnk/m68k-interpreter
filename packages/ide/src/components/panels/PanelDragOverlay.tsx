@@ -27,7 +27,6 @@ export default function PanelDragOverlay({
       }}
     >
       <header className="panel-frame-header">
-        <span aria-hidden="true" className="panel-drag-handle">⠇</span>
         <span aria-hidden="true" className="panel-kind-icon">{entry.icon}</span>
         <h2>{instance.title}</h2>
         {instance.kind === 'terminal' ? (

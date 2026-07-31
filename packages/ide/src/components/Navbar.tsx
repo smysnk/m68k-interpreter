@@ -218,25 +218,27 @@ const Navbar: React.FC = () => {
           </div>
         ) : null}
         {!isFocusedMobileTerminal ? <NavbarViewMenu /> : null}
-        <div className="navbar-menubar">
-          <div className="navbar-view-toggle" role="tablist" aria-label="Workspace views">
-            {workspaceTabs.map((tab) => (
-              <button
-                key={tab.id}
-                aria-controls={tab.controls}
-                aria-label={tab.ariaLabel}
-                aria-selected={activeWorkspaceTab === tab.id}
-                className={`navbar-view-tab ${activeWorkspaceTab === tab.id ? 'active' : ''}`}
-                id={`workspace-tab-${tab.id}`}
-                onClick={() => handleWorkspaceSelection(tab.id)}
-                role="tab"
-                type="button"
-              >
-                {tab.label}
-              </button>
-            ))}
+        {isCompactShell ? (
+          <div className="navbar-menubar">
+            <div className="navbar-view-toggle" role="tablist" aria-label="Workspace views">
+              {workspaceTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  aria-controls={tab.controls}
+                  aria-label={tab.ariaLabel}
+                  aria-selected={activeWorkspaceTab === tab.id}
+                  className={`navbar-view-tab ${activeWorkspaceTab === tab.id ? 'active' : ''}`}
+                  id={`workspace-tab-${tab.id}`}
+                  onClick={() => handleWorkspaceSelection(tab.id)}
+                  role="tab"
+                  type="button"
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
 
       <div className="navbar-right" data-runtime-visible={showRuntimeControls ? 'true' : 'false'}>

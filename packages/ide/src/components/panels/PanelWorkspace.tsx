@@ -40,7 +40,7 @@ export default function PanelWorkspace(): React.ReactElement {
         <div className="compact-panel-switcher" role="tablist" aria-label="Open panels">
           {Object.values(document.instances).map((panel) => <button aria-selected={panel.id === instance?.id} key={panel.id} onClick={() => dispatch(focusPanel(panel.id))} role="tab" type="button">{panel.title}</button>)}
         </div>
-        {instance ? <PanelFrame columns={document.columns} draggableEnabled={false} instance={instance} interactive={document.terminalOwnerPanelId === instance.id} /> : null}
+        {instance ? <PanelFrame draggableEnabled={false} instance={instance} interactive={document.terminalOwnerPanelId === instance.id} /> : null}
       </div>
     );
   }
@@ -88,7 +88,7 @@ export default function PanelWorkspace(): React.ReactElement {
                       const instance = document.instances[panelId];
                       return instance ? (
                         <React.Fragment key={panelId}>
-                          <PanelFrame columns={document.columns} instance={instance} interactive={document.terminalOwnerPanelId === panelId} />
+                          <PanelFrame instance={instance} interactive={document.terminalOwnerPanelId === panelId} />
                           <PanelDockZone
                             active={drag.activeDockTarget?.id === targets[panelIndex + 1]?.id}
                             document={document}

@@ -48,14 +48,13 @@ test.describe('browser e2e nibbles', () => {
   }) => {
     test.slow();
 
-    const terminalTab = page.getByRole('tab', { name: /terminal/i });
     const terminalScreen = page.getByTestId('terminal-screen');
 
     await loadNibbles(page, {
       useFileExplorer: true,
       speed: '1',
     });
-    await expect(terminalTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tablist', { name: 'Workspace views' })).toHaveCount(0);
     await expect(terminalScreen).toBeVisible();
 
     const terminalBounds = await terminalScreen.boundingBox();

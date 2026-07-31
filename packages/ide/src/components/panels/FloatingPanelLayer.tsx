@@ -19,7 +19,7 @@ export default function FloatingPanelLayer({
         const rect = instance.floatingRect ?? { x: 32, y: 32, width: 520, height: 420 };
         return (
           <div className="floating-panel-window" key={panelId} style={{ left: rect.x, top: rect.y, width: rect.width, height: instance.minimized ? 'auto' : rect.height, zIndex: zIndex + 1 }}>
-            <PanelFrame columns={document.columns} floating instance={instance} interactive={document.terminalOwnerPanelId === panelId} />
+            <PanelFrame floating instance={instance} interactive={document.terminalOwnerPanelId === panelId} />
             {!instance.minimized ? (
               <button
                 aria-label={`Resize ${instance.title}`}

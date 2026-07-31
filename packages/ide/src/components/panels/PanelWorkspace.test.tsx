@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { createIdeStore, duplicatePanel, revealPanelKind, setColumnCount, type AppStore } from '@/store';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
 import PanelWorkspace from './PanelWorkspace';
@@ -29,7 +29,7 @@ describe('PanelWorkspace', () => {
     store.dispatch(duplicatePanel({ sourcePanelId: 'panel-terminal-1' }));
     renderWithIdeProviders(<PanelWorkspace />, { store });
     expect(screen.getByText('Mirror')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /make interactive/i }));
+    fireEvent.click(screen.getByRole('img', { name: 'M68K terminal mirror' }));
     expect(store.getState().panelLayout.activeLayout.terminalOwnerPanelId).not.toBe('panel-terminal-1');
     expect(screen.getAllByTestId('terminal-screen')).toHaveLength(1);
   });
@@ -43,18 +43,18 @@ describe('PanelWorkspace', () => {
     expect(screen.queryByTestId('terminal-screen')).not.toBeInTheDocument();
   });
 
-  it('floats, docks, duplicates, and closes panels through accessible header actions', () => {
+  it('keeps only minimize and close in each panel header', () => {
     renderWithIdeProviders(<PanelWorkspace />, { store });
-    fireEvent.click(screen.getByRole('button', { name: 'Float Screen' }));
-    expect(store.getState().panelLayout.activeLayout.floatingPanelIds).toEqual(['panel-terminal-1']);
-    expect(screen.getByTestId('panel-instance-panel-terminal-1')).toHaveClass('panel-frame-floating');
+    const controls = screen.getByRole('toolbar', { name: 'Screen panel controls' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dock Screen' }));
-    expect(store.getState().panelLayout.activeLayout.floatingPanelIds).toEqual([]);
-    fireEvent.click(screen.getByRole('button', { name: 'Duplicate Screen' }));
-    expect(Object.values(store.getState().panelLayout.activeLayout.instances).filter((panel) => panel.kind === 'terminal')).toHaveLength(2);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Close Screen' })[1]!);
-    expect(Object.values(store.getState().panelLayout.activeLayout.instances).filter((panel) => panel.kind === 'terminal')).toHaveLength(1);
+    expect(within(controls).getAllByRole('button')).toHaveLength(2);
+    expect(within(controls).getByRole('button', { name: 'Minimize Screen' })).toBeInTheDocument();
+    expect(within(controls).getByRole('button', { name: 'Close Screen' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Duplicate Screen' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Float Screen' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('More actions for Screen')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Drag Screen panel')).toHaveClass('panel-drag-activator-sr-only');
+    expect(document.querySelector('.panel-drag-handle')).not.toBeInTheDocument();
   });
 
   it('renders without a separate workspace toolbar row', () => {
@@ -65,15 +65,36 @@ describe('PanelWorkspace', () => {
 
   it('integrates the hardware title and window controls into one header', () => {
     store.dispatch(revealPanelKind('hardware-display'));
+    store.dispatch(revealPanelKind('hardware-digital-io'));
+    store.dispatch(revealPanelKind('hardware-interrupts'));
     renderWithIdeProviders(<PanelWorkspace />, { store });
 
     const hardwareFrame = screen.getByTestId(/panel-instance-panel-hardware-display/);
     expect(hardwareFrame.querySelectorAll('.panel-frame-header')).toHaveLength(1);
     expect(screen.getByRole('heading', { name: 'Seven-segment display' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Display base address' })).toBeInTheDocument();
+    expect(within(hardwareFrame).queryByText('Write output')).not.toBeInTheDocument();
+    expect(within(hardwareFrame).queryByText('8 × byte')).not.toBeInTheDocument();
+    expect(
+      within(hardwareFrame).queryByText(
+        'CPU byte writes at successive even addresses drive digits left to right.'
+      )
+    ).not.toBeInTheDocument();
 
     const controls = screen.getByRole('toolbar', { name: 'Seven-segment display panel controls' });
     expect(controls).toContainElement(screen.getByRole('button', { name: 'Minimize Seven-segment display' }));
     expect(controls).toContainElement(screen.getByRole('button', { name: 'Close Seven-segment display' }));
+
+    const digitalFrame = screen.getByTestId(/panel-instance-panel-hardware-digital-io/);
+    const digitalHeader = digitalFrame.querySelector('.panel-frame-header');
+    const digitalBody = digitalFrame.querySelector('.panel-body');
+    expect(digitalHeader).not.toBeNull();
+    expect(digitalBody).not.toBeNull();
+    expect(within(digitalHeader as HTMLElement).getByRole('textbox', { name: 'I/O base address' })).toBeInTheDocument();
+    expect(within(digitalBody as HTMLElement).queryByRole('textbox', { name: 'I/O base address' })).not.toBeInTheDocument();
+
+    const interruptFrame = screen.getByTestId(/panel-instance-panel-hardware-interrupts/);
+    expect(within(interruptFrame).queryByRole('button', { name: 'Reset simulator' })).not.toBeInTheDocument();
+    expect(within(interruptFrame).queryByText('Hardware ready')).not.toBeInTheDocument();
   });
 });

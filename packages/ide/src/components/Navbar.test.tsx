@@ -33,10 +33,12 @@ describe('Navbar', () => {
     const appMenuButton = screen.getByRole('button', { name: /open app menu/i });
     const viewMenuButton = screen.getByRole('button', { name: /open view menu/i });
     expect(appMenuButton.closest('.navbar-menu-wrap')?.nextElementSibling).toContainElement(viewMenuButton);
+    expect(screen.queryByRole('tablist', { name: 'Workspace views' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /terminal/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /code/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Delay (s)')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Speed (x)')).toHaveValue(1);
 
-    fireEvent.click(screen.getByRole('tab', { name: /code/i }));
     fireEvent.change(screen.getByLabelText('Speed (x)'), { target: { value: '2.5' } });
     fireEvent.click(screen.getByTitle(/run program/i));
     fireEvent.click(screen.getByTitle(/reset/i));
@@ -51,7 +53,6 @@ describe('Navbar', () => {
     fireEvent.click(screen.getByRole('button', { name: /open app menu/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /line numbers/i }));
 
-    expect(store.getState().panelLayout.activeLayout.instances[store.getState().panelLayout.activeLayout.focusedPanelId ?? '']?.kind).toBe('code');
     expect(store.getState().settings.editorTheme).toBe(EditorThemeEnum.M68K_DARK);
     expect(store.getState().settings.followSystemTheme).toBe(false);
     expect(store.getState().settings.lineNumbers).toBe(false);
