@@ -84,6 +84,12 @@ async function selectColumnCount(page: Page, count: number): Promise<void> {
   await page.getByRole('menuitemradio', { name: `${count} column${count === 1 ? '' : 's'}` }).click();
 }
 
+async function addPanel(page: Page, panelName: string): Promise<void> {
+  await page.getByRole('button', { name: /open view menu/i }).click();
+  await page.getByRole('menuitem', { name: 'Add Panel' }).click();
+  await page.getByRole('menuitem', { name: `Add ${panelName} panel` }).click();
+}
+
 async function commitAddress(
   panel: Locator,
   label: string,
@@ -150,25 +156,15 @@ test.describe('live EASy68K hardware panels', () => {
 
     const displayPanels = page.locator('[data-panel-kind="hardware-display"]');
     const digitalPanels = page.locator('[data-panel-kind="hardware-digital-io"]');
-    await displayPanels
-      .first()
-      .getByRole('button', { name: 'Duplicate Seven-segment display' })
-      .click();
-    await digitalPanels
-      .first()
-      .getByRole('button', { name: 'Duplicate LEDs / Switches / Buttons' })
-      .click();
+    await addPanel(page, 'Seven-segment display');
+    await addPanel(page, 'LEDs / Switches / Buttons');
     await expect(displayPanels).toHaveCount(2);
     await expect(digitalPanels).toHaveCount(2);
 
     await commitAddress(displayPanels.nth(0), 'Display base', '00E00000');
     await commitAddress(displayPanels.nth(1), 'Display base', '00E00020');
-    await commitAddress(digitalPanels.nth(0), 'LED', '00E00040');
-    await commitAddress(digitalPanels.nth(0), 'Switch', '00E00040');
-    await commitAddress(digitalPanels.nth(0), 'Button', '00E00042');
-    await commitAddress(digitalPanels.nth(1), 'LED', '00E00050');
-    await commitAddress(digitalPanels.nth(1), 'Switch', '00E00050');
-    await commitAddress(digitalPanels.nth(1), 'Button', '00E00052');
+    await commitAddress(digitalPanels.nth(0), 'I/O base', '00E00040');
+    await commitAddress(digitalPanels.nth(1), 'I/O base', '00E00050');
 
     await assertAlignedMatrix(digitalPanels.nth(0));
     await assertAlignedMatrix(digitalPanels.nth(1));
@@ -253,22 +249,6 @@ test.describe('live EASy68K hardware panels', () => {
       contentType: 'image/png',
     });
 
-    await digitalPanels
-      .nth(1)
-      .getByRole('button', { name: 'Float LEDs / Switches / Buttons' })
-      .click();
-    await expect(
-      page.locator('.floating-panel-window [data-panel-kind="hardware-digital-io"]')
-    ).toBeVisible();
-    await testInfo.attach('independent-hardware-panels-light-floating', {
-      body: await page.screenshot({ fullPage: true }),
-      contentType: 'image/png',
-    });
-    await digitalPanels
-      .nth(1)
-      .getByRole('button', { name: 'Dock LEDs / Switches / Buttons' })
-      .click();
-
     await selectColumnCount(page, 1);
     await expect(page.locator('[data-panel-column-id]')).toHaveCount(1);
     await testInfo.attach('independent-hardware-panels-light-one-column', {
@@ -284,12 +264,12 @@ test.describe('live EASy68K hardware panels', () => {
       .poll(() =>
         page
           .locator('[data-panel-kind="hardware-digital-io"]')
-          .getByRole('textbox', { name: 'Button address' })
+          .getByRole('textbox', { name: 'I/O base address' })
           .evaluateAll((inputs) =>
             inputs.map((input) => (input as HTMLInputElement).value)
           )
       )
-      .toContain('00E00052');
+      .toContain('00E00050');
     expect(browserErrors).toEqual([]);
   });
 

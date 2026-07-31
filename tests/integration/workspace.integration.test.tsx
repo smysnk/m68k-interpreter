@@ -48,13 +48,13 @@ describe('workspace integration', () => {
 
     render(<App />);
 
-    expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.queryByRole('tablist', { name: /workspace views/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('terminal-screen')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('tab', { name: /code/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /add panel/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /add code panel/i }));
 
-    expect(screen.getByRole('tab', { name: /code/i })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByTestId('assembly-editor')).toBeInTheDocument();
 
     act(() => {
@@ -74,7 +74,8 @@ describe('workspace integration', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /terminal/i })).toHaveAttribute('aria-selected', 'true');
+      const layout = ideStore.getState().panelLayout.activeLayout;
+      expect(layout.instances[layout.focusedPanelId ?? '']?.kind).toBe('terminal');
       expect(window.emulatorInstance).not.toBeNull();
       expect(getEmulatorTerminalText()).toContain('H');
       expect(terminalSurfaceStore.getText()).toContain('H');
