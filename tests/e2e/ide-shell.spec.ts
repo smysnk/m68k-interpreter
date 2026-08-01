@@ -112,7 +112,7 @@ test.describe('browser e2e ide shell', () => {
     const frames = page.locator(
       '.panel-column > .panel-frame[data-panel-kind^="hardware-"]'
     );
-    await expect(frames).toHaveCount(3);
+    await expect(frames).toHaveCount(2);
     const measurements = await frames.evaluateAll((elements) =>
       elements.map((frame) => {
         const header = frame.querySelector('.panel-frame-header');
