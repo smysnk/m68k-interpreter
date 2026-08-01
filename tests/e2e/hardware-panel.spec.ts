@@ -22,47 +22,53 @@ async function openHardwareLab(page: Page, compact = false): Promise<void> {
   await page.goto('/?ide_perf=1');
   await page.waitForFunction(
     () =>
-      typeof (window as typeof window & {
-        __M68K_IDE_TEST_CONTROLS__?: IdeTestControls;
-      }).__M68K_IDE_TEST_CONTROLS__?.setPanelPreset === 'function'
+      typeof (
+        window as typeof window & {
+          __M68K_IDE_TEST_CONTROLS__?: IdeTestControls;
+        }
+      ).__M68K_IDE_TEST_CONTROLS__?.setPanelPreset === 'function'
   );
   await page.evaluate(() => {
-    (window as typeof window & {
-      __M68K_IDE_TEST_CONTROLS__?: IdeTestControls;
-    }).__M68K_IDE_TEST_CONTROLS__?.setPanelPreset?.('hardware-lab');
+    (
+      window as typeof window & {
+        __M68K_IDE_TEST_CONTROLS__?: IdeTestControls;
+      }
+    ).__M68K_IDE_TEST_CONTROLS__?.setPanelPreset?.('hardware-lab');
   });
   if (compact) {
     await page.evaluate(() => {
-      (window as typeof window & {
-        __M68K_IDE_TEST_CONTROLS__?: IdeTestControls;
-      }).__M68K_IDE_TEST_CONTROLS__?.setWorkspaceTab?.('hardware');
+      (
+        window as typeof window & {
+          __M68K_IDE_TEST_CONTROLS__?: IdeTestControls;
+        }
+      ).__M68K_IDE_TEST_CONTROLS__?.setWorkspaceTab?.('hardware');
     });
     await expect(page.locator('[data-panel-kind="hardware-display"]')).toBeVisible();
     return;
   }
   await expect(page.locator('[data-panel-kind="hardware-display"]')).toHaveCount(1);
   await expect(page.locator('[data-panel-kind="hardware-digital-io"]')).toHaveCount(1);
-  await expect(page.locator('[data-panel-kind="hardware-interrupts"]')).toHaveCount(1);
+  await expect(page.locator('[data-panel-kind="hardware-interrupts"]')).toHaveCount(0);
 }
 
-async function loadAndRun(
-  page: Page,
-  source: string,
-  expectedSymbol = 'LOOP'
-): Promise<void> {
+async function loadAndRun(page: Page, source: string, expectedSymbol = 'LOOP'): Promise<void> {
   await page.evaluate((program) => {
-    const controls = (window as typeof window & {
-      __M68K_IDE_TEST_CONTROLS__?: IdeTestControls;
-    }).__M68K_IDE_TEST_CONTROLS__;
+    const controls = (
+      window as typeof window & {
+        __M68K_IDE_TEST_CONTROLS__?: IdeTestControls;
+      }
+    ).__M68K_IDE_TEST_CONTROLS__;
     controls?.loadSource?.(program);
     controls?.runProgram?.();
   }, source);
   await page.waitForFunction(
     (symbol) =>
       Object.keys(
-        (window as typeof window & {
-          emulatorInstance?: { getSymbols?(): Record<string, number> };
-        }).emulatorInstance?.getSymbols?.() ?? {}
+        (
+          window as typeof window & {
+            emulatorInstance?: { getSymbols?(): Record<string, number> };
+          }
+        ).emulatorInstance?.getSymbols?.() ?? {}
       ).includes(symbol),
     expectedSymbol
   );
@@ -81,7 +87,9 @@ async function selectTheme(page: Page, theme: 'M68K Dark' | 'M68K Light'): Promi
 async function selectColumnCount(page: Page, count: number): Promise<void> {
   await page.getByRole('button', { name: /open view menu/i }).click();
   await page.getByRole('menuitem', { name: 'Columns' }).click();
-  await page.getByRole('menuitemradio', { name: `${count} column${count === 1 ? '' : 's'}` }).click();
+  await page
+    .getByRole('menuitemradio', { name: `${count} column${count === 1 ? '' : 's'}` })
+    .click();
 }
 
 async function addPanel(page: Page, panelName: string): Promise<void> {
@@ -95,19 +103,40 @@ async function commitAddress(
   label: string,
   hexadecimalAddress: string
 ): Promise<void> {
+  const gear = panel.getByRole('button', {
+    name: `Configure ${label.toLowerCase()} address`,
+  });
+  const usesGear = (await gear.count()) === 1;
+  if (usesGear) await gear.click();
   const input = panel.getByRole('textbox', { name: `${label} address` });
   await input.fill(hexadecimalAddress);
   await input.press('Enter');
-  await expect(input).toHaveValue(hexadecimalAddress.toUpperCase().padStart(8, '0'));
+  const formattedAddress = hexadecimalAddress.toUpperCase().padStart(8, '0');
+  if (usesGear) {
+    await expect(gear).toHaveAttribute('data-address', formattedAddress);
+  } else {
+    await expect(input).toHaveValue(formattedAddress);
+  }
+}
+
+async function commitDigitalIoMapping(
+  panel: Locator,
+  hexadecimalBaseAddress: string
+): Promise<void> {
+  const baseAddress = Number.parseInt(hexadecimalBaseAddress, 16);
+  await commitAddress(panel, 'LED', hexadecimalBaseAddress);
+  await commitAddress(panel, 'Switch', hexadecimalBaseAddress);
+  await commitAddress(panel, 'Button', (baseAddress + 2).toString(16));
 }
 
 async function assertAlignedMatrix(panel: Locator): Promise<void> {
-  const matrix = panel.getByTestId('hardware-io-matrix');
-  const columnGeometry = await matrix.evaluate((element) => {
+  const surface = panel.locator('.hardware-digital-io-panel');
+  const columnGeometry = await surface.evaluate((element) => {
     const selectors = [
       '.hardware-io-switch-row .hardware-io-cell',
       '.hardware-io-led-row .hardware-io-cell',
       '.hardware-io-button-row .hardware-io-cell',
+      '.hardware-interrupt-grid-aligned > :not(.hardware-interrupt-row-label)',
     ];
     return {
       rows: selectors.map((selector) =>
@@ -116,8 +145,8 @@ async function assertAlignedMatrix(panel: Locator): Promise<void> {
           return { x: rect.x, width: rect.width };
         })
       ),
-      clientWidth: element.clientWidth,
-      scrollWidth: element.scrollWidth,
+      clientWidth: element.querySelector<HTMLElement>('.hardware-io-matrix')?.clientWidth ?? 0,
+      scrollWidth: element.querySelector<HTMLElement>('.hardware-io-matrix')?.scrollWidth ?? 0,
     };
   });
 
@@ -125,22 +154,14 @@ async function assertAlignedMatrix(panel: Locator): Promise<void> {
   for (let rowIndex = 1; rowIndex < columnGeometry.rows.length; rowIndex += 1) {
     for (let column = 0; column < 8; column += 1) {
       expect(
-        Math.abs(
-          columnGeometry.rows[rowIndex][column].x -
-            columnGeometry.rows[0][column].x
-        )
+        Math.abs(columnGeometry.rows[rowIndex][column].x - columnGeometry.rows[0][column].x)
       ).toBeLessThan(1);
       expect(
-        Math.abs(
-          columnGeometry.rows[rowIndex][column].width -
-            columnGeometry.rows[0][column].width
-        )
+        Math.abs(columnGeometry.rows[rowIndex][column].width - columnGeometry.rows[0][column].width)
       ).toBeLessThan(1);
     }
   }
-  expect(columnGeometry.scrollWidth).toBeLessThanOrEqual(
-    columnGeometry.clientWidth + 1
-  );
+  expect(columnGeometry.scrollWidth).toBeLessThanOrEqual(columnGeometry.clientWidth + 1);
 }
 
 test.describe('live EASy68K hardware panels', () => {
@@ -157,14 +178,14 @@ test.describe('live EASy68K hardware panels', () => {
     const displayPanels = page.locator('[data-panel-kind="hardware-display"]');
     const digitalPanels = page.locator('[data-panel-kind="hardware-digital-io"]');
     await addPanel(page, 'Seven-segment display');
-    await addPanel(page, 'LEDs / Switches / Buttons');
+    await addPanel(page, 'LEDs / Switches / Buttons / IRQs');
     await expect(displayPanels).toHaveCount(2);
     await expect(digitalPanels).toHaveCount(2);
 
     await commitAddress(displayPanels.nth(0), 'Display base', '00E00000');
     await commitAddress(displayPanels.nth(1), 'Display base', '00E00020');
-    await commitAddress(digitalPanels.nth(0), 'I/O base', '00E00040');
-    await commitAddress(digitalPanels.nth(1), 'I/O base', '00E00050');
+    await commitDigitalIoMapping(digitalPanels.nth(0), '00E00040');
+    await commitDigitalIoMapping(digitalPanels.nth(1), '00E00050');
 
     await assertAlignedMatrix(digitalPanels.nth(0));
     await assertAlignedMatrix(digitalPanels.nth(1));
@@ -178,20 +199,12 @@ test.describe('live EASy68K hardware panels', () => {
     ).toBeVisible();
 
     await digitalPanels.nth(0).getByRole('switch', { name: 'Toggle switch 7' }).click();
-    await expect(
-      digitalPanels.nth(0).getByRole('img', { name: 'LED output 0x80' })
-    ).toBeVisible();
-    await expect(
-      digitalPanels.nth(1).getByRole('img', { name: 'LED output 0x00' })
-    ).toBeVisible();
+    await expect(digitalPanels.nth(0).getByRole('img', { name: 'LED output 0x80' })).toBeVisible();
+    await expect(digitalPanels.nth(1).getByRole('img', { name: 'LED output 0x00' })).toBeVisible();
 
     await digitalPanels.nth(1).getByRole('switch', { name: 'Toggle switch 0' }).click();
-    await expect(
-      digitalPanels.nth(1).getByRole('img', { name: 'LED output 0x01' })
-    ).toBeVisible();
-    await expect(
-      digitalPanels.nth(0).getByRole('img', { name: 'LED output 0x80' })
-    ).toBeVisible();
+    await expect(digitalPanels.nth(1).getByRole('img', { name: 'LED output 0x01' })).toBeVisible();
+    await expect(digitalPanels.nth(0).getByRole('img', { name: 'LED output 0x80' })).toBeVisible();
 
     const deviceAButton = digitalPanels.nth(0).getByRole('button', { name: 'Push button 0' });
     const deviceBButton = digitalPanels.nth(1).getByRole('button', { name: 'Push button 0' });
@@ -201,13 +214,9 @@ test.describe('live EASy68K hardware panels', () => {
     await deviceBButton.dispatchEvent('pointerup');
 
     await loadAndRun(page, INTERRUPT_SOURCE, 'IRQ7_HANDLER');
-    const interruptPanel = page.locator('[data-panel-kind="hardware-interrupts"]');
-    await interruptPanel
-      .getByRole('button', { name: 'Request interrupt level 7' })
-      .click();
-    await expect(
-      digitalPanels.nth(0).getByRole('img', { name: 'LED output 0x07' })
-    ).toBeVisible();
+    const interruptPanel = digitalPanels.nth(0).getByTestId('hardware-interrupt-requests');
+    await interruptPanel.getByRole('button', { name: 'Request interrupt level 7' }).click();
+    await expect(digitalPanels.nth(0).getByRole('img', { name: 'LED output 0x07' })).toBeVisible();
     await interruptPanel
       .getByRole('spinbutton', { name: 'Automatic interrupt interval' })
       .fill('50');
@@ -216,9 +225,7 @@ test.describe('live EASy68K hardware panels', () => {
     });
     await automaticIrq7.check();
     await expect
-      .poll(() =>
-        digitalPanels.nth(0).locator('.hardware-io-led-row').getAttribute('aria-label')
-      )
+      .poll(() => digitalPanels.nth(0).locator('.hardware-io-led-row').getAttribute('aria-label'))
       .not.toBe('LED output 0x07');
     await automaticIrq7.uncheck();
 
@@ -264,9 +271,9 @@ test.describe('live EASy68K hardware panels', () => {
       .poll(() =>
         page
           .locator('[data-panel-kind="hardware-digital-io"]')
-          .getByRole('textbox', { name: 'I/O base address' })
-          .evaluateAll((inputs) =>
-            inputs.map((input) => (input as HTMLInputElement).value)
+          .getByRole('button', { name: 'Configure led address' })
+          .evaluateAll((buttons) =>
+            buttons.map((button) => button.getAttribute('data-address'))
           )
       )
       .toContain('00E00050');
@@ -278,7 +285,7 @@ test.describe('live EASy68K hardware panels', () => {
   }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openHardwareLab(page, true);
-    await page.getByRole('tab', { name: 'LEDs / Switches / Buttons' }).click();
+    await page.getByRole('tab', { name: 'LEDs / Switches / Buttons / IRQs' }).click();
     const digitalPanel = page.locator('[data-panel-kind="hardware-digital-io"]');
     await expect(digitalPanel).toBeVisible();
     await assertAlignedMatrix(digitalPanel);

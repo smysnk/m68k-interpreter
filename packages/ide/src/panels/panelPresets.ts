@@ -84,7 +84,7 @@ export const PANEL_PRESETS: readonly PanelPresetDefinition[] = [
         'Hardware Lab',
         [
           [{ kind: 'terminal' }],
-          [{ kind: 'hardware-display' }, { kind: 'hardware-interrupts' }],
+          [{ kind: 'hardware-display' }],
           [{ kind: 'hardware-digital-io' }],
         ],
         [42, 26, 32]

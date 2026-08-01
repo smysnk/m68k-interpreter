@@ -8,11 +8,13 @@ import {
 } from '@/store';
 
 export function InterruptControls({
+  aligned = false,
   automaticLevels,
   intervalMs,
   lastInterrupt,
   onRequest,
 }: {
+  aligned?: boolean;
   automaticLevels: readonly number[];
   intervalMs: number;
   lastInterrupt: number | null;
@@ -21,7 +23,14 @@ export function InterruptControls({
   const dispatch = useDispatch<AppDispatch>();
   return (
     <RenderProfileBoundary id="HardwareInterruptControls">
-      <div className="hardware-interrupt-grid">
+      <div
+        className={`hardware-interrupt-grid ${aligned ? 'hardware-interrupt-grid-aligned' : ''}`}
+      >
+        {aligned ? (
+          <div className="hardware-interrupt-row-label">
+            <strong>IRQ</strong>
+          </div>
+        ) : null}
         {EASY68K_INTERRUPT_LEVELS.map((level) => (
           <div className="hardware-interrupt-control" key={level}>
             <button
@@ -43,6 +52,11 @@ export function InterruptControls({
             </label>
           </div>
         ))}
+        {aligned ? (
+          <div aria-label="No interrupt level zero" className="hardware-interrupt-empty">
+            —
+          </div>
+        ) : null}
       </div>
       <label className="hardware-interval-field">
         <span>Interval</span>
@@ -50,7 +64,9 @@ export function InterruptControls({
           <input
             aria-label="Automatic interrupt interval"
             min={50}
-            onChange={(event) => dispatch(setAutomaticInterruptInterval(Number(event.target.value)))}
+            onChange={(event) =>
+              dispatch(setAutomaticInterruptInterval(Number(event.target.value)))
+            }
             step={50}
             type="number"
             value={intervalMs}

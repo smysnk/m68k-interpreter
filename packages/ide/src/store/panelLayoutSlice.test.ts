@@ -14,7 +14,10 @@ import panelLayoutReducer, {
   togglePanelMinimized,
 } from './panelLayoutSlice';
 import { createPanelPreset } from '@/panels/panelPresets';
-import { getPanelLayoutInvariantErrors, normalizePanelLayoutDocument } from './panelLayoutValidation';
+import {
+  getPanelLayoutInvariantErrors,
+  normalizePanelLayoutDocument,
+} from './panelLayoutValidation';
 
 function reduce(actions: Parameters<typeof panelLayoutReducer>[1][]) {
   return actions.reduce(panelLayoutReducer, structuredClone(initialPanelLayoutState));
@@ -31,13 +34,26 @@ describe('panelLayoutSlice', () => {
 
   it('duplicates, minimizes, floats, docks, and closes instances without orphan placements', () => {
     let state = reduce([duplicatePanel({ sourcePanelId: 'panel-terminal-1' })]);
-    const mirrorId = Object.values(state.activeLayout.instances).find((panel) => panel.kind === 'terminal' && panel.id !== 'panel-terminal-1')!.id;
+    const mirrorId = Object.values(state.activeLayout.instances).find(
+      (panel) => panel.kind === 'terminal' && panel.id !== 'panel-terminal-1'
+    )!.id;
     state = panelLayoutReducer(state, setTerminalOwner(mirrorId));
     state = panelLayoutReducer(state, togglePanelMinimized(mirrorId));
     expect(state.activeLayout.terminalOwnerPanelId).toBe('panel-terminal-1');
-    state = panelLayoutReducer(state, floatPanel({ panelId: mirrorId, rect: { x: -8, y: -4, width: 10, height: 10 } }));
-    expect(state.activeLayout.instances[mirrorId]?.floatingRect).toMatchObject({ x: 0, y: 0, width: 280, height: 180 });
-    state = panelLayoutReducer(state, movePanel({ panelId: mirrorId, columnId: state.activeLayout.columns[1]!.id, index: 0 }));
+    state = panelLayoutReducer(
+      state,
+      floatPanel({ panelId: mirrorId, rect: { x: -8, y: -4, width: 10, height: 10 } })
+    );
+    expect(state.activeLayout.instances[mirrorId]?.floatingRect).toMatchObject({
+      x: 0,
+      y: 0,
+      width: 280,
+      height: 180,
+    });
+    state = panelLayoutReducer(
+      state,
+      movePanel({ panelId: mirrorId, columnId: state.activeLayout.columns[1]!.id, index: 0 })
+    );
     state = panelLayoutReducer(state, closePanel(mirrorId));
     expect(getPanelLayoutInvariantErrors(state.activeLayout)).toEqual([]);
   });
@@ -49,7 +65,11 @@ describe('panelLayoutSlice', () => {
       setColumnCount(1),
     ]);
     expect(state.activeLayout.columns).toHaveLength(1);
-    expect(state.activeLayout.columns[0]?.panelIds.some((id) => state.activeLayout.instances[id]?.kind === 'memory')).toBe(true);
+    expect(
+      state.activeLayout.columns[0]?.panelIds.some(
+        (id) => state.activeLayout.instances[id]?.kind === 'memory'
+      )
+    ).toBe(true);
     expect(getPanelLayoutInvariantErrors(state.activeLayout)).toEqual([]);
   });
 
@@ -66,17 +86,32 @@ describe('panelLayoutSlice', () => {
 
   it('repairs corrupt placement, owner, widths, and floating rectangles', () => {
     const normalized = normalizePanelLayoutDocument({
-      name: 'Damaged', columnCount: 2,
+      name: 'Damaged',
+      columnCount: 2,
       instances: {
         a: { id: 'a', kind: 'terminal', title: 'A', minimized: false, config: {} },
-        b: { id: 'b', kind: 'memory', title: 'B', minimized: false, floatingRect: { x: NaN, y: -3, width: 1, height: 1 }, config: {} },
+        b: {
+          id: 'b',
+          kind: 'memory',
+          title: 'B',
+          minimized: false,
+          floatingRect: { x: NaN, y: -3, width: 1, height: 1 },
+          config: {},
+        },
       },
       columns: [{ id: 'one', width: NaN, panelIds: ['a', 'a', 'missing'] }],
-      floatingPanelIds: ['b', 'a'], terminalOwnerPanelId: 'b', focusedPanelId: 'missing',
+      floatingPanelIds: ['b', 'a'],
+      terminalOwnerPanelId: 'b',
+      focusedPanelId: 'missing',
     });
     expect(getPanelLayoutInvariantErrors(normalized)).toEqual([]);
     expect(normalized.terminalOwnerPanelId).toBe('a');
-    expect(normalized.instances.b?.floatingRect).toMatchObject({ x: 32, y: 0, width: 280, height: 180 });
+    expect(normalized.instances.b?.floatingRect).toMatchObject({
+      x: 32,
+      y: 0,
+      width: 280,
+      height: 180,
+    });
   });
 
   it('moves, focuses, and raises a floating panel in one semantic reducer action', () => {
@@ -84,12 +119,18 @@ describe('panelLayoutSlice', () => {
       floatPanel({ panelId: 'panel-terminal-1' }),
       floatPanel({ panelId: 'panel-registers-2' }),
     ]);
-    state = panelLayoutReducer(state, moveFloatingPanel({
-      panelId: 'panel-terminal-1',
-      rect: { x: 80, y: 70, width: 500, height: 360 },
-    }));
+    state = panelLayoutReducer(
+      state,
+      moveFloatingPanel({
+        panelId: 'panel-terminal-1',
+        rect: { x: 80, y: 70, width: 500, height: 360 },
+      })
+    );
     expect(state.activeLayout.instances['panel-terminal-1']?.floatingRect).toEqual({
-      x: 80, y: 70, width: 500, height: 360,
+      x: 80,
+      y: 70,
+      width: 500,
+      height: 360,
     });
     expect(state.activeLayout.floatingPanelIds.at(-1)).toBe('panel-terminal-1');
     expect(state.activeLayout.focusedPanelId).toBe('panel-terminal-1');
@@ -103,19 +144,12 @@ describe('panelLayoutSlice', () => {
     const source = Object.values(state.activeLayout.instances).find(
       (panel) => panel.kind === 'hardware-display'
     )!;
-    state = panelLayoutReducer(
-      state,
-      duplicatePanel({ sourcePanelId: source.id })
-    );
+    state = panelLayoutReducer(state, duplicatePanel({ sourcePanelId: source.id }));
     const displays = Object.values(state.activeLayout.instances)
       .map((panel) => panel.config)
       .filter(
-        (
-          config
-        ): config is Extract<
-          (typeof config),
-          { kind: 'hardware-display' }
-        > => config.kind === 'hardware-display'
+        (config): config is Extract<typeof config, { kind: 'hardware-display' }> =>
+          config.kind === 'hardware-display'
       );
 
     expect(displays).toHaveLength(2);
@@ -124,7 +158,7 @@ describe('panelLayoutSlice', () => {
     expect(getPanelLayoutInvariantErrors(state.activeLayout)).toEqual([]);
   });
 
-  it('migrates a legacy composite hardware panel into three stable panel kinds', () => {
+  it('migrates a legacy composite hardware panel into two combined panel kinds', () => {
     const migrated = normalizePanelLayoutDocument({
       schemaVersion: 1,
       name: 'Legacy lab',
@@ -146,13 +180,60 @@ describe('panelLayoutSlice', () => {
       nextColumnSequence: 2,
     });
 
-    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.schemaVersion).toBe(3);
     expect(Object.values(migrated.instances).map((panel) => panel.kind)).toEqual([
       'hardware-display',
       'hardware-digital-io',
-      'hardware-interrupts',
     ]);
-    expect(migrated.columns[0]?.panelIds).toHaveLength(3);
+    expect(migrated.columns[0]?.panelIds).toHaveLength(2);
     expect(normalizePanelLayoutDocument(migrated)).toEqual(migrated);
+  });
+
+  it('folds version-two interrupt panels into digital I/O', () => {
+    const migrated = normalizePanelLayoutDocument({
+      schemaVersion: 2,
+      name: 'Split hardware lab',
+      columnCount: 1,
+      columns: [
+        {
+          id: 'column-1',
+          width: 100,
+          panelIds: ['digital', 'interrupts'],
+        },
+      ],
+      floatingPanelIds: [],
+      instances: {
+        digital: {
+          id: 'digital',
+          kind: 'hardware-digital-io',
+          title: 'LEDs / Switches / Buttons',
+          minimized: false,
+          config: {
+            kind: 'hardware-digital-io',
+            deviceId: 'device-digital',
+            ledAddress: 0xe00010,
+            switchAddress: 0xe00010,
+            buttonAddress: 0xe00012,
+          },
+        },
+        interrupts: {
+          id: 'interrupts',
+          kind: 'hardware-interrupts',
+          title: 'Interrupt requests',
+          minimized: false,
+          config: { kind: 'hardware-interrupts' },
+        },
+      },
+      focusedPanelId: 'interrupts',
+      terminalOwnerPanelId: null,
+      nextInstanceSequence: 3,
+      nextColumnSequence: 2,
+    });
+
+    expect(migrated.schemaVersion).toBe(3);
+    expect(Object.keys(migrated.instances)).toEqual(['digital']);
+    expect(migrated.instances.digital?.title).toBe('LEDs / Switches / Buttons / IRQs');
+    expect(migrated.focusedPanelId).toBe('digital');
+    expect(getPanelLayoutInvariantErrors(migrated)).toEqual([]);
   });
 });

@@ -1,11 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PanelInstance } from '@/store';
+import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
 import DigitalIoPanel from './DigitalIoPanel';
-import { DigitalIoHeaderAccessory } from './HardwarePanelHeaderAccessories';
 
 const controller = vi.hoisted(() => ({
-  configureDigitalIoBase: vi.fn(),
+  configure: vi.fn(),
+  requestInterrupt: vi.fn(),
   setButton: vi.fn(),
   setToggle: vi.fn(),
 }));
@@ -13,8 +14,17 @@ const controller = vi.hoisted(() => ({
 vi.mock('@/hooks/useHardwareDeviceController', () => ({
   useHardwareDeviceController: () => ({
     ...controller,
-    configure: vi.fn(),
     status: 'Button 3 released',
+  }),
+}));
+
+vi.mock('@/hooks/useHardwareController', () => ({
+  useHardwareController: () => ({
+    preferences: {
+      automaticInterruptIntervalMs: 1000,
+      automaticInterruptLevels: [],
+    },
+    requestInterrupt: controller.requestInterrupt,
   }),
 }));
 
@@ -25,7 +35,7 @@ vi.mock('@/runtime/useHardwareSurface', () => ({
 const instance: PanelInstance = {
   id: 'panel-digital-io-test',
   kind: 'hardware-digital-io',
-  title: 'LEDs / Switches / Buttons',
+  title: 'LEDs / Switches / Buttons / IRQs',
   minimized: false,
   config: {
     kind: 'hardware-digital-io',
@@ -38,39 +48,46 @@ const instance: PanelInstance = {
 
 describe('DigitalIoPanel', () => {
   beforeEach(() => {
-    controller.configureDigitalIoBase.mockReset();
-    controller.configureDigitalIoBase.mockResolvedValue({
+    controller.configure.mockReset();
+    controller.configure.mockResolvedValue({
       valid: true,
       conflicts: [],
       errors: [],
     });
   });
 
-  it('keeps address controls and redundant summary labels out of the panel body', () => {
-    render(<DigitalIoPanel instance={instance} />);
+  it('keeps only compact row labels and address gears in the matrix', () => {
+    renderWithIdeProviders(<DigitalIoPanel instance={instance} />);
 
-    expect(screen.queryByText('Digital I/O')).not.toBeInTheDocument();
-    expect(screen.queryByText('8 columns')).not.toBeInTheDocument();
+    expect(screen.getByText('Switch')).toBeInTheDocument();
+    expect(screen.getByText('LED')).toBeInTheDocument();
+    expect(screen.getByText('Button')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Configure switch address' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Configure led address' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Configure button address' })).toBeInTheDocument();
     expect(screen.queryByLabelText('I/O base address')).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(
-        'LED writes and switch reads use the base address; buttons use base + 2.'
-      )
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/READ · \$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/WRITE · \$/)).not.toBeInTheDocument();
+    expect(screen.queryByText('0x00')).not.toBeInTheDocument();
     expect(screen.queryByText('Button 3 released')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Request interrupt level 7' })).toBeInTheDocument();
   });
 
-  it('provides one shared address control through the title-bar accessory', async () => {
-    render(<DigitalIoHeaderAccessory instance={instance} />);
+  it('configures each row address independently through its gear', async () => {
+    renderWithIdeProviders(<DigitalIoPanel instance={instance} />);
 
-    const input = screen.getByLabelText('I/O base address');
+    fireEvent.click(screen.getByRole('button', { name: 'Configure switch address' }));
+
+    const input = screen.getByLabelText('Switch address');
     expect(input).toHaveValue('00E00010');
 
     fireEvent.change(input, { target: { value: '00E00040' } });
     fireEvent.blur(input);
 
     await waitFor(() =>
-      expect(controller.configureDigitalIoBase).toHaveBeenCalledWith(0xe00040)
+      expect(controller.configure).toHaveBeenCalledWith({
+        switchAddress: 0xe00040,
+      })
     );
   });
 });

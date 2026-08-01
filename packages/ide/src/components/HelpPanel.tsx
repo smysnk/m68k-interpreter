@@ -14,7 +14,7 @@ const HelpPanel: React.FC = () => {
       <div className="help-panel-section">
         <h3>Panel Workspace</h3>
         <ul className="help-panel-list">
-          <li>Choose one to four columns, then add Screen, Code, Registers, Memory, Seven-segment, Digital I/O, Interrupt, or Help panels from the View menu.</li>
+          <li>Choose one to four columns, then add Screen, Code, Registers, Memory, Seven-segment, combined Digital I/O and IRQ, or Help panels from the View menu.</li>
           <li>Drag a panel by its header to reorder it or move it between columns.</li>
           <li>Minimize retains a compact header, and close removes the panel from the current layout.</li>
           <li>Only the Screen marked Interactive owns keyboard, touch, focus, and terminal geometry. Click a passive Screen mirror to transfer ownership.</li>

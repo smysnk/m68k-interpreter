@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { Emulator } from '@m68k/interpreter';
 import HardwarePanelPreview from './HardwarePanelPreview';
@@ -39,9 +39,9 @@ describe('HardwarePanelPreview', () => {
     renderPanel();
 
     expect(screen.getByText('Base · $00E00000')).toBeInTheDocument();
-    expect(screen.getByText('Read · $00E00010')).toBeInTheDocument();
-    expect(screen.getByText('Write · $00E00010')).toBeInTheDocument();
-    expect(screen.getByText('Read low · $00E00012')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Configure switch address' })).toHaveAttribute('data-address', '00E00010');
+    expect(screen.getByRole('button', { name: 'Configure led address' })).toHaveAttribute('data-address', '00E00010');
+    expect(screen.getByRole('button', { name: 'Configure button address' })).toHaveAttribute('data-address', '00E00012');
     expect(screen.getByRole('img', { name: 'LED output 0xA5' })).toBeInTheDocument();
 
     const matrix = screen.getByTestId('hardware-io-matrix');
@@ -65,13 +65,13 @@ describe('HardwarePanelPreview', () => {
     const buttonRow = screen.getByTestId('hardware-matrix-button-row');
     const pushButton = screen.getByRole('button', { name: 'Push button 0' });
 
-    expect(within(buttonRow).getByText('0xFF')).toBeInTheDocument();
+    expect(buttonRow).toHaveAttribute('aria-label', 'Button input 0xFF');
 
     fireEvent.pointerDown(pushButton);
-    await waitFor(() => expect(within(buttonRow).getByText('0xFE')).toBeInTheDocument());
+    await waitFor(() => expect(buttonRow).toHaveAttribute('aria-label', 'Button input 0xFE'));
 
     fireEvent.pointerUp(pushButton);
-    await waitFor(() => expect(within(buttonRow).getByText('0xFF')).toBeInTheDocument());
+    await waitFor(() => expect(buttonRow).toHaveAttribute('aria-label', 'Button input 0xFF'));
 
     const interruptButton = screen.getByRole('button', { name: 'Request interrupt level 5' });
     fireEvent.click(interruptButton);

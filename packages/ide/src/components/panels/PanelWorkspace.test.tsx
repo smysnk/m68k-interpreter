@@ -66,7 +66,6 @@ describe('PanelWorkspace', () => {
   it('integrates the hardware title and window controls into one header', () => {
     store.dispatch(revealPanelKind('hardware-display'));
     store.dispatch(revealPanelKind('hardware-digital-io'));
-    store.dispatch(revealPanelKind('hardware-interrupts'));
     renderWithIdeProviders(<PanelWorkspace />, { store });
 
     const hardwareFrame = screen.getByTestId(/panel-instance-panel-hardware-display/);
@@ -90,11 +89,9 @@ describe('PanelWorkspace', () => {
     const digitalBody = digitalFrame.querySelector('.panel-body');
     expect(digitalHeader).not.toBeNull();
     expect(digitalBody).not.toBeNull();
-    expect(within(digitalHeader as HTMLElement).getByRole('textbox', { name: 'I/O base address' })).toBeInTheDocument();
-    expect(within(digitalBody as HTMLElement).queryByRole('textbox', { name: 'I/O base address' })).not.toBeInTheDocument();
-
-    const interruptFrame = screen.getByTestId(/panel-instance-panel-hardware-interrupts/);
-    expect(within(interruptFrame).queryByRole('button', { name: 'Reset simulator' })).not.toBeInTheDocument();
-    expect(within(interruptFrame).queryByText('Hardware ready')).not.toBeInTheDocument();
+    expect(within(digitalHeader as HTMLElement).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(digitalBody as HTMLElement).getByRole('button', { name: 'Configure switch address' })).toBeInTheDocument();
+    expect(within(digitalBody as HTMLElement).getByRole('button', { name: 'Request interrupt level 7' })).toBeInTheDocument();
+    expect(screen.queryByTestId(/panel-instance-panel-hardware-interrupts/)).not.toBeInTheDocument();
   });
 });

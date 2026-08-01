@@ -49,7 +49,7 @@ describe('panelDragModel', () => {
     const column = document.columns[1]!;
     const target = createPanelDockTargets(document, column.id, 1)[1]!;
     expect(describePanelDockTarget(target, 'Screen', document)).toBe(
-      'Dock Screen between Seven-segment display and Interrupt requests in column 2',
+      'Dock Screen after Seven-segment display in column 2',
     );
   });
 });

@@ -2324,12 +2324,12 @@ input.register-segment-input[type='text'] {
 }
 
 .hardware-io-row-label {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-content: center;
-  gap: 2px 6px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   min-width: 0;
-  padding: 7px 9px;
+  padding: 4px 10px;
   background: color-mix(in srgb, var(--ide-surface-strong) 66%, transparent);
 }
 
@@ -2339,24 +2339,43 @@ input.register-segment-input[type='text'] {
   font-weight: 800;
 }
 
-.hardware-io-row-label span {
-  grid-column: 1 / -1;
-  overflow: hidden;
-  color: var(--ide-text-muted);
-  font-family: var(--font-monospace);
-  font-size: 7px;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
+.hardware-io-address-menu {
+  position: relative;
 }
 
-.hardware-io-row-label output {
-  align-self: center;
-  justify-self: end;
+.hardware-io-address-menu > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 23px;
+  height: 23px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ide-text-muted);
+  cursor: pointer;
+}
+
+.hardware-io-address-menu > button:hover,
+.hardware-io-address-menu > button:focus-visible,
+.hardware-io-address-menu > button[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--ide-accent) 16%, transparent);
   color: var(--ide-accent);
-  font-family: var(--font-monospace);
-  font-size: 8px;
-  font-weight: 800;
+  outline: none;
+}
+
+.hardware-io-address-popover {
+  position: absolute;
+  z-index: 90;
+  top: 50%;
+  left: calc(100% + 6px);
+  min-width: 146px;
+  padding: 8px;
+  border: 1px solid var(--ide-border-strong);
+  border-radius: 7px;
+  background: var(--ide-surface-strong);
+  box-shadow: var(--ide-shadow);
+  transform: translateY(-50%);
 }
 
 .hardware-io-cell {
@@ -2367,16 +2386,16 @@ input.register-segment-input[type='text'] {
 }
 
 .hardware-io-switch-row {
-  min-height: 65px;
+  min-height: 50px;
 }
 
 .hardware-io-led-row {
-  min-height: 45px;
+  min-height: 36px;
   background: linear-gradient(90deg, transparent, rgba(255, 49, 75, 0.025), transparent);
 }
 
 .hardware-io-button-row {
-  min-height: 53px;
+  min-height: 44px;
 }
 
 .hardware-io-matrix-note {
@@ -2504,6 +2523,36 @@ input.register-segment-input[type='text'] {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 6px;
+}
+
+.hardware-interrupt-grid-aligned {
+  grid-template-columns: minmax(116px, 1.65fr) repeat(8, minmax(30px, 1fr));
+  gap: 0;
+}
+
+.hardware-interrupt-grid-aligned .hardware-interrupt-control {
+  padding: 0 4px;
+  border-left: 1px solid color-mix(in srgb, var(--ide-border) 68%, transparent);
+}
+
+.hardware-interrupt-row-label,
+.hardware-interrupt-empty {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.hardware-interrupt-row-label {
+  padding: 0 10px;
+  color: var(--text-color);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.hardware-interrupt-empty {
+  justify-content: center;
+  border-left: 1px solid color-mix(in srgb, var(--ide-border) 68%, transparent);
+  color: var(--ide-text-muted);
 }
 
 .hardware-interrupt-control {
@@ -2672,6 +2721,37 @@ input.register-segment-input[type='text'] {
   background: color-mix(in srgb, var(--ide-panel) 95%, transparent);
 }
 
+.hardware-digital-io-panel {
+  gap: 0;
+}
+
+.hardware-combined-interrupt-section {
+  margin-top: 0;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--ide-border) 88%, transparent);
+}
+
+.hardware-combined-interrupt-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--ide-text-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.hardware-combined-interrupt-heading span:last-child {
+  color: var(--ide-accent);
+}
+
+.hardware-combined-interrupt-section .hardware-interval-field {
+  margin-top: 10px;
+}
+
 .hardware-display-panel {
   gap: 0;
   padding: 0;
@@ -2757,7 +2837,7 @@ input.register-segment-input[type='text'] {
   box-shadow: var(--ide-shadow);
 }
 
-@container hardware-panel (max-width: 440px) {
+@container (max-width: 440px) {
   .hardware-preview-content {
     padding: 10px;
   }
@@ -2771,19 +2851,17 @@ input.register-segment-input[type='text'] {
   }
 
   .hardware-io-row-label {
-    padding: 6px;
+    padding: 4px 6px;
   }
 
   .hardware-io-row-label strong {
     font-size: 10px;
   }
 
-  .hardware-io-row-label span {
-    font-size: 6px;
-  }
-
-  .hardware-io-row-label output {
-    font-size: 7px;
+  .hardware-io-address-popover {
+    top: calc(100% + 4px);
+    left: 0;
+    transform: none;
   }
 
   .hardware-toggle {
@@ -2802,6 +2880,10 @@ input.register-segment-input[type='text'] {
 
   .hardware-interrupt-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .hardware-interrupt-grid-aligned {
+    grid-template-columns: minmax(72px, 1.35fr) repeat(8, minmax(24px, 1fr));
   }
 
   .hardware-seven-segment-bank,

@@ -75,7 +75,7 @@ const HardwarePanel: React.FC<HardwarePanelProps> = ({ embedded = false }) => {
 
           <section className="hardware-board-section hardware-io-matrix-section">
             <SectionHeading eyebrow="Digital I/O" title="8-bit control matrix" value="8 columns" />
-            <DigitalIoMatrix snapshot={snapshot} onToggle={(bit, enabled) => void setToggle(bit, enabled)} onButton={(bit, pressed) => void setButton(bit, pressed)} />
+            <DigitalIoMatrix snapshot={snapshot} onAddressCommit={commitAddress} onToggle={(bit, enabled) => void setToggle(bit, enabled)} onButton={(bit, pressed) => void setButton(bit, pressed)} />
             <p className="hardware-io-matrix-note">Each vertical column is one bit: switch → LED → button.</p>
             <div className="hardware-address-configuration" data-testid="hardware-address-configuration">
               <HardwareAddressField label="Display base" value={preferences.config.displayBase} onCommit={(value) => commitAddress('displayBase', value)} />

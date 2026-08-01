@@ -5,10 +5,8 @@ import Memory from '@/components/Memory';
 import Registers from '@/components/Registers';
 import Terminal from '@/components/Terminal';
 import DigitalIoPanel from '@/components/hardware/panels/DigitalIoPanel';
-import InterruptRequestsPanel from '@/components/hardware/panels/InterruptRequestsPanel';
 import SevenSegmentPanel from '@/components/hardware/panels/SevenSegmentPanel';
 import {
-  DigitalIoHeaderAccessory,
   SevenSegmentHeaderAccessory,
 } from '@/components/hardware/panels/HardwarePanelHeaderAccessories';
 import {
@@ -79,12 +77,7 @@ export const PANEL_REGISTRY: Record<PanelKind, PanelRegistryEntry> = {
   },
   'hardware-digital-io': {
     ...metadata('hardware-digital-io'),
-    HeaderAccessory: DigitalIoHeaderAccessory,
     render: ({ instance }) => <DigitalIoPanel instance={instance} />,
-  },
-  'hardware-interrupts': {
-    ...metadata('hardware-interrupts'),
-    render: () => <InterruptRequestsPanel />,
   },
   help: {
     ...metadata('help'),

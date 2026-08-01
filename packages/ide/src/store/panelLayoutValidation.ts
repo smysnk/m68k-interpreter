@@ -61,11 +61,7 @@ function migrateV1ToV2(value: Record<string, unknown>): Record<string, unknown> 
   for (const [id, raw] of Object.entries(value.instances)) {
     if (!isRecord(raw) || raw.kind !== 'hardware') continue;
     delete instances[id];
-    const kinds: readonly PanelKind[] = [
-      'hardware-display',
-      'hardware-digital-io',
-      'hardware-interrupts',
-    ];
+    const kinds: readonly PanelKind[] = ['hardware-display', 'hardware-digital-io'];
     const ids: string[] = [];
     for (const kind of kinds) {
       if (expandedCount >= MAX_PANEL_INSTANCES) break;
@@ -108,20 +104,16 @@ function migrateV1ToV2(value: Record<string, unknown>): Record<string, unknown> 
 
   const replaceIds = (rawIds: unknown): unknown[] =>
     Array.isArray(rawIds)
-      ? rawIds.flatMap((id) =>
-          typeof id === 'string' ? replacements.get(id) ?? [id] : []
-        )
+      ? rawIds.flatMap((id) => (typeof id === 'string' ? (replacements.get(id) ?? [id]) : []))
       : [];
   const columns = Array.isArray(value.columns)
     ? value.columns.map((rawColumn) =>
-        isRecord(rawColumn)
-          ? { ...rawColumn, panelIds: replaceIds(rawColumn.panelIds) }
-          : rawColumn
+        isRecord(rawColumn) ? { ...rawColumn, panelIds: replaceIds(rawColumn.panelIds) } : rawColumn
       )
     : value.columns;
   const focusedPanelId =
     typeof value.focusedPanelId === 'string'
-      ? replacements.get(value.focusedPanelId)?.[0] ?? value.focusedPanelId
+      ? (replacements.get(value.focusedPanelId)?.[0] ?? value.focusedPanelId)
       : value.focusedPanelId;
 
   return {
@@ -134,11 +126,82 @@ function migrateV1ToV2(value: Record<string, unknown>): Record<string, unknown> 
   };
 }
 
+function migrateV2ToV3(value: Record<string, unknown>): Record<string, unknown> {
+  if (finite(value.schemaVersion, 1) >= 3 || !isRecord(value.instances)) {
+    return value;
+  }
+
+  const instances = { ...value.instances };
+  const removedIds = new Set<string>();
+  let digitalIoId = Object.entries(instances).find(
+    ([, raw]) => isRecord(raw) && raw.kind === 'hardware-digital-io'
+  )?.[0];
+
+  for (const [id, raw] of Object.entries(instances)) {
+    if (!isRecord(raw)) continue;
+    if (raw.kind === 'hardware-digital-io') {
+      instances[id] = {
+        ...raw,
+        title: getPanelDefaultTitle('hardware-digital-io'),
+      };
+      continue;
+    }
+    if (raw.kind !== 'hardware-interrupts') continue;
+
+    if (!digitalIoId) {
+      digitalIoId = id;
+      instances[id] = {
+        ...raw,
+        kind: 'hardware-digital-io',
+        title: getPanelDefaultTitle('hardware-digital-io'),
+        config: {
+          kind: 'hardware-digital-io',
+          deviceId: `device-${id}`,
+          ledAddress: DEFAULT_EASY68K_HARDWARE_CONFIG.ledAddress,
+          switchAddress: DEFAULT_EASY68K_HARDWARE_CONFIG.switchAddress,
+          buttonAddress: DEFAULT_EASY68K_HARDWARE_CONFIG.buttonAddress,
+        },
+      };
+    } else {
+      delete instances[id];
+      removedIds.add(id);
+    }
+  }
+
+  const withoutRemoved = (rawIds: unknown): unknown[] =>
+    Array.isArray(rawIds)
+      ? rawIds.filter((id) => typeof id === 'string' && !removedIds.has(id))
+      : [];
+  const columns = Array.isArray(value.columns)
+    ? value.columns.map((rawColumn) =>
+        isRecord(rawColumn)
+          ? { ...rawColumn, panelIds: withoutRemoved(rawColumn.panelIds) }
+          : rawColumn
+      )
+    : value.columns;
+  const focusedPanelId =
+    typeof value.focusedPanelId === 'string' && removedIds.has(value.focusedPanelId)
+      ? (digitalIoId ?? null)
+      : value.focusedPanelId;
+
+  return {
+    ...value,
+    schemaVersion: 3,
+    instances,
+    columns,
+    floatingPanelIds: withoutRemoved(value.floatingPanelIds),
+    focusedPanelId,
+  };
+}
+
 function migratePanelLayoutDocument(value: unknown): unknown {
   if (!isRecord(value)) return value;
   let migrated = value;
   if (finite(migrated.schemaVersion, 1) < 2) {
     migrated = migrateV1ToV2(migrated);
+  }
+  if (finite(migrated.schemaVersion, 1) < 3) {
+    migrated = migrateV2ToV3(migrated);
   }
   return migrated;
 }
@@ -245,7 +308,11 @@ export function normalizePanelLayoutDocument(value: unknown): PanelLayoutDocumen
   const sourceInstances = migrated.instances as Record<string, unknown>;
   const instances: PanelLayoutDocument['instances'] = {};
   for (const [id, raw] of Object.entries(sourceInstances).slice(0, MAX_PANEL_INSTANCES)) {
-    if (!isRecord(raw) || typeof raw.kind !== 'string' || !PANEL_KIND_SET.has(raw.kind as PanelKind)) {
+    if (
+      !isRecord(raw) ||
+      typeof raw.kind !== 'string' ||
+      !PANEL_KIND_SET.has(raw.kind as PanelKind)
+    ) {
       continue;
     }
     const kind = raw.kind as PanelKind;
@@ -308,15 +375,9 @@ export function normalizePanelLayoutDocument(value: unknown): PanelLayoutDocumen
 
   if (Object.keys(instances).length === 0) return createPanelPreset('classic');
   const equalWidth = 100 / columns.length;
-  const totalWidth = columns.reduce(
-    (total, column) => total + Math.max(0.1, column.width),
-    0
-  );
+  const totalWidth = columns.reduce((total, column) => total + Math.max(0.1, column.width), 0);
   for (const column of columns) {
-    column.width =
-      totalWidth > 0
-        ? (Math.max(0.1, column.width) / totalWidth) * 100
-        : equalWidth;
+    column.width = totalWidth > 0 ? (Math.max(0.1, column.width) / totalWidth) * 100 : equalWidth;
   }
   const terminalIds = Object.values(instances)
     .filter((panel) => panel.kind === 'terminal')
@@ -326,9 +387,7 @@ export function normalizePanelLayoutDocument(value: unknown): PanelLayoutDocumen
       ? migrated.focusedPanelId
       : null;
   const requestedOwner =
-    typeof migrated.terminalOwnerPanelId === 'string'
-      ? migrated.terminalOwnerPanelId
-      : null;
+    typeof migrated.terminalOwnerPanelId === 'string' ? migrated.terminalOwnerPanelId : null;
 
   return {
     schemaVersion: PANEL_LAYOUT_SCHEMA_VERSION,
@@ -341,12 +400,10 @@ export function normalizePanelLayoutDocument(value: unknown): PanelLayoutDocumen
     terminalOwnerPanelId:
       requestedOwner && terminalIds.includes(requestedOwner)
         ? requestedOwner
-        : terminalIds[0] ?? null,
+        : (terminalIds[0] ?? null),
     nextInstanceSequence: Math.max(
       1,
-      Math.trunc(
-        finite(migrated.nextInstanceSequence, Object.keys(instances).length + 1)
-      )
+      Math.trunc(finite(migrated.nextInstanceSequence, Object.keys(instances).length + 1))
     ),
     nextColumnSequence: Math.max(
       columns.length + 1,
@@ -427,9 +484,11 @@ export function getPanelLayoutInvariantErrors(document: PanelLayoutDocument): st
   return errors;
 }
 
-function legacyKindToPanelKinds(kind: WorkspaceTab | 'registers' | 'memory' | 'hardware'): PanelKind[] {
+function legacyKindToPanelKinds(
+  kind: WorkspaceTab | 'registers' | 'memory' | 'hardware'
+): PanelKind[] {
   if (kind === 'hardware') {
-    return ['hardware-display', 'hardware-digital-io', 'hardware-interrupts'];
+    return ['hardware-display', 'hardware-digital-io'];
   }
   return [kind];
 }

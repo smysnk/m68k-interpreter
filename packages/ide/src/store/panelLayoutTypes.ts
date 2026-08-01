@@ -4,7 +4,7 @@ import {
   type Easy68kHardwareDeviceConfig,
 } from '@m68k/interpreter';
 
-export const PANEL_LAYOUT_SCHEMA_VERSION = 2 as const;
+export const PANEL_LAYOUT_SCHEMA_VERSION = 3 as const;
 export const MIN_PANEL_COLUMNS = 1;
 export const MAX_PANEL_COLUMNS = 4;
 export const MAX_PANEL_INSTANCES = 32;
@@ -17,7 +17,6 @@ export type PanelKind =
   | 'memory'
   | 'hardware-display'
   | 'hardware-digital-io'
-  | 'hardware-interrupts'
   | 'help';
 export type PanelInstanceId = string;
 export type PanelColumnId = string;
@@ -88,23 +87,13 @@ export const PANEL_KIND_DEFINITIONS: Record<PanelKind, PanelKindDefinition> = {
   },
   'hardware-digital-io': {
     kind: 'hardware-digital-io',
-    title: 'LEDs / Switches / Buttons',
+    title: 'LEDs / Switches / Buttons / IRQs',
     icon: 'I/O',
     canDuplicate: true,
     canFloat: true,
     minimumWidth: 520,
     minimumFloatingSize: { width: 720, height: 360 },
     addMenuOrder: 5,
-  },
-  'hardware-interrupts': {
-    kind: 'hardware-interrupts',
-    title: 'Interrupt requests',
-    icon: 'IRQ',
-    canDuplicate: true,
-    canFloat: true,
-    minimumWidth: 360,
-    minimumFloatingSize: { width: 520, height: 320 },
-    addMenuOrder: 6,
   },
   help: {
     kind: 'help',
@@ -114,13 +103,11 @@ export const PANEL_KIND_DEFINITIONS: Record<PanelKind, PanelKindDefinition> = {
     canFloat: true,
     minimumWidth: 280,
     minimumFloatingSize: { width: 380, height: 300 },
-    addMenuOrder: 7,
+    addMenuOrder: 6,
   },
 };
 
-export const PANEL_KINDS = Object.freeze(
-  Object.keys(PANEL_KIND_DEFINITIONS) as PanelKind[]
-);
+export const PANEL_KINDS = Object.freeze(Object.keys(PANEL_KIND_DEFINITIONS) as PanelKind[]);
 
 export interface FloatingPanelRect {
   x: number;
@@ -146,7 +133,6 @@ export type PanelConfiguration =
       switchAddress: number;
       buttonAddress: number;
     }
-  | { kind: 'hardware-interrupts' }
   | { kind: 'help' };
 
 export interface PanelInstance {
