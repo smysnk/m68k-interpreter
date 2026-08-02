@@ -45,6 +45,8 @@
 .panel-dock-zone-empty.available { min-height: 96px; }
 .panel-dock-zone-empty.available::before { inset: 50% 12%; }
 .empty-panel-column { position: absolute; inset: 50% auto auto 50%; z-index: 3; transform: translate(-50%, -50%); min-height: 70px; width: calc(100% - 34px); border: 1px dashed var(--ide-border-strong); border-radius: 8px; background: transparent; color: var(--ide-text-muted); transition: opacity 120ms ease; }
+.empty-panel-column:hover, .empty-panel-column:focus-visible, .empty-panel-column[aria-expanded='true'] { border-color: color-mix(in srgb, var(--ide-accent) 58%, var(--ide-border-strong)); background: color-mix(in srgb, var(--ide-accent) 7%, transparent); color: var(--text-color); outline: none; }
+.panel-add-menu { width: 300px; overflow-y: auto; }
 .panel-workspace[data-panel-drag-active='true'] .empty-panel-column { opacity: .18; pointer-events: none; }
 .panel-drag-overlay { min-height: 40px; overflow: hidden; border-color: color-mix(in srgb, var(--ide-accent) 70%, var(--ide-border-strong)); opacity: .92; box-shadow: 0 22px 48px rgba(0,0,0,.52), 0 0 0 1px color-mix(in srgb, var(--ide-accent) 38%, transparent); transform: rotate(.25deg) scale(1.01); pointer-events: none; }
 .panel-drag-overlay .panel-frame-header { cursor: grabbing; }
@@ -60,9 +62,6 @@
 .floating-panel-resize-handle { position: absolute; right: 1px; bottom: 1px; width: 18px; height: 18px; border: 0; background: linear-gradient(135deg, transparent 45%, var(--ide-border-strong) 46% 55%, transparent 56% 66%, var(--ide-border-strong) 67% 76%, transparent 77%); cursor: nwse-resize; touch-action: none; }
 .panel-error { padding: 18px; display: grid; gap: 12px; }
 .panel-error-actions { display: flex; gap: 8px; }
-.compact-panel-switcher { display: flex; gap: 4px; overflow-x: auto; padding: 5px 7px; border-bottom: 1px solid var(--ide-border); }
-.compact-panel-switcher button { padding: 5px 9px; white-space: nowrap; border-radius: 6px; background: var(--ide-surface); color: var(--text-secondary); }
-.compact-panel-switcher button[aria-selected='true'] { color: var(--text-color); border-color: var(--ide-accent); }
 .panel-workspace-compact > .panel-frame { flex: 1; margin: 0; }
 .panel-workspace-terminal-focus > .panel-body { height: 100%; overflow: hidden; }
 @media (max-width: 960px) { .floating-panel-layer { display: none; } }

@@ -100,7 +100,7 @@ describe('App', () => {
     expect(screen.queryByRole('tab', { name: /code/i })).not.toBeInTheDocument();
   });
 
-  it('activates the compact mobile projection and makes every panel kind available without mutating columns', () => {
+  it('activates the compact mobile projection with one tab row and makes every panel kind available', () => {
     setViewportWidth(600);
 
     render(<App />);
@@ -116,20 +116,19 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('tab', { name: /registers/i }));
 
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-terminal-view-mode', 'standard');
+    expect(screen.queryByRole('tablist', { name: 'Open panels' })).not.toBeInTheDocument();
     expect(screen.getByText('Flags')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /^add panel$/i }));
     expect(screen.getByRole('menuitem', { name: /add memory panel/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /add seven-segment display panel/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('menuitem', { name: /add memory panel/i }));
-    fireEvent.click(screen.getAllByRole('tab', { name: /memory/i }).at(-1)!);
 
     expect(screen.getByLabelText('Start Address')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /^add panel$/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /add seven-segment display panel/i }));
-    fireEvent.click(screen.getAllByRole('tab', { name: /seven-segment display/i }).at(-1)!);
 
     expect(screen.getByTestId(/hardware-display-device-/)).toBeInTheDocument();
   });

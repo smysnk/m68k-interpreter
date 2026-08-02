@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, screen, within } from '@testing-library/react';
-import { createIdeStore, duplicatePanel, revealPanelKind, setColumnCount, type AppStore } from '@/store';
+import { createIdeStore, duplicatePanel, focusPanel, revealPanelKind, setColumnCount, type AppStore } from '@/store';
+import { PANEL_KIND_ORDER, PANEL_REGISTRY } from '@/panels/panelRegistry';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
 import PanelWorkspace from './PanelWorkspace';
 
@@ -61,6 +62,49 @@ describe('PanelWorkspace', () => {
     renderWithIdeProviders(<PanelWorkspace />, { store });
     expect(screen.queryByLabelText('Workspace layout controls')).not.toBeInTheDocument();
     expect(document.querySelector('.panel-workspace-toolbar')).not.toBeInTheDocument();
+  });
+
+  it('does not render a second panel switcher in the compact workspace', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 600 });
+    store.dispatch(focusPanel('panel-registers-2'));
+
+    renderWithIdeProviders(<PanelWorkspace />, { store });
+
+    expect(screen.queryByRole('tablist', { name: 'Open panels' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Registers' })).toBeInTheDocument();
+  });
+
+  it('opens the shared panel catalogue from an empty column and adds the selection there', () => {
+    store.dispatch(setColumnCount(3));
+    renderWithIdeProviders(<PanelWorkspace />, { store });
+
+    const addPanelButton = screen.getByRole('button', { name: 'Add panel to column 3' });
+    fireEvent.click(addPanelButton);
+
+    const menu = screen.getByRole('menu', { name: 'Add panel to column 3' });
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.getAttribute('aria-label'))
+    ).toEqual(PANEL_KIND_ORDER.map((kind) => `Add ${PANEL_REGISTRY[kind].title} panel`));
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('menu', { name: 'Add panel to column 3' })).not.toBeInTheDocument();
+    expect(addPanelButton).toHaveFocus();
+
+    fireEvent.click(addPanelButton);
+    fireEvent.click(
+      within(screen.getByRole('menu', { name: 'Add panel to column 3' })).getByRole('menuitem', {
+        name: 'Add Memory panel',
+      })
+    );
+
+    expect(
+      within(screen.getByTestId('panel-column-3')).getByRole('toolbar', {
+        name: 'Memory panel controls',
+      })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: 'Add panel to column 3' })).not.toBeInTheDocument();
   });
 
   it('integrates the hardware title and window controls into one header', () => {

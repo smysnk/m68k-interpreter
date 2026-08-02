@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCheck, faChevronRight, faTableColumns } from '@fortawesome/free-solid-svg-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { PANEL_KIND_ORDER, PANEL_REGISTRY } from '@/panels/panelRegistry';
+import PanelKindMenuItems from '@/components/PanelKindMenuItems';
 import { PANEL_PRESETS } from '@/panels/panelPresets';
 import {
   closeAppMenu,
@@ -275,24 +275,7 @@ export default function NavbarViewMenu(): React.ReactElement {
                   id="navbar-view-add-panel-submenu"
                   role="menu"
                 >
-                  {PANEL_KIND_ORDER.map((kind) => {
-                    const panel = PANEL_REGISTRY[kind];
-                    return (
-                      <button
-                        aria-label={`Add ${panel.title} panel`}
-                        className="navbar-menu-item"
-                        key={kind}
-                        onClick={() => addPanel(kind)}
-                        role="menuitem"
-                        type="button"
-                      >
-                        <span className="navbar-menu-copy">
-                          <span className="navbar-menu-title">{panel.title}</span>
-                        </span>
-                        <span aria-hidden="true" className="navbar-menu-meta">{panel.icon}</span>
-                      </button>
-                    );
-                  })}
+                  <PanelKindMenuItems onSelect={addPanel} />
                 </div>
               ) : null}
 

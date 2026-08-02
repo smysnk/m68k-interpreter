@@ -3,12 +3,13 @@ import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useS
 import { Group, Panel, Separator, type Layout } from 'react-resizable-panels';
 import { useDispatch, useSelector } from 'react-redux';
 import {
-  commitColumnWidths, createPanel, focusPanel, selectActivePanelLayout, type AppDispatch,
+  commitColumnWidths, selectActivePanelLayout, type AppDispatch,
 } from '@/store';
 import { useCompactShell } from '@/hooks/useCompactShell';
 import { panelKeyboardCoordinates, usePanelDragController } from '@/hooks/usePanelDragController';
 import { createPanelDockTargets } from '@/panels/panelDragModel';
 import FloatingPanelLayer from './FloatingPanelLayer';
+import EmptyPanelColumn from './EmptyPanelColumn';
 import PanelDockZone from './PanelDockZone';
 import PanelDragOverlay from './PanelDragOverlay';
 import PanelFrame from './PanelFrame';
@@ -37,9 +38,6 @@ export default function PanelWorkspace(): React.ReactElement {
     }
     return (
       <div className="panel-workspace panel-workspace-compact" data-testid="panel-workspace">
-        <div className="compact-panel-switcher" role="tablist" aria-label="Open panels">
-          {Object.values(document.instances).map((panel) => <button aria-selected={panel.id === instance?.id} key={panel.id} onClick={() => dispatch(focusPanel(panel.id))} role="tab" type="button">{panel.title}</button>)}
-        </div>
         {instance ? <PanelFrame draggableEnabled={false} instance={instance} interactive={document.terminalOwnerPanelId === instance.id} /> : null}
       </div>
     );
@@ -99,7 +97,9 @@ export default function PanelWorkspace(): React.ReactElement {
                         </React.Fragment>
                       ) : null;
                     })}
-                    {column.panelIds.length === 0 ? <button className="empty-panel-column" onClick={() => dispatch(createPanel({ kind: 'terminal', target: { columnId: column.id } }))} type="button">+ Add panel</button> : null}
+                    {column.panelIds.length === 0 ? (
+                      <EmptyPanelColumn columnId={column.id} columnIndex={columnIndex} />
+                    ) : null}
                   </section>
                 </Panel>
               </React.Fragment>
