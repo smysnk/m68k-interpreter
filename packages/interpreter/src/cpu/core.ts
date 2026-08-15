@@ -16,7 +16,7 @@ import {
   truncate,
 } from './alu';
 import { evaluateBranchCondition, evaluateConditionCode } from './conditions';
-import { decodeBinaryInstruction } from './decoder';
+import { decodeBinaryInstruction, type DecodedBinaryInstruction } from './decoder';
 import {
   classifyEffectiveAddress,
   isEffectiveAddressAllowed,
@@ -39,6 +39,10 @@ export class StrictM68000Core {
   private stopped = false;
   private pendingInterruptLevel = 0;
   private programEndAddress: number | undefined;
+  private readonly decodeCache = new Map<
+    number,
+    { opcode: number; extension: number; instruction: DecodedBinaryInstruction }
+  >();
 
   constructor(options: StrictM68000CoreOptions = {}) {
     this.bus = options.bus ?? new RamBus();
@@ -155,31 +159,40 @@ export class StrictM68000Core {
   ): { value: number; ccr: number } {
     const extend = (this.state.ccr & FLAG_X) !== 0 ? 1 : 0;
     const stickyZero = (this.state.ccr & FLAG_Z) !== 0;
-    const preservedUndefined = this.state.ccr & (FLAG_N | FLAG_V);
-    let value: number;
+    let result: number;
+    let intermediate: number;
     let carry: boolean;
+    let overflow: boolean;
 
     if (subtract) {
-      const lowDifference = (destination & 0x0f) - (source & 0x0f) - extend;
-      let difference = (destination & 0xff) - (source & 0xff) - extend;
-      if (lowDifference < 0) difference -= 0x06;
-      carry = difference < 0;
-      if (carry) difference -= 0x60;
-      value = difference & 0xff;
+      const low = (destination & 0x0f) - (source & 0x0f) - extend;
+      const high = (destination & 0xf0) - (source & 0xf0);
+      result = intermediate = high + low;
+      if ((low & 0xf0) !== 0) {
+        result -= 0x06;
+        carry = ((destination - source - 6 - extend) & 0x300) >>> 0 > 0xff;
+      } else {
+        carry = ((destination - source - extend) & 0x300) >>> 0 > 0xff;
+      }
+      if (((destination - source - (carry ? 1 : 0)) & 0x100) !== 0) result -= 0x60;
+      overflow = (intermediate & 0x80) !== 0 && (result & 0x80) === 0;
     } else {
-      const lowSum = (destination & 0x0f) + (source & 0x0f) + extend;
-      let sum = (destination & 0xff) + (source & 0xff) + extend;
-      if (lowSum > 9) sum += 0x06;
-      carry = sum > 0x99;
-      if (carry) sum += 0x60;
-      value = sum & 0xff;
+      const low = (destination & 0x0f) + (source & 0x0f) + extend;
+      const high = (destination & 0xf0) + (source & 0xf0);
+      result = intermediate = high + low;
+      if (low > 9) result += 0x06;
+      carry = (result & 0x3f0) > 0x90;
+      if (carry) result += 0x60;
+      overflow = (intermediate & 0x80) === 0 && (result & 0x80) !== 0;
     }
 
+    const value = result & 0xff;
     return {
       value,
       ccr:
-        preservedUndefined |
         (carry ? FLAG_X | FLAG_C : 0) |
+        (overflow ? FLAG_V : 0) |
+        ((value & 0x80) !== 0 ? FLAG_N : 0) |
         (value === 0 && stickyZero ? FLAG_Z : 0),
     };
   }
@@ -356,13 +369,20 @@ export class StrictM68000Core {
       const needsExtension =
         opcode === 0x4e72 || ((opcode & 0xf000) === 0x6000 && (opcode & 0xff) === 0);
       const extension = needsExtension ? this.bus.read16(pcBefore + 2, 'fetch') : 0;
-      const instructionBytes = Uint8Array.of(
-        (opcode >>> 8) & 0xff,
-        opcode & 0xff,
-        (extension >>> 8) & 0xff,
-        extension & 0xff
-      );
-      const instruction = decodeBinaryInstruction(instructionBytes);
+      const cached = this.decodeCache.get(pcBefore);
+      let instruction: DecodedBinaryInstruction;
+      if (cached?.opcode === opcode && cached.extension === extension) {
+        instruction = cached.instruction;
+      } else {
+        const instructionBytes = Uint8Array.of(
+          (opcode >>> 8) & 0xff,
+          opcode & 0xff,
+          (extension >>> 8) & 0xff,
+          extension & 0xff
+        );
+        instruction = decodeBinaryInstruction(instructionBytes);
+        this.decodeCache.set(pcBefore, { opcode, extension, instruction });
+      }
       const nextPc = (pcBefore + instruction.length) & 0x00ff_ffff;
       const stream = new InstructionStream(this.bus, pcBefore + 2);
 
@@ -478,8 +498,11 @@ export class StrictM68000Core {
             'indexed',
             'absolute-short',
             'absolute-long',
+            ...(instruction.operation === 'btst'
+              ? (['pc-displacement', 'pc-indexed', 'immediate'] as const)
+              : []),
           ] as const;
-          if (!allowed.includes(destinationClass as (typeof allowed)[number])) {
+          if (!isEffectiveAddressAllowed(instruction.mode, instruction.register, allowed)) {
             return this.faultResult({
               code: 'illegal-instruction',
               message: `${instruction.operation.toUpperCase()} requires a data destination`,
@@ -838,6 +861,12 @@ export class StrictM68000Core {
         case 'binary-alu': {
           const sourceAllowed = [
             'data-register',
+            ...(instruction.size !== 1 &&
+            (instruction.operation === 'add' ||
+              instruction.operation === 'sub' ||
+              instruction.operation === 'cmp')
+              ? (['address-register'] as const)
+              : []),
             'address-indirect',
             'postincrement',
             'predecrement',
@@ -1199,13 +1228,13 @@ export class StrictM68000Core {
             size: 4,
             access: 'address',
           });
-          const address = ea.resolveAddress() & 0x00ff_ffff;
+          const resolvedAddress = ea.resolveAddress();
           if (instruction.operation === 'lea') {
-            this.state.a[instruction.addressRegister ?? 0] = address | 0;
+            this.state.a[instruction.addressRegister ?? 0] = resolvedAddress | 0;
             this.state.pc = stream.cursor;
           } else {
             if (instruction.operation === 'jsr') this.push32(stream.cursor);
-            this.state.pc = address;
+            this.state.pc = resolvedAddress & 0x00ff_ffff;
           }
           return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 12 };
         }
@@ -1256,7 +1285,7 @@ export class StrictM68000Core {
           for (let bit = 0; bit < 16; bit += 1) {
             if ((mask & (1 << bit)) === 0) continue;
             const registerIndex = predecrement ? 15 - bit : bit;
-            if (predecrement) address = (address - instruction.size) & 0x00ff_ffff;
+            if (predecrement) address = (address - instruction.size) >>> 0;
             if (instruction.direction === 'registers-to-memory') {
               const value = this.readRegister(registerIndex);
               if (instruction.size === 2) this.bus.write16(address, value);
@@ -1268,7 +1297,7 @@ export class StrictM68000Core {
                   : this.bus.read32(address) | 0;
               this.writeRegister(registerIndex, value);
             }
-            if (!predecrement) address = (address + instruction.size) & 0x00ff_ffff;
+            if (!predecrement) address = (address + instruction.size) >>> 0;
           }
           if (predecrement || postincrement) this.state.a[instruction.register] = address | 0;
           this.state.pc = stream.cursor;
@@ -1717,6 +1746,20 @@ export class StrictM68000Core {
             return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 20 };
           }
         case 'unimplemented':
+          if ((instruction.opcode & 0xf000) === 0xa000) {
+            return this.faultResult({
+              code: 'line-a-emulator',
+              message: `Line-A opcode ${instruction.opcode.toString(16).padStart(4, '0')}`,
+              vector: 10,
+            });
+          }
+          if ((instruction.opcode & 0xf000) === 0xf000) {
+            return this.faultResult({
+              code: 'line-f-emulator',
+              message: `Line-F opcode ${instruction.opcode.toString(16).padStart(4, '0')}`,
+              vector: 11,
+            });
+          }
           return this.faultResult({
             code: 'unimplemented-instruction',
             message: `Opcode ${instruction.opcode.toString(16).padStart(4, '0')} is not implemented`,

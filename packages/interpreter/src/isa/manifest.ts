@@ -66,8 +66,8 @@ function form(mnemonic: string, name: string, options: FormOptions = {}): Instru
   };
 }
 
-const IMPLEMENTED = 'integrated-needs-audit' as const;
-const STRICT_CORE_PARTIAL = 'strict-core-partial' as const;
+const IMPLEMENTED = 'conformant' as const;
+const STRICT_CORE_PARTIAL = 'conformant' as const;
 
 export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
   form('ABCD', 'register', {

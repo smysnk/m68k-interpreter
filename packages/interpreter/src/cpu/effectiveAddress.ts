@@ -5,8 +5,6 @@ import type { InstructionStream } from './instructionStream';
 import type { MemoryBus } from './memoryBus';
 import type { M68000State } from './state';
 
-const ADDRESS_MASK = 0x00ff_ffff;
-
 export type EffectiveAddressAccess = 'read' | 'write' | 'readwrite' | 'address';
 
 export interface EffectiveAddress {
@@ -197,8 +195,6 @@ export function resolveEffectiveAddress(
     default:
       throw new RangeError(`Unsupported effective address class: ${eaClass}`);
   }
-  address &= ADDRESS_MASK;
-
   let sideEffectApplied = false;
   const applyPostIncrement = (): void => {
     if (!postIncrement || sideEffectApplied) return;

@@ -17,12 +17,19 @@ const FAKE_ENGINE_REPORT: EngineBatteryProfileReport = {
         maxSteps: 0,
       },
       interpreter: {
-        elapsedMs: { min: 1, max: 3, mean: 2, median: 2 },
-        stepsPerSecond: { min: 10, max: 30, mean: 20, median: 20 },
-        heapDeltaBytes: { min: 100, max: 300, mean: 200, median: 200 },
-        rssDeltaBytes: { min: 1000, max: 3000, mean: 2000, median: 2000 },
-        userCpuMicros: { min: 5, max: 7, mean: 6, median: 6 },
-        systemCpuMicros: { min: 8, max: 10, mean: 9, median: 9 },
+        elapsedMs: { min: 1, max: 3, mean: 2, median: 2, p95: 3, mad: 1 },
+        stepsPerSecond: { min: 10, max: 30, mean: 20, median: 20, p95: 30, mad: 10 },
+        heapDeltaBytes: { min: 100, max: 300, mean: 200, median: 200, p95: 300, mad: 100 },
+        rssDeltaBytes: {
+          min: 1000,
+          max: 3000,
+          mean: 2000,
+          median: 2000,
+          p95: 3000,
+          mad: 1000,
+        },
+        userCpuMicros: { min: 5, max: 7, mean: 6, median: 6, p95: 7, mad: 1 },
+        systemCpuMicros: { min: 8, max: 10, mean: 9, median: 9, p95: 10, mad: 1 },
         steps: 100,
         sampleCount: 3,
         finalSnapshot: {
@@ -62,7 +69,7 @@ describe('test station benchmark metrics', () => {
     });
 
     expect(payload.status).toBe('passed');
-    expect(payload.performanceStats).toHaveLength(7);
+    expect(payload.performanceStats).toHaveLength(9);
     expect(payload.performanceStats[0]).toMatchObject({
       statGroup: 'benchmark.node.classic_interpreter.shared.tight_arithmetic_loop',
       statName: 'elapsed_ms',
@@ -79,6 +86,10 @@ describe('test station benchmark metrics', () => {
         seriesId: 'classic-interpreter',
       },
     });
+    expect(payload.performanceStats.slice(1, 3)).toMatchObject([
+      { statName: 'elapsed_ms_p95', metadata: { statistic: 'p95' } },
+      { statName: 'elapsed_ms_mad', metadata: { statistic: 'mad' } },
+    ]);
   });
 
   it('honors benchmark runner key overrides', () => {

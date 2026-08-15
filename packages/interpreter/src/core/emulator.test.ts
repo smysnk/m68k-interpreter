@@ -1255,7 +1255,8 @@ IRQ7_COUNT DC.B 0
     const originalUsp = emulator.getUSP();
 
     expect(emulator.requestInterruptLevel(1)).toBe('accepted');
-    emulator.emulationStep();
+    expect(emulator.emulationStep()).toBe(false);
+    expect(emulator.getException()).toBeUndefined();
     expect(emulator.getSR() & 0x2700).toBe(0x2100);
     expect(emulator.getUSP()).toBe(originalUsp);
     expect(emulator.getSSP()).toBe(originalUsp - 6);

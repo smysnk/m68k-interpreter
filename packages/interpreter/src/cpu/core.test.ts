@@ -371,7 +371,7 @@ describe('StrictM68000Core status, stack, and system slice', () => {
         0x80, // CHK.W D0,D1
         0x4a,
         0xd0, // TAS (A0)
-        0xe3,
+        0xe1,
         0xd0, // ASL.W (A0)
         0x4e,
         0x76 // TRAPV

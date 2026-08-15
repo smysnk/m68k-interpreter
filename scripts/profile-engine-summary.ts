@@ -1,4 +1,8 @@
-import { formatEngineBatteryRows, profileEngineBattery, profileScenario } from '../tests/benchmarks/engineHarness';
+import {
+  formatEngineBatteryRows,
+  profileEngineBattery,
+  profileScenario,
+} from '../tests/benchmarks/engineHarness';
 import {
   ENGINE_BENCHMARK_SCENARIOS,
   NIBBLES_INTRO_BENCHMARK_SCENARIO,
@@ -45,16 +49,10 @@ function parseArgs(argv: string[]): ProfileSummaryOptions {
   const outputIndex = argv.indexOf('--output');
 
   return {
-    warmupRuns: parseNonNegativeInteger(
-      warmupIndex >= 0 ? argv[warmupIndex + 1] : undefined,
-      1
-    ),
-    measuredRuns: parseNonNegativeInteger(
-      runsIndex >= 0 ? argv[runsIndex + 1] : undefined,
-      3
-    ),
+    warmupRuns: parseNonNegativeInteger(warmupIndex >= 0 ? argv[warmupIndex + 1] : undefined, 1),
+    measuredRuns: parseNonNegativeInteger(runsIndex >= 0 ? argv[runsIndex + 1] : undefined, 3),
     json: argv.includes('--json'),
-    outputPath: outputIndex >= 0 ? argv[outputIndex + 1] ?? null : null,
+    outputPath: outputIndex >= 0 ? (argv[outputIndex + 1] ?? null) : null,
   };
 }
 
@@ -62,10 +60,7 @@ function round(value: number): number {
   return Number(value.toFixed(2));
 }
 
-function buildNibblesRow(
-  warmupRuns: number,
-  measuredRuns: number
-): NibblesSummaryRow {
+function buildNibblesRow(warmupRuns: number, measuredRuns: number): NibblesSummaryRow {
   const report = profileScenario(NIBBLES_INTRO_BENCHMARK_SCENARIO, {
     warmupRuns,
     measuredRuns,
@@ -83,9 +78,7 @@ function buildNibblesRow(
 function median(values: readonly number[]): number {
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1]! + sorted[middle]!) / 2
-    : sorted[middle]!;
+  return sorted.length % 2 === 0 ? (sorted[middle - 1]! + sorted[middle]!) / 2 : sorted[middle]!;
 }
 
 function profileHardwareScenario(
@@ -200,7 +193,7 @@ function main(): void {
   }
 
   console.log(
-    `Classic interpreter benchmark summary (warmup=${options.warmupRuns}, runs=${options.measuredRuns})`
+    `Authoritative strict core benchmark summary (warmup=${options.warmupRuns}, runs=${options.measuredRuns})`
   );
   console.log('Core Battery');
   console.table(batteryRows);

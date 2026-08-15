@@ -1,11 +1,15 @@
 # Easy68K Subset And Limitations
 
-This workspace now includes a terminal-first path for running `nibbles.asm` in the browser IDE.
+This document describes Easy68K simulator compatibility layered on top of the
+complete strict MC68000 instruction core. It is not the MC68000 instruction
+coverage list; see the generated ISA report for that evidence.
 
 ## Runtime modes
 
-- The classic `Interpreter` is the only IDE runtime.
-- `nibbles.asm` runs through the worker-backed classic interpreter path.
+- The strict byte-addressed core is the only instruction execution authority.
+- The `Emulator` compatibility facade selects strict MC68000, MC68010
+  Extensions, or MC68000 plus the Easy68K machine adapter.
+- `nibbles.asm` runs through the worker-backed Easy68K profile.
 
 ## Quick start
 
@@ -15,7 +19,7 @@ This workspace now includes a terminal-first path for running `nibbles.asm` in t
 4. Press `Enter` to confirm menu selections.
 5. Use `Reset` to clear the current emulator session and terminal before replaying.
 
-## Supported Easy68K subset
+## Supported Easy68K compatibility subset
 
 - Assembler compatibility:
   - standalone labels
@@ -24,11 +28,8 @@ This workspace now includes a terminal-first path for running `nibbles.asm` in t
   - `DC.B`, `DC.W`, `DC.L`
   - `DS.B`, `DS.W`, `DS.L`
   - character immediates such as `#'w'`
-- Runtime coverage used by Nibbles:
-  - `MOVE`, `MOVEA`, `LEA`, `CLR`, `CMP`
-  - branch and subroutine flow including `BRA`, `Bxx`, `BSR`, `JSR`, `RTS`
-  - `MULU`, `DIVU`, `MOVEM`, `BTST`
-  - register indirect, predecrement, postincrement, and indexed memory forms used by the game
+- Complete strict MC68000 instruction execution, independently audited in the
+  generated ISA evidence matrix.
 - Easy68K trap services currently implemented:
   - `TRAP #15` task `1` for output
   - `TRAP #15` task `3` for blocking input
@@ -42,8 +43,11 @@ This workspace now includes a terminal-first path for running `nibbles.asm` in t
 
 ## Known limitations
 
-- This is a targeted Easy68K subset for terminal-oriented programs. It is not full Easy68K compatibility.
+- Easy68K simulator services remain a targeted compatibility subset; this does
+  not limit strict MC68000 instruction coverage.
 - Trainer board DUART routines are still out of scope for this build.
 - The built-in Hardware I/O Board implements the EASy68K seven-segment display, switches, LEDs, active-low buttons, and level 1–7 autovector interrupts. Other generic graphics or framebuffer devices remain outside the current subset.
-- Execution is tuned for browser playability and deterministic testing, not cycle accuracy.
+- Architectural results are conformance-tested. Exact MC68000 address-error
+  microcycles, internal frame words, and prefetch-stage attribution remain
+  reviewed temporal-conformance quarantines.
 - The IDE currently uses the internal fixed-grid terminal adapter path; broader display-surface integration remains future work.

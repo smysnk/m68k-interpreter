@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import type { ProgramSource } from '@m68k/interpreter';
+import type { CpuProfile, ProgramSource } from '@m68k/interpreter';
 
 export type BenchmarkEngineId = 'interpreter';
 
@@ -22,6 +22,7 @@ export interface BenchmarkScenario {
   stopCondition?: BenchmarkStopCondition;
   terminalMarkers?: string[];
   expectation?: BenchmarkScenarioExpectation;
+  cpuProfile?: CpuProfile;
 }
 
 const nibblesPath = fileURLToPath(
@@ -33,12 +34,13 @@ export const NIBBLES_INTRO_BENCHMARK_SCENARIO: BenchmarkScenario = {
   id: 'nibbles-intro-screen',
   title: 'Nibbles Intro Screen',
   description:
-    'Measures how long the classic interpreter takes to boot nibbles.asm and render the intro/menu screen.',
+    'Measures how long the authoritative strict core and Easy68K adapter take to boot nibbles.asm and render the intro/menu screen.',
   program: nibblesProgram,
   mode: 'load-and-run',
   maxSteps: 200000,
   stopCondition: 'waiting-for-input',
   terminalMarkers: ['DIFFICULTY', 'Joshua Bellamy', 'smysnk.com'],
+  cpuProfile: 'easy68k',
 };
 
 function buildColdLoadProgram(entryCount = 96): string {
@@ -125,7 +127,8 @@ export const ENGINE_BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
   {
     id: 'cold-load-generated-source',
     title: 'Cold Load Generated Source',
-    description: 'Measures parser and loader setup cost on a generated medium-size assembly source.',
+    description:
+      'Measures parser and loader setup cost on a generated medium-size assembly source.',
     program: buildColdLoadProgram(),
     mode: 'load-only',
     maxSteps: 0,
@@ -137,6 +140,7 @@ export const ENGINE_BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     program: buildTightArithmeticLoopProgram(),
     mode: 'load-and-run',
     maxSteps: 5000,
+    cpuProfile: 'easy68k',
     expectation: {
       registers: {
         d0: 100,
@@ -146,6 +150,33 @@ export const ENGINE_BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
         ITER: 100,
         ACC: 300,
       },
+    },
+  },
+  {
+    id: 'tight-arithmetic-loop-m68000',
+    title: 'Tight Arithmetic Loop (MC68000)',
+    description: 'Measures strict MC68000 initialization and representative arithmetic execution.',
+    program: buildTightArithmeticLoopProgram(),
+    mode: 'load-and-run',
+    maxSteps: 5000,
+    cpuProfile: 'm68000',
+    expectation: {
+      registers: { d0: 100, d1: 300 },
+      symbols: { ITER: 100, ACC: 300 },
+    },
+  },
+  {
+    id: 'tight-arithmetic-loop-m68010',
+    title: 'Tight Arithmetic Loop (MC68010 Extensions)',
+    description:
+      'Measures MC68010-extension initialization and representative arithmetic execution.',
+    program: buildTightArithmeticLoopProgram(),
+    mode: 'load-and-run',
+    maxSteps: 5000,
+    cpuProfile: 'm68010',
+    expectation: {
+      registers: { d0: 100, d1: 300 },
+      symbols: { ITER: 100, ACC: 300 },
     },
   },
   {
@@ -169,7 +200,8 @@ export const ENGINE_BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
   {
     id: 'memory-roundtrip-unrolled',
     title: 'Memory Roundtrip Unrolled',
-    description: 'Measures repeated register-to-memory and memory-to-register traffic on direct symbols.',
+    description:
+      'Measures repeated register-to-memory and memory-to-register traffic on direct symbols.',
     program: buildMemoryRoundTripProgram(),
     mode: 'load-and-run',
     maxSteps: 2000,
@@ -184,6 +216,8 @@ export const ENGINE_BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
   },
 ];
 
-export const ENGINE_PROFILE_SMOKE_SCENARIOS: BenchmarkScenario[] = ENGINE_BENCHMARK_SCENARIOS.filter(
-  (scenario) => scenario.id !== 'memory-roundtrip-unrolled' && scenario.id !== 'nibbles-intro-screen'
-);
+export const ENGINE_PROFILE_SMOKE_SCENARIOS: BenchmarkScenario[] =
+  ENGINE_BENCHMARK_SCENARIOS.filter(
+    (scenario) =>
+      scenario.id !== 'memory-roundtrip-unrolled' && scenario.id !== 'nibbles-intro-screen'
+  );

@@ -1,5 +1,5 @@
 import type { CpuDiagnostic } from '../core/execution';
-import { loadProgramSource, type ProgramSource } from '../programLoader';
+import { loadProgramSource, type ProgramLoadResult, type ProgramSource } from '../programLoader';
 import type { ProgramImage, ProgramSourceMapEntry } from './programImage';
 import { encodeSourceInstruction } from './sourceEncoder';
 
@@ -133,7 +133,10 @@ function normalizeSymbols(symbols: Record<string, number>): Record<string, numbe
 }
 
 export function assembleProgramSource(source: ProgramSource): SourceAssemblyResult {
-  const loaded = loadProgramSource(source);
+  return assembleLoadedProgram(loadProgramSource(source));
+}
+
+export function assembleLoadedProgram(loaded: ProgramLoadResult): SourceAssemblyResult {
   const diagnostics: CpuDiagnostic[] = loaded.errors.map((message) => ({
     code: 'source-load-error',
     severity: 'error',

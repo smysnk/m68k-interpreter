@@ -78,37 +78,56 @@ const ENGINE_METRICS = [
   {
     statName: 'elapsed_ms',
     unit: 'ms',
-    selectMedian: (report: ScenarioProfileReport) => report.interpreter.elapsedMs.median,
+    statistic: 'median',
+    selectValue: (report: ScenarioProfileReport) => report.interpreter.elapsedMs.median,
+  },
+  {
+    statName: 'elapsed_ms_p95',
+    unit: 'ms',
+    statistic: 'p95',
+    selectValue: (report: ScenarioProfileReport) => report.interpreter.elapsedMs.p95,
+  },
+  {
+    statName: 'elapsed_ms_mad',
+    unit: 'ms',
+    statistic: 'mad',
+    selectValue: (report: ScenarioProfileReport) => report.interpreter.elapsedMs.mad,
   },
   {
     statName: 'steps_per_second',
     unit: 'ops_per_sec',
-    selectMedian: (report: ScenarioProfileReport) => report.interpreter.stepsPerSecond.median,
+    statistic: 'median',
+    selectValue: (report: ScenarioProfileReport) => report.interpreter.stepsPerSecond.median,
   },
   {
     statName: 'heap_delta_bytes',
     unit: 'bytes',
-    selectMedian: (report: ScenarioProfileReport) => report.interpreter.heapDeltaBytes.median,
+    statistic: 'median',
+    selectValue: (report: ScenarioProfileReport) => report.interpreter.heapDeltaBytes.median,
   },
   {
     statName: 'rss_delta_bytes',
     unit: 'bytes',
-    selectMedian: (report: ScenarioProfileReport) => report.interpreter.rssDeltaBytes.median,
+    statistic: 'median',
+    selectValue: (report: ScenarioProfileReport) => report.interpreter.rssDeltaBytes.median,
   },
   {
     statName: 'user_cpu_micros',
     unit: 'micros',
-    selectMedian: (report: ScenarioProfileReport) => report.interpreter.userCpuMicros.median,
+    statistic: 'median',
+    selectValue: (report: ScenarioProfileReport) => report.interpreter.userCpuMicros.median,
   },
   {
     statName: 'system_cpu_micros',
     unit: 'micros',
-    selectMedian: (report: ScenarioProfileReport) => report.interpreter.systemCpuMicros.median,
+    statistic: 'median',
+    selectValue: (report: ScenarioProfileReport) => report.interpreter.systemCpuMicros.median,
   },
   {
     statName: 'steps',
     unit: 'count',
-    selectMedian: (report: ScenarioProfileReport) => report.interpreter.steps,
+    statistic: 'count',
+    selectValue: (report: ScenarioProfileReport) => report.interpreter.steps,
   },
 ] as const;
 
@@ -122,7 +141,10 @@ function createEmptySummary(total: number): StructuredSuiteSummary {
 }
 
 function slugToNamespaceSegment(value: string): string {
-  return value.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase();
+  return value
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
 }
 
 function getScenarioStatGroup(scenarioId: string): string {
@@ -140,14 +162,17 @@ function roundMetric(value: number): number {
 function buildNodeMetadata(
   scenarioReport: ScenarioProfileReport,
   runnerKey: string,
-  report: EngineBatteryProfileReport
+  report: EngineBatteryProfileReport,
+  statistic: string
 ): Record<string, boolean | number | string | null> {
   return {
     seriesId: 'classic-interpreter',
     runtimeId: 'classic-interpreter',
     scenarioId: scenarioReport.scenario.id,
     scenarioTitle: scenarioReport.scenario.title,
-    statistic: 'median',
+    statistic,
+    engineAuthority: 'strict-core',
+    cpuProfile: scenarioReport.scenario.cpuProfile ?? 'easy68k',
     runnerKey,
     runtime: 'node',
     harnessVersion: '1',
@@ -171,16 +196,16 @@ function buildEnginePerformanceStats(
     statGroup,
     statName: metric.statName,
     unit: metric.unit,
-    numericValue: roundMetric(metric.selectMedian(scenarioReport)),
-    metadata: buildNodeMetadata(scenarioReport, runnerKey, report),
+    numericValue: roundMetric(metric.selectValue(scenarioReport)),
+    metadata: buildNodeMetadata(scenarioReport, runnerKey, report, metric.statistic),
   }));
 }
 
 function formatEngineScenarioSummary(report: ScenarioProfileReport): string {
   return [
     `${report.scenario.id}`,
-    `  classic interpreter median ms: ${report.interpreter.elapsedMs.median.toFixed(2)}`,
-    `  classic interpreter steps/s: ${report.interpreter.stepsPerSecond.median.toFixed(2)}`,
+    `  authoritative strict core median ms: ${report.interpreter.elapsedMs.median.toFixed(2)}`,
+    `  authoritative strict core steps/s: ${report.interpreter.stepsPerSecond.median.toFixed(2)}`,
   ].join('\n');
 }
 
@@ -194,7 +219,9 @@ function formatEngineBatterySummary(report: EngineBatteryProfileReport): string 
   ].join('\n');
 }
 
-function createSerializableEngineReport(report: EngineBatteryProfileReport): Record<string, unknown> {
+function createSerializableEngineReport(
+  report: EngineBatteryProfileReport
+): Record<string, unknown> {
   return {
     generatedAt: report.generatedAt,
     warmupRuns: report.warmupRuns,
@@ -222,7 +249,9 @@ function createSerializableEngineReport(report: EngineBatteryProfileReport): Rec
   };
 }
 
-export function createEngineBenchmarkSuitePayload(options: EngineSuiteOptions): StructuredSuitePayload {
+export function createEngineBenchmarkSuitePayload(
+  options: EngineSuiteOptions
+): StructuredSuitePayload {
   const tests: StructuredSuiteTest[] = options.report.scenarios.map((scenarioReport) => ({
     name: scenarioReport.scenario.title,
     fullName: `${options.suiteLabel} ${scenarioReport.scenario.title}`,
@@ -258,13 +287,13 @@ export function createEngineBenchmarkSuitePayload(options: EngineSuiteOptions): 
     rawArtifacts: [
       {
         relativePath: `benchmarks/${options.artifactBaseName}.json`,
-        label: 'Classic interpreter benchmark report',
+        label: 'Authoritative strict core benchmark report',
         content: `${JSON.stringify(createSerializableEngineReport(options.report), null, 2)}\n`,
         mediaType: 'application/json',
       },
       {
         relativePath: `benchmarks/${options.artifactBaseName}-summary.txt`,
-        label: 'Classic interpreter benchmark summary',
+        label: 'Authoritative strict core benchmark summary',
         content: `${formatEngineBatterySummary(options.report)}\n`,
         mediaType: 'text/plain',
       },
@@ -374,7 +403,9 @@ export function createFailedSuitePayload(options: {
   error: unknown;
 }): StructuredSuitePayload {
   const message =
-    options.error instanceof Error ? options.error.stack || options.error.message : String(options.error);
+    options.error instanceof Error
+      ? options.error.stack || options.error.message
+      : String(options.error);
 
   return {
     status: 'failed',
@@ -422,7 +453,8 @@ export function resolveRunnerKey(options: { browserName?: string } = {}): string
 
   const provider = process.env.GITHUB_ACTIONS ? 'gha' : 'local';
   const osLabel =
-    String(process.env.TEST_STATION_RUNNER_OS_LABEL || '').trim() || normalizeOsLabel(process.platform);
+    String(process.env.TEST_STATION_RUNNER_OS_LABEL || '').trim() ||
+    normalizeOsLabel(process.platform);
   const nodeMajor = process.versions.node.split('.')[0] || 'unknown';
   const parts = [provider, osLabel, `node${nodeMajor}`];
 

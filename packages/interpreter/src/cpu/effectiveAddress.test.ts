@@ -78,6 +78,21 @@ describe('effective-address transactions', () => {
     expect(pcRelative.resolveAddress()).toBe(0x40);
   });
 
+  it('preserves the full 32-bit computed address while the bus masks it to 24 bits', () => {
+    const { bus, state } = setup();
+    state.a[1] = 0x1200_0200;
+    bus.write16(0x20, 0x0006);
+    const indexed = resolveEffectiveAddress(6, 1, {
+      state,
+      bus,
+      stream: new InstructionStream(bus, 0x20),
+      size: 2,
+      access: 'address',
+    });
+
+    expect(indexed.resolveAddress()).toBe(0x1200_0206);
+  });
+
   it('reads byte, word, and long immediate values with exact extension lengths', () => {
     const { bus, state } = setup();
     bus.write16(0x40, 0x00fe);

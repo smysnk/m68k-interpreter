@@ -9,7 +9,7 @@ import {
   resolveRunnerKey,
 } from './testStationMetrics';
 
-const SUITE_LABEL = 'Classic Interpreter Benchmark Battery';
+const SUITE_LABEL = 'Authoritative Strict Core Benchmark Battery';
 
 function readIntegerEnv(name: string, fallback: number): number {
   const rawValue = Number.parseInt(String(process.env[name] || ''), 10);

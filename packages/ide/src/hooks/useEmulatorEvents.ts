@@ -27,7 +27,7 @@ import {
 } from '@/runtime/workerExecutionPolicy';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { runtimeSessionStore } from '@/runtime/runtimeSessionStore';
-import { runtimeCommandPort } from '@/runtime/runtimeCommandPort';
+import { RuntimeUnavailableError, runtimeCommandPort } from '@/runtime/runtimeCommandPort';
 import { hardwareSurfaceStore } from '@/runtime/hardwareSurfaceStore';
 import { syncRuntimeGeometryBridge } from '@/runtime/terminalProgramBridge';
 import {
@@ -177,7 +177,10 @@ function cancelFrame(handle: number): void {
 }
 
 function isDisposedWorkerRuntimeError(error: unknown): boolean {
-  return error instanceof Error && /disposed/i.test(error.message);
+  return (
+    error instanceof RuntimeUnavailableError ||
+    (error instanceof Error && /disposed/i.test(error.message))
+  );
 }
 
 function publishRuntimeSession(runtime: IdeRuntimeSession | null, dispatch: AppDispatch): void {

@@ -567,14 +567,16 @@ export function decodeBinaryInstruction(bytes: Uint8Array, offset = 0): DecodedB
   }
 
   if ((opcode & 0xf0c0) === 0xe0c0) {
-    const memoryShiftOperations = ['asr', 'asl', 'lsr', 'lsl', 'ror', 'rol'] as const;
-    const operationCode = (opcode >>> 9) & 0x7;
-    if (operationCode < 4 || operationCode > 5) {
+    const operationGroup = (opcode >>> 9) & 0x3;
+    if (operationGroup !== 2) {
+      const direction = (opcode & 0x0100) !== 0 ? 'l' : 'r';
+      const operationPrefix = operationGroup === 0 ? 'as' : operationGroup === 1 ? 'ls' : 'ro';
       return {
         kind: 'memory-shift',
         length: 2,
         opcode,
-        operation: memoryShiftOperations[operationCode < 4 ? operationCode : operationCode - 2],
+        operation: `${operationPrefix}${direction}` as
+          'asr' | 'asl' | 'lsr' | 'lsl' | 'ror' | 'rol',
         mode: (opcode >>> 3) & 0x7,
         register: opcode & 0x7,
       };

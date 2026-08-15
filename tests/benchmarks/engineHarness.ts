@@ -83,11 +83,13 @@ export interface EngineRunResult {
   snapshot: EngineSnapshot;
 }
 
-interface NumericSummary {
+export interface NumericSummary {
   min: number;
   max: number;
   mean: number;
   median: number;
+  p95: number;
+  mad: number;
 }
 
 export interface EngineProfileSummary {
@@ -133,9 +135,13 @@ const REGISTER_INDEX_BY_NAME: Record<RegisterName, number> = {
   d7: 15,
 };
 
-function createSession(program: string): BenchmarkSession {
+function createSession(
+  program: string,
+  cpuProfile: BenchmarkScenario['cpuProfile']
+): BenchmarkSession {
   return new Emulator(program, {
     undoMode: 'off',
+    cpuProfile,
   });
 }
 
@@ -151,11 +157,12 @@ function readMemoryByte(memory: Record<number, number>, address: number): number
 
 function readMemoryLong(memory: Record<number, number>, address: number): number {
   return (
-    ((readMemoryByte(memory, address) & 0xff) << 24) |
-    ((readMemoryByte(memory, address + 1) & 0xff) << 16) |
-    ((readMemoryByte(memory, address + 2) & 0xff) << 8) |
-    (readMemoryByte(memory, address + 3) & 0xff)
-  ) >>> 0;
+    (((readMemoryByte(memory, address) & 0xff) << 24) |
+      ((readMemoryByte(memory, address + 1) & 0xff) << 16) |
+      ((readMemoryByte(memory, address + 2) & 0xff) << 8) |
+      (readMemoryByte(memory, address + 3) & 0xff)) >>>
+    0
+  );
 }
 
 function toSortedNumericEntries(record: Record<number, number>): Array<[number, number]> {
@@ -224,7 +231,7 @@ function assertScenarioExpectations(
       }
 
       const actualValue = readMemoryLong(memory, symbolAddress);
-      if (actualValue !== (expectedValue >>> 0)) {
+      if (actualValue !== expectedValue >>> 0) {
         throw new Error(
           `Symbol ${symbolName} expected ${expectedValue >>> 0} but found ${actualValue}`
         );
@@ -294,7 +301,7 @@ export function runBenchmarkScenario(
   const beforeResources = process.resourceUsage();
   const startedAt = performance.now();
 
-  const session = createSession(scenario.program);
+  const session = createSession(scenario.program, scenario.cpuProfile);
   const { steps, stopped } = runScenarioUntilStop(session, scenario);
 
   const elapsedMs = performance.now() - startedAt;
@@ -338,20 +345,29 @@ export function runBenchmarkScenario(
   };
 }
 
-function summarizeNumbers(values: number[]): NumericSummary {
+export function summarizeNumbers(values: number[]): NumericSummary {
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
   const median =
-    sorted.length % 2 === 0
-      ? (sorted[middle - 1] + sorted[middle]) / 2
-      : sorted[middle];
+    sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
   const mean = sorted.reduce((total, value) => total + value, 0) / sorted.length;
+  const p95 = sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)] ?? 0;
+  const deviations = sorted
+    .map((value) => Math.abs(value - median))
+    .sort((left, right) => left - right);
+  const deviationMiddle = Math.floor(deviations.length / 2);
+  const mad =
+    deviations.length % 2 === 0
+      ? ((deviations[deviationMiddle - 1] ?? 0) + (deviations[deviationMiddle] ?? 0)) / 2
+      : (deviations[deviationMiddle] ?? 0);
 
   return {
     min: sorted[0] ?? 0,
     max: sorted[sorted.length - 1] ?? 0,
     mean,
     median,
+    p95,
+    mad,
   };
 }
 

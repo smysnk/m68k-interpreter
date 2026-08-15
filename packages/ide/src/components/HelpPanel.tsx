@@ -7,48 +7,104 @@ const HelpPanel: React.FC = () => {
         <div className="pane-title-group">
           <p className="pane-eyebrow">Reference</p>
           <h2 className="pane-title">Compatibility Notes</h2>
-          <p className="pane-caption">Current Nibbles workflow, runtime support, and known limits.</p>
+          <p className="pane-caption">
+            Current Nibbles workflow, runtime support, and known limits.
+          </p>
         </div>
       </div>
 
       <div className="help-panel-section">
         <h3>Panel Workspace</h3>
         <ul className="help-panel-list">
-          <li>Choose one to four columns, then add Screen, Code, Registers, Memory, Seven-segment, combined Digital I/O and IRQ, or Help panels from the View menu.</li>
+          <li>
+            Choose one to four columns, then add Screen, Code, Registers, Memory, Seven-segment,
+            combined Digital I/O and IRQ, or Help panels from the View menu.
+          </li>
           <li>Drag a panel by its header to reorder it or move it between columns.</li>
-          <li>Minimize retains a compact header, and close removes the panel from the current layout.</li>
-          <li>Only the Screen marked Interactive owns keyboard, touch, focus, and terminal geometry. Click a passive Screen mirror to transfer ownership.</li>
-          <li>The Layouts menu applies immutable built-in views and saves, restores, renames, or deletes personal views. The active draft resumes automatically after reload.</li>
-          <li>On compact screens, the desktop layout is preserved and projected through a single-panel switcher.</li>
+          <li>
+            Minimize retains a compact header, and close removes the panel from the current layout.
+          </li>
+          <li>
+            Only the Screen marked Interactive owns keyboard, touch, focus, and terminal geometry.
+            Click a passive Screen mirror to transfer ownership.
+          </li>
+          <li>
+            The Layouts menu applies immutable built-in views and saves, restores, renames, or
+            deletes personal views. The active draft resumes automatically after reload.
+          </li>
+          <li>
+            On compact screens, the desktop layout is preserved and projected through a single-panel
+            switcher.
+          </li>
         </ul>
       </div>
 
       <div className="help-panel-section">
         <h3>Play Nibbles</h3>
-        <p>Select `nibbles.asm` from the file explorer, press Run, then use W A S D, arrow keys, or keypad 4 5 6 8. Press Enter to confirm menus.</p>
-        <p>Reset clears the current emulator session and terminal so the loaded program can be launched again from a clean state.</p>
-        <p>The IDE now runs on a single interpreter runtime, so the file you load always starts on the supported execution path.</p>
+        <p>
+          Select `nibbles.asm` from the file explorer, press Run, then use W A S D, arrow keys, or
+          keypad 4 5 6 8. Press Enter to confirm menus.
+        </p>
+        <p>
+          Reset clears the current emulator session and terminal so the loaded program can be
+          launched again from a clean state.
+        </p>
+        <p>
+          The IDE uses one strict byte-addressed CPU core in every mode; Easy68K mode layers
+          terminal and trainer-board services onto it.
+        </p>
       </div>
 
       <div className="help-panel-section">
-        <h3>Supported Easy68K Subset</h3>
+        <h3>MC68000 And Easy68K Support</h3>
         <ul className="help-panel-list">
-          <li>Assembler compatibility for standalone labels, `END &lt;label&gt;`, `EQU`, `DC.B/W/L`, `DS.B/W/L`, and character immediates.</li>
-          <li>Runtime support for the Nibbles instruction subset including `MOVE`, `MOVEA`, `LEA`, `BRA/Bxx`, `BSR`, `JSR`, `RTS`, `MULU`, `DIVU`, `MOVEM`, and `BTST`.</li>
-          <li>Easy68K trap tasks used by Nibbles: `TRAP #15` tasks `1`, `3`, and `4`, plus `TRAP #11` task `0` for halt.</li>
-          <li>Terminal rendering for clear screen, cursor motion, carriage return, line feed, and ANSI SGR color/style sequences used by the game.</li>
-          <li>Memory-mapped EASy68K hardware: independently addressable eight-byte seven-segment displays and digital I/O boards with shared switch/LED bytes, active-low buttons, and configurable 24-bit addresses.</li>
-          <li>Level 1–7 autovector interrupts with SR masking, supervisor stack frames, automatic scheduling, and `RTE`.</li>
+          <li>
+            Assembler compatibility for standalone labels, `END &lt;label&gt;`, `EQU`, `DC.B/W/L`,
+            `DS.B/W/L`, and character immediates.
+          </li>
+          <li>
+            The strict core implements every MC68000 instruction form in the generated ISA manifest.
+            MC68010 additions remain profile-gated.
+          </li>
+          <li>
+            Easy68K trap tasks used by Nibbles: `TRAP #15` tasks `1`, `3`, and `4`, plus `TRAP #11`
+            task `0` for halt.
+          </li>
+          <li>
+            Terminal rendering for clear screen, cursor motion, carriage return, line feed, and ANSI
+            SGR color/style sequences used by the game.
+          </li>
+          <li>
+            Memory-mapped EASy68K hardware: independently addressable eight-byte seven-segment
+            displays and digital I/O boards with shared switch/LED bytes, active-low buttons, and
+            configurable 24-bit addresses.
+          </li>
+          <li>
+            Level 1–7 autovector interrupts with SR masking, supervisor stack frames, automatic
+            scheduling, and `RTE`.
+          </li>
         </ul>
       </div>
 
       <div className="help-panel-section">
         <h3>Known Limitations</h3>
         <ul className="help-panel-list">
-          <li>This is a targeted Easy68K subset for terminal-first programs like Nibbles, not full simulator compatibility.</li>
-          <li>Trainer board DUART routines and generic graphics/framebuffer devices beyond the Hardware I/O Board are not implemented.</li>
-          <li>The runtime is tuned for browser playability and deterministic tests, not cycle accuracy.</li>
-          <li>The IDE currently uses the internal fixed-grid terminal adapter surface; broader display integration remains a future swap.</li>
+          <li>
+            Easy68K terminal and device services are a targeted compatibility subset; this does not
+            limit strict MC68000 instruction coverage.
+          </li>
+          <li>
+            Trainer board DUART routines and generic graphics/framebuffer devices beyond the
+            Hardware I/O Board are not implemented.
+          </li>
+          <li>
+            Exact address-error microcycles, internal frame words, and prefetch-stage attribution
+            remain temporal-conformance quarantines.
+          </li>
+          <li>
+            The IDE currently uses the internal fixed-grid terminal adapter surface; broader display
+            integration remains a future swap.
+          </li>
         </ul>
       </div>
     </aside>

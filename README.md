@@ -33,24 +33,36 @@ Write, step through, and debug m68k assembly — no installation needed.
 - Independently addressable EASy68K panels for seven-segment displays, aligned switches/LEDs/active-low buttons, and CPU interrupt requests
 - Level 1–7 autovector interrupts, SR masking, automatic IRQ scheduling, and `RTE`
 
-## Supported instructions
+## MC68000 conformance
 
-**Arithmetic** — `ADD` `ADDA` `ADDI` `SUB` `SUBA` `SUBI`  
-**Logic** — `AND` `ANDI` `EOR` `EORI` `NOT` `OR` `ORI`  
-**Data movement** — `CLR` `EXG` `EXT` `MOVE` `MOVEA` `NEG` `SWAP`  
-**Shifts & rotates** — `ASL` `ASR` `LSL` `LSR` `ROL` `ROR`  
-**Comparisons** — `CMP` `CMPA` `CMPI` `TST`  
-**Control flow** — `JMP` `JSR` `RTS` `RTE` `BRA` `BSR` `BEQ` `BNE` `BGE` `BGT` `BLE` `BLT`
+The byte-addressed strict core implements all 116 distinct MC68000 forms in the
+project manifest, with zero missing or audit-pending forms. This includes every
+base arithmetic, BCD, bit, condition, data movement, shift/rotate, stack,
+status-register, control-flow, trap, exception, and privileged family targeted
+by the MC68000 profile. MC68010-only `RTD` and `MOVE from CCR` are available only
+in the MC68010 Extensions mode.
+
+The generated [ISA coverage and evidence matrix](docs/generated/M68000_ISA_COVERAGE.md)
+records every form. The [conformance execution report](docs/M68000_CONFORMANCE_EXECUTION_REPORT.md)
+records the full validation and before/after performance results. The full MAME
+audit covers 317,500 vectors and fails on any unexplained architectural
+difference; reviewed temporal quarantines are kept separate for internal
+address-error frames/bus sequencing and prefetch-stage attribution.
 
 ## Easy68K subset notes
 
-The current build includes the Easy68K subset needed by `nibbles.asm`, two-pass forward label resolution for `DC.L`, memory-mapped trainer-board I/O, autovector interrupts, trap tasks `1`, `3`, `4`, and `TRAP #11` halt. See [docs/EASY68K_SUBSET_AND_LIMITATIONS.md](docs/EASY68K_SUBSET_AND_LIMITATIONS.md) for the supported subset and known limitations.
+The MC68000 instruction set is separate from Easy68K simulator compatibility.
+Easy68K mode adds the directives, terminal tasks, and trainer-board devices used
+by `nibbles.asm`, including trap tasks `1`, `3`, `4`, and `TRAP #11` halt. See
+[docs/EASY68K_SUBSET_AND_LIMITATIONS.md](docs/EASY68K_SUBSET_AND_LIMITATIONS.md)
+for the remaining simulator-level limitations.
 
 ## Runtime shape
 
-- the classic `Interpreter` is the only IDE runtime
-- browser execution runs through a worker-backed runtime session
-- `nibbles.asm` uses that same worker-backed classic interpreter path
+- the strict byte-addressed core is the single instruction execution authority
+- the public `Emulator` API is a compatibility facade over that core
+- browser execution and `nibbles.asm` run through the same worker-backed strict runtime
+- MC68000, MC68010 Extensions, and Easy68K modes are selected from the bottom status bar
 
 ## IDE architecture
 
@@ -84,7 +96,7 @@ Each file is commented line by line — useful if you are following a computer a
 
 ## Built with
 
-React 18 · Redux Toolkit · TypeScript · Next.js 15 · Vitest
+React 19 · Redux Toolkit · TypeScript · Vite · Vitest · Playwright
 
 ---
 

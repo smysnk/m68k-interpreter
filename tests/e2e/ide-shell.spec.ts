@@ -8,6 +8,40 @@ async function openViewMenu(page: Page): Promise<void> {
 }
 
 test.describe('browser e2e ide shell', () => {
+  test('switches among every emulation mode from the status bar and persists the selection', async ({
+    page,
+  }) => {
+    await page.goto('/');
+
+    const selectMode = async (currentLabel: string, nextLabel: string): Promise<void> => {
+      await page.getByRole('button', { name: `Emulation mode: ${currentLabel}` }).click();
+      const menu = page.getByRole('menu', { name: 'Select emulation mode' });
+      await expect(menu).toBeVisible();
+      await expect(menu.getByRole('menuitemradio', { checked: true })).toHaveAccessibleName(
+        currentLabel
+      );
+      await menu.getByRole('menuitemradio', { name: nextLabel }).click();
+      await expect(
+        page.getByRole('button', { name: `Emulation mode: ${nextLabel}` })
+      ).toBeVisible();
+      await expect(menu).toHaveCount(0);
+    };
+
+    await selectMode('Easy68K', 'MC68000');
+    await selectMode('MC68000', 'MC68010 Extensions');
+
+    await page.waitForFunction(
+      (storageKey) => window.localStorage.getItem(storageKey)?.includes('"cpuProfile":"m68010"'),
+      IDE_PERSISTENCE_KEY
+    );
+    await page.reload();
+    await expect(
+      page.getByRole('button', { name: 'Emulation mode: MC68010 Extensions' })
+    ).toBeVisible();
+
+    await selectMode('MC68010 Extensions', 'Easy68K');
+  });
+
   test('uses a minimal workspace gutter and keeps panel content flush with its frame', async ({
     page,
   }) => {

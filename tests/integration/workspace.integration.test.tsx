@@ -51,7 +51,8 @@ describe('workspace integration', () => {
     expect(screen.queryByRole('tablist', { name: /workspace views/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('terminal-screen')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open app menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /^view$/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /add panel/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /add code panel/i }));
 
@@ -85,7 +86,7 @@ describe('workspace integration', () => {
   it('loads Nibbles from the file explorer, renders the splash screen, and forwards gameplay input', async () => {
     render(<App />);
 
-    fireEvent.mouseEnter(screen.getByRole('button', { name: /open file explorer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
     fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
     expect(window.editorCode).toContain('END NIBBLES');
 
@@ -154,7 +155,7 @@ describe('workspace integration', () => {
   it('can reset and relaunch Nibbles from a clean state', async () => {
     render(<App />);
 
-    fireEvent.mouseEnter(screen.getByRole('button', { name: /open file explorer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
     fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
 
     act(() => {

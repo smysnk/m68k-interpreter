@@ -1,4 +1,5 @@
 const SUPERVISOR_FLAG = 0x2000;
+const STATUS_REGISTER_MASK = 0xa71f;
 
 export interface M68000StateOptions {
   dataRegisters?: ArrayLike<number>;
@@ -25,7 +26,7 @@ export class M68000State {
       this.a.set(Array.from(options.addressRegisters).slice(0, 8));
     }
     this.pc = options.pc ?? 0;
-    this.statusRegister = options.sr ?? 0x2700;
+    this.statusRegister = (options.sr ?? 0x2700) & STATUS_REGISTER_MASK;
     this.usp = options.usp ?? 0;
     this.ssp = options.ssp ?? this.a[7];
     this.a[7] = this.isSupervisor() ? this.ssp : this.usp;
@@ -37,7 +38,7 @@ export class M68000State {
 
   set sr(value: number) {
     const wasSupervisor = this.isSupervisor();
-    const next = value & 0xffff;
+    const next = value & STATUS_REGISTER_MASK;
     const willBeSupervisor = (next & SUPERVISOR_FLAG) !== 0;
 
     if (wasSupervisor !== willBeSupervisor) {
@@ -78,8 +79,8 @@ export class M68000State {
       a: Array.from(this.a),
       pc: this.pc >>> 0,
       sr: this.sr,
-      usp: this.usp >>> 0,
-      ssp: this.ssp >>> 0,
+      usp: (this.isSupervisor() ? this.usp : this.a[7]) >>> 0,
+      ssp: (this.isSupervisor() ? this.a[7] : this.ssp) >>> 0,
     };
   }
 }

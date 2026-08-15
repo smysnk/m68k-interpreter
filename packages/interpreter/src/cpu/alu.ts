@@ -51,11 +51,11 @@ export function addResult(
   extend = 0,
   stickyZero = false
 ): AluResult {
-  const mask = BigInt(sizeMask(size) >>> 0);
-  const unsignedDestination = BigInt(truncate(destination, size));
-  const unsignedSource = BigInt(truncate(source, size));
-  const sum = unsignedDestination + unsignedSource + BigInt(extend & 1);
-  const value = Number(sum & mask) >>> 0;
+  const mask = sizeMask(size) >>> 0;
+  const unsignedDestination = truncate(destination, size);
+  const unsignedSource = truncate(source, size);
+  const sum = unsignedDestination + unsignedSource + (extend & 1);
+  const value = size === 4 ? sum >>> 0 : sum & mask;
   const carry = sum > mask;
   const destinationNegative = (truncate(destination, size) & signBit(size)) !== 0;
   const sourceNegative = (truncate(source, size) & signBit(size)) !== 0;
@@ -81,16 +81,18 @@ export function subResult(
   stickyZero = false,
   affectExtend = true
 ): AluResult {
-  const unsignedDestination = BigInt(truncate(destination, size));
-  const unsignedSource = BigInt(truncate(source, size));
-  const subtrahend = unsignedSource + BigInt(extend & 1);
-  const mask = BigInt(sizeMask(size) >>> 0);
-  const value = Number((unsignedDestination - subtrahend) & mask) >>> 0;
+  const unsignedDestination = truncate(destination, size);
+  const unsignedSource = truncate(source, size);
+  const subtrahend = unsignedSource + (extend & 1);
+  const mask = sizeMask(size) >>> 0;
+  const difference = unsignedDestination - subtrahend;
+  const value = size === 4 ? difference >>> 0 : difference & mask;
   const borrow = subtrahend > unsignedDestination;
-  const destinationNegative = (truncate(destination, size) & signBit(size)) !== 0;
-  const sourceNegative = (truncate(source + (extend & 1), size) & signBit(size)) !== 0;
   const resultNegative = (value & signBit(size)) !== 0;
-  const overflow = destinationNegative !== sourceNegative && destinationNegative !== resultNegative;
+  const minimum = -(2 ** (size * 8 - 1));
+  const maximum = 2 ** (size * 8 - 1) - 1;
+  const signedDifference = signExtend(destination, size) - signExtend(source, size) - (extend & 1);
+  const overflow = signedDifference < minimum || signedDifference > maximum;
   const zero = value === 0 && (!stickyZero || (previousCcr & FLAG_Z) !== 0);
   return {
     value,
