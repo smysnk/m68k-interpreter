@@ -1,12 +1,16 @@
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import type { RuntimeSessionStore } from '@/runtime/runtimeSessionStore';
 import { runtimeSessionStore } from '@/runtime/runtimeSessionStore';
-import type { TerminalTouchPacket, TerminalTouchProtocolSymbols } from '@/runtime/terminalTouchProtocol';
+import type {
+  TerminalTouchPacket,
+  TerminalTouchProtocolSymbols,
+} from '@/runtime/terminalTouchProtocol';
 import type {
   Easy68kHardwareConfig,
   Easy68kHardwareDeviceConfig,
   Easy68kHardwareValidationResult,
   InterruptRequestResult,
+  CpuProfile,
   UndoCaptureMode,
 } from '@m68k/interpreter';
 import type { WorkerExecutionConfig } from '@/runtime/worker/interpreterWorkerProtocol';
@@ -66,10 +70,15 @@ export class RuntimeCommandPort {
     });
   }
 
-  loadProgram(source: string, columns: number, rows: number): Promise<void> {
+  loadProgram(
+    source: string,
+    columns: number,
+    rows: number,
+    cpuProfile: CpuProfile
+  ): Promise<void> {
     this.hardwareDeviceConfigurationKey = '';
     return this.enqueue(async (runtime) => {
-      await runtime.controller?.requestLoadProgram(source, columns, rows);
+      await runtime.controller?.requestLoadProgram(source, columns, rows, cpuProfile);
     });
   }
 
@@ -248,7 +257,10 @@ export class RuntimeCommandPort {
     this.automaticInterruptConfigurationKey = key;
     const operation = this.enqueue(async (runtime) => {
       if (runtime.controller) {
-        await runtime.controller.requestConfigureAutomaticInterrupts(normalizedLevels, normalizedInterval);
+        await runtime.controller.requestConfigureAutomaticInterrupts(
+          normalizedLevels,
+          normalizedInterval
+        );
         return;
       }
       this.cancelLocalAutomaticInterrupts();

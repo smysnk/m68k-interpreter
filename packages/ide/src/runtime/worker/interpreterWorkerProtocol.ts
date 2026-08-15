@@ -8,6 +8,7 @@ import type {
   Easy68kHardwareConfig,
   Easy68kHardwareDeviceConfig,
   Easy68kHardwareSnapshot,
+  CpuProfile,
 } from '@m68k/interpreter';
 import type { RuntimeFrameSyncPayload } from '@/runtime/runtimeFramePayload';
 import type {
@@ -81,7 +82,14 @@ export type WorkerFrameKind = 'full' | 'terminal' | 'hardware' | 'heartbeat';
 export type InterpreterWorkerCommand =
   | { id: number; type: 'init' }
   | { id: number; type: 'dispose' }
-  | { id: number; type: 'loadProgram'; source: string; columns: number; rows: number }
+  | {
+      id: number;
+      type: 'loadProgram';
+      source: string;
+      columns: number;
+      rows: number;
+      cpuProfile: CpuProfile;
+    }
   | { id: number; type: 'run'; config: WorkerExecutionConfig }
   | { id: number; type: 'resume'; config: WorkerExecutionConfig }
   | { id: number; type: 'pause' }

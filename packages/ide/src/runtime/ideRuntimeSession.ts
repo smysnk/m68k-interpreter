@@ -10,6 +10,7 @@ import type {
   Easy68kHardwareSnapshot,
   Easy68kHardwareValidationResult,
   InterruptRequestResult,
+  CpuProfile,
 } from '@m68k/interpreter';
 import type {
   InterpreterWorkerEvent,
@@ -60,7 +61,12 @@ export interface IdeRuntimeController {
   initialize?(): Promise<void>;
   whenReady(): Promise<void>;
   dispose(): Promise<void>;
-  requestLoadProgram(source: string, columns: number, rows: number): Promise<void>;
+  requestLoadProgram(
+    source: string,
+    columns: number,
+    rows: number,
+    cpuProfile: CpuProfile
+  ): Promise<void>;
   requestRun(config?: WorkerExecutionConfig): Promise<void>;
   requestResume(config?: WorkerExecutionConfig): Promise<void>;
   requestPause(): Promise<void>;
@@ -95,7 +101,9 @@ export interface IdeRuntimeController {
   requestReadMemoryRange(address: number, length: number): Promise<Uint8Array>;
   requestSymbolAddress(symbol: string): Promise<number | undefined>;
   subscribeEvents?(
-    listener: (event: Exclude<InterpreterWorkerEvent, { type: 'ready' } | { type: 'reply' }>) => void
+    listener: (
+      event: Exclude<InterpreterWorkerEvent, { type: 'ready' } | { type: 'reply' }>
+    ) => void
   ): () => void;
 }
 

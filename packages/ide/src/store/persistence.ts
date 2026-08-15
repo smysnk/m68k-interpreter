@@ -3,10 +3,7 @@ import type { SettingsState } from '@/store/settingsSlice';
 import type { UiShellState } from '@/store/uiShellSlice';
 import type { HardwarePreferencesState } from '@/store/hardwareSlice';
 import type { PanelLayoutState } from '@/store/panelLayoutTypes';
-import {
-  DEFAULT_EASY68K_HARDWARE_CONFIG,
-  validateEasy68kHardwareConfig,
-} from '@m68k/interpreter';
+import { DEFAULT_EASY68K_HARDWARE_CONFIG, validateEasy68kHardwareConfig } from '@m68k/interpreter';
 
 export const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v2';
 export const LEGACY_IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v1';
@@ -16,7 +13,12 @@ export interface PersistedIdeState {
   files?: FilesState;
   settings?: Pick<
     SettingsState,
-    'editorTheme' | 'followSystemTheme' | 'lineNumbers' | 'registerEditRadix' | 'terminalInputMode'
+    | 'editorTheme'
+    | 'followSystemTheme'
+    | 'lineNumbers'
+    | 'registerEditRadix'
+    | 'terminalInputMode'
+    | 'cpuProfile'
   >;
   uiShell?: Pick<
     UiShellState,
@@ -56,17 +58,15 @@ export function normalizePersistedHardwarePreferences(
         ? rawConfig.buttonAddress
         : DEFAULT_EASY68K_HARDWARE_CONFIG.buttonAddress,
   });
-  const config = validation.valid && validation.config
-    ? validation.config
-    : { ...DEFAULT_EASY68K_HARDWARE_CONFIG };
+  const config =
+    validation.valid && validation.config
+      ? validation.config
+      : { ...DEFAULT_EASY68K_HARDWARE_CONFIG };
   const automaticInterruptLevels = Array.isArray(value.automaticInterruptLevels)
     ? [...new Set(value.automaticInterruptLevels)]
         .filter(
           (level): level is number =>
-            typeof level === 'number' &&
-            Number.isInteger(level) &&
-            level >= 1 &&
-            level <= 7
+            typeof level === 'number' && Number.isInteger(level) && level >= 1 && level <= 7
         )
         .sort((left, right) => right - left)
     : [];
@@ -77,10 +77,7 @@ export function normalizePersistedHardwarePreferences(
   return {
     config,
     automaticInterruptLevels,
-    automaticInterruptIntervalMs: Math.min(
-      60_000,
-      Math.max(50, Math.round(rawInterval) || 1000)
-    ),
+    automaticInterruptIntervalMs: Math.min(60_000, Math.max(50, Math.round(rawInterval) || 1000)),
   };
 }
 
@@ -102,7 +99,8 @@ export function readPersistedIdeState(): PersistedIdeState | undefined {
     return undefined;
   }
 
-  const rawValue = storage.getItem(IDE_PERSISTENCE_KEY) ?? storage.getItem(LEGACY_IDE_PERSISTENCE_KEY);
+  const rawValue =
+    storage.getItem(IDE_PERSISTENCE_KEY) ?? storage.getItem(LEGACY_IDE_PERSISTENCE_KEY);
   if (!rawValue) {
     return undefined;
   }

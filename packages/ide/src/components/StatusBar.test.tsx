@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import StatusBar from './StatusBar';
 import { useEmulatorStore } from '@/stores/emulatorStore';
 import { ideStore, resetFilesState, resetSettingsState } from '@/store';
@@ -18,6 +19,7 @@ describe('StatusBar', () => {
     expect(screen.getByLabelText('IDE status bar')).toBeInTheDocument();
     expect(screen.queryByText('Files')).not.toBeInTheDocument();
     expect(screen.getByText('Ready')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Emulation mode: Easy68K' })).toBeInTheDocument();
     expect(screen.queryByText(/Inspector:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Help:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Terminal:/)).not.toBeInTheDocument();
@@ -33,6 +35,27 @@ describe('StatusBar', () => {
     expect(screen.getByRole('link', { name: /buy me a coffee/i })).toHaveAttribute(
       'href',
       'https://buymeacoffee.com/josh1g'
+    );
+  });
+
+  it('changes the persisted emulator CPU profile from the bottom status bar', async () => {
+    const user = userEvent.setup();
+    renderWithIdeProviders(<StatusBar />);
+
+    await user.click(screen.getByRole('button', { name: 'Emulation mode: Easy68K' }));
+
+    expect(screen.getByRole('menu', { name: 'Select emulation mode' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitemradio', { name: 'Easy68K' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+
+    await user.click(screen.getByRole('menuitemradio', { name: 'MC68000' }));
+
+    expect(ideStore.getState().settings.cpuProfile).toBe('m68000');
+    expect(screen.getByRole('button', { name: 'Emulation mode: MC68000' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
     );
   });
 
@@ -54,6 +77,7 @@ describe('StatusBar', () => {
     expect(screen.getByLabelText('IDE status bar')).toHaveAttribute('data-compact', 'true');
     expect(screen.getByTestId('status-bar-inline')).toBeInTheDocument();
     expect(screen.getByText('Ready')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Emulation mode: Easy68K' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'smysnk.com' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /buy me a coffee/i })).toBeInTheDocument();
   });

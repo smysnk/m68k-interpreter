@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InterpreterWorkerHost } from '@/runtime/worker/InterpreterWorkerHost';
-import type { InterpreterWorkerEvent, WorkerRuntimeSnapshot } from '@/runtime/worker/interpreterWorkerProtocol';
+import type {
+  InterpreterWorkerEvent,
+  WorkerRuntimeSnapshot,
+} from '@/runtime/worker/interpreterWorkerProtocol';
 
 function getLastFrameEvent(events: InterpreterWorkerEvent[]) {
   const frameEvent = [...events].reverse().find((event) => event.type === 'frame');
@@ -22,7 +25,10 @@ function getRequiredTerminalMeta(snapshot: WorkerRuntimeSnapshot) {
 
 function getStoppedReasons(events: InterpreterWorkerEvent[]): string[] {
   return events
-    .filter((event): event is Extract<InterpreterWorkerEvent, { type: 'stopped' }> => event.type === 'stopped')
+    .filter(
+      (event): event is Extract<InterpreterWorkerEvent, { type: 'stopped' }> =>
+        event.type === 'stopped'
+    )
     .map((event) => event.reason);
 }
 
@@ -120,6 +126,7 @@ describe('InterpreterWorkerHost', () => {
       source: GEOMETRY_SOURCE,
       columns: 80,
       rows: 25,
+      cpuProfile: 'easy68k',
     });
     events.length = 0;
 
@@ -195,7 +202,14 @@ describe('InterpreterWorkerHost', () => {
   it('runs a bounded automatic IRQ scheduler and cancels it deterministically', async () => {
     const events: InterpreterWorkerEvent[] = [];
     const host = new InterpreterWorkerHost((event) => events.push(event));
-    await host.handleCommand({ id: 1, type: 'loadProgram', source: AUTO_IRQ_SOURCE, columns: 80, rows: 25 });
+    await host.handleCommand({
+      id: 1,
+      type: 'loadProgram',
+      source: AUTO_IRQ_SOURCE,
+      columns: 80,
+      rows: 25,
+      cpuProfile: 'easy68k',
+    });
     const countAddress = getLastFrameSnapshot(events).symbols?.IRQ_COUNT ?? -1;
     await host.handleCommand({
       id: 2,
@@ -230,6 +244,7 @@ describe('InterpreterWorkerHost', () => {
       source: GEOMETRY_SOURCE,
       columns: 64,
       rows: 18,
+      cpuProfile: 'easy68k',
     });
 
     expect(events[0]).toEqual({ type: 'ready' });
@@ -273,6 +288,7 @@ describe('InterpreterWorkerHost', () => {
       source: GEOMETRY_SOURCE,
       columns: 40,
       rows: 20,
+      cpuProfile: 'easy68k',
     });
 
     const loadedSnapshot = getLastFrameSnapshot(events);
@@ -312,6 +328,7 @@ describe('InterpreterWorkerHost', () => {
       source: WAIT_FOR_INPUT_SOURCE,
       columns: 40,
       rows: 20,
+      cpuProfile: 'easy68k',
     });
 
     await host.handleCommand({ id: 3, type: 'step' });
@@ -350,6 +367,7 @@ describe('InterpreterWorkerHost', () => {
       source: HALT_SOURCE,
       columns: 40,
       rows: 20,
+      cpuProfile: 'easy68k',
     });
     await host.handleCommand({
       id: 3,
@@ -383,6 +401,7 @@ describe('InterpreterWorkerHost', () => {
       source: LOOPING_OUTPUT_SOURCE,
       columns: 40,
       rows: 20,
+      cpuProfile: 'easy68k',
     });
 
     events.length = 0;
@@ -417,6 +436,7 @@ describe('InterpreterWorkerHost', () => {
       source: LOOPING_OUTPUT_SOURCE,
       columns: 40,
       rows: 20,
+      cpuProfile: 'easy68k',
     });
 
     events.length = 0;
@@ -457,6 +477,7 @@ describe('InterpreterWorkerHost', () => {
       source: LOOPING_NO_OUTPUT_SOURCE,
       columns: 40,
       rows: 20,
+      cpuProfile: 'easy68k',
     });
 
     events.length = 0;
@@ -492,6 +513,7 @@ describe('InterpreterWorkerHost', () => {
       source: WAIT_FOR_INPUT_SOURCE,
       columns: 40,
       rows: 20,
+      cpuProfile: 'easy68k',
     });
     await host.handleCommand({
       id: 3,
@@ -524,6 +546,7 @@ describe('InterpreterWorkerHost', () => {
       source: EXCEPTION_SOURCE,
       columns: 40,
       rows: 20,
+      cpuProfile: 'easy68k',
     });
     await host.handleCommand({
       id: 3,
@@ -556,6 +579,7 @@ describe('InterpreterWorkerHost', () => {
       source: WAIT_FOR_INPUT_SOURCE,
       columns: 40,
       rows: 20,
+      cpuProfile: 'easy68k',
     });
 
     events.length = 0;
@@ -579,6 +603,7 @@ describe('InterpreterWorkerHost', () => {
       source: TOUCH_SOURCE,
       columns: 40,
       rows: 20,
+      cpuProfile: 'easy68k',
     });
 
     const snapshot = getLastFrameSnapshot(events);
@@ -625,6 +650,7 @@ describe('InterpreterWorkerHost', () => {
       source: LOOPING_OUTPUT_SOURCE,
       columns: 40,
       rows: 20,
+      cpuProfile: 'easy68k',
     });
     await host.handleCommand({
       id: 3,

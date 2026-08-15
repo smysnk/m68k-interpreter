@@ -87,10 +87,12 @@ function getConfiguredHardwareDevices() {
   );
   return devices.length > 0
     ? devices
-    : [{
-        ...DEFAULT_EASY68K_HARDWARE_DEVICE_CONFIG,
-        ...state.hardware.config,
-      }];
+    : [
+        {
+          ...DEFAULT_EASY68K_HARDWARE_DEVICE_CONFIG,
+          ...state.hardware.config,
+        },
+      ];
 }
 
 async function setRuntimeUndoCaptureModeAsync(
@@ -178,10 +180,7 @@ function isDisposedWorkerRuntimeError(error: unknown): boolean {
   return error instanceof Error && /disposed/i.test(error.message);
 }
 
-function publishRuntimeSession(
-  runtime: IdeRuntimeSession | null,
-  dispatch: AppDispatch
-): void {
+function publishRuntimeSession(runtime: IdeRuntimeSession | null, dispatch: AppDispatch): void {
   if (runtime) {
     runtimeSessionStore.replace(runtime);
   } else {
@@ -220,6 +219,7 @@ export const useEmulatorEvents = () => {
   const terminalInputModePreference = useSelector(
     (state: RootState) => state.settings.terminalInputMode
   );
+  const cpuProfile = useSelector((state: RootState) => state.settings.cpuProfile);
   const activeFile = useSelector((state: RootState) => selectActiveFile(state));
   const isCompactShell = useCompactShell();
   const emulatorRef = useRef<IdeRuntimeSession | null>(null);
@@ -245,6 +245,7 @@ export const useEmulatorEvents = () => {
   const previousStepIntentRef = useRef(runtimeIntents.step);
   const previousUndoIntentRef = useRef(runtimeIntents.undo);
   const previousResetIntentRef = useRef(runtimeIntents.reset);
+  const previousCpuProfileRef = useRef(cpuProfile);
   const lastRegisterSyncAtRef = useRef<number>(0);
   const currentRegistersRef = useRef(currentRegisters);
   const currentFlagsRef = useRef(currentFlags);
@@ -256,9 +257,7 @@ export const useEmulatorEvents = () => {
   const workerUnsubscribeRef = useRef<(() => void) | null>(null);
   const isInitializingRuntimeRef = useRef(false);
   const queuedRunAfterInitRef = useRef(false);
-  const lastHandledNibblesGeometrySignatureRef = useRef(
-    `${terminalColumns}x${terminalRows}`
-  );
+  const lastHandledNibblesGeometrySignatureRef = useRef(`${terminalColumns}x${terminalRows}`);
   const syncStoreFromEmulatorRef = useRef<
     (
       emulator: IdeRuntimeSession,
@@ -449,7 +448,11 @@ export const useEmulatorEvents = () => {
     };
 
     const scheduleExecutionFrame = (): void => {
-      if (!emulatorRef.current || isExecutionScheduledRef.current || isWorkerRuntime(emulatorRef.current)) {
+      if (
+        !emulatorRef.current ||
+        isExecutionScheduledRef.current ||
+        isWorkerRuntime(emulatorRef.current)
+      ) {
         return;
       }
 
@@ -508,6 +511,7 @@ export const useEmulatorEvents = () => {
       hardwareSurfaceStore.reset();
       await disposeRuntime(previousRuntime);
       const { columns, rows } = ideStore.getState().emulator.terminal;
+      const selectedCpuProfile = ideStore.getState().settings.cpuProfile;
       const emulator =
         !isJsdomEnvironment() && supportsInterpreterWorkerRuntime()
           ? createWorkerIdeRuntimeSession()
@@ -515,6 +519,7 @@ export const useEmulatorEvents = () => {
               new Emulator(code, {
                 columns,
                 rows,
+                cpuProfile: selectedCpuProfile,
                 hardwareDevices: getConfiguredHardwareDevices(),
               })
             );
@@ -574,7 +579,7 @@ export const useEmulatorEvents = () => {
           await disposeRuntime(emulator);
           return null;
         }
-        await runtimeCommandPort.loadProgram(code, columns, rows);
+        await runtimeCommandPort.loadProgram(code, columns, rows, selectedCpuProfile);
         if (runtimeEpochRef.current !== epoch) {
           await disposeRuntime(emulator);
           return null;
@@ -900,6 +905,15 @@ export const useEmulatorEvents = () => {
       hardwareSurfaceStore.reset();
     };
   }, [dispatch]);
+
+  useEffect(() => {
+    if (cpuProfile === previousCpuProfileRef.current) {
+      return;
+    }
+
+    previousCpuProfileRef.current = cpuProfile;
+    handleResetRef.current();
+  }, [cpuProfile]);
 
   useEffect(() => {
     const controller = getWorkerController(emulatorRef.current);

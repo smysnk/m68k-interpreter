@@ -99,7 +99,10 @@ interface WorkerClientCache {
   hardwareSnapshot: Easy68kHardwareSnapshot;
 }
 
-type InterpreterWorkerClientEvent = Exclude<InterpreterWorkerEvent, { type: 'ready' } | { type: 'reply' }>;
+type InterpreterWorkerClientEvent = Exclude<
+  InterpreterWorkerEvent,
+  { type: 'ready' } | { type: 'reply' }
+>;
 
 function createTerminalMeta(
   columns = 80,
@@ -336,8 +339,13 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
     this.worker.terminate();
   }
 
-  requestLoadProgram(source: string, columns: number, rows: number): Promise<void> {
-    return this.postCommand<void>({ type: 'loadProgram', source, columns, rows });
+  requestLoadProgram(
+    source: string,
+    columns: number,
+    rows: number,
+    cpuProfile: import('@m68k/interpreter').CpuProfile
+  ): Promise<void> {
+    return this.postCommand<void>({ type: 'loadProgram', source, columns, rows, cpuProfile });
   }
 
   requestRun(config?: WorkerExecutionConfig): Promise<void> {
@@ -381,29 +389,41 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
   async requestConfigureHardware(
     config: Easy68kHardwareConfig
   ): Promise<Easy68kHardwareValidationResult> {
-    const payload = await this.postHardwareCommand<Easy68kHardwareValidationResult>({
-      type: 'configureHardware',
-      config,
-    }, (result) => result?.valid === true, true);
-    return payload ?? {
-      valid: false,
-      conflicts: [],
-      errors: ['Hardware configuration was not acknowledged'],
-    };
+    const payload = await this.postHardwareCommand<Easy68kHardwareValidationResult>(
+      {
+        type: 'configureHardware',
+        config,
+      },
+      (result) => result?.valid === true,
+      true
+    );
+    return (
+      payload ?? {
+        valid: false,
+        conflicts: [],
+        errors: ['Hardware configuration was not acknowledged'],
+      }
+    );
   }
 
   async requestConfigureHardwareDevices(
     devices: readonly Easy68kHardwareDeviceConfig[]
   ): Promise<Easy68kHardwareValidationResult> {
-    const payload = await this.postHardwareCommand<Easy68kHardwareValidationResult>({
-      type: 'configureHardwareDevices',
-      devices: devices.map((device) => ({ ...device })),
-    }, (result) => result?.valid === true, true);
-    return payload ?? {
-      valid: false,
-      conflicts: [],
-      errors: ['Hardware device configuration was not acknowledged'],
-    };
+    const payload = await this.postHardwareCommand<Easy68kHardwareValidationResult>(
+      {
+        type: 'configureHardwareDevices',
+        devices: devices.map((device) => ({ ...device })),
+      },
+      (result) => result?.valid === true,
+      true
+    );
+    return (
+      payload ?? {
+        valid: false,
+        conflicts: [],
+        errors: ['Hardware device configuration was not acknowledged'],
+      }
+    );
   }
 
   requestSetHardwareToggle(bit: number, enabled: boolean, deviceId?: string): Promise<void> {
@@ -428,24 +448,23 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
         { type: 'requestInterruptLevel', level },
         (result) => result !== 'rejected',
         false
-      )) ??
-      'rejected'
+      )) ?? 'rejected'
     );
   }
 
   requestConfigureAutomaticInterrupts(levels: number[], intervalMs: number): Promise<void> {
-    return this.postHardwareCommand<void>({
-      type: 'configureAutomaticInterrupts',
-      config: { levels, intervalMs },
-    }, () => true, false);
-  }
-
-  requestCancelAutomaticInterrupts(): Promise<void> {
     return this.postHardwareCommand<void>(
-      { type: 'cancelAutomaticInterrupts' },
+      {
+        type: 'configureAutomaticInterrupts',
+        config: { levels, intervalMs },
+      },
       () => true,
       false
     );
+  }
+
+  requestCancelAutomaticInterrupts(): Promise<void> {
+    return this.postHardwareCommand<void>({ type: 'cancelAutomaticInterrupts' }, () => true, false);
   }
 
   async requestRaiseExternalInterrupt(handlerAddress: number): Promise<boolean> {
@@ -662,9 +681,7 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
     };
   }
 
-  subscribeEvents(
-    listener: (event: InterpreterWorkerClientEvent) => void
-  ): () => void {
+  subscribeEvents(listener: (event: InterpreterWorkerClientEvent) => void): () => void {
     this.eventListeners.add(listener);
     return () => {
       this.eventListeners.delete(listener);
@@ -765,7 +782,10 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
         snapshot.terminalFrameBuffer
       );
     } else if (snapshot.terminalSnapshot) {
-      copyTerminalSnapshotIntoFrameBuffer(this.cache.terminalFrameBuffer, snapshot.terminalSnapshot);
+      copyTerminalSnapshotIntoFrameBuffer(
+        this.cache.terminalFrameBuffer,
+        snapshot.terminalSnapshot
+      );
     } else if (
       this.cache.terminalFrameBuffer.columns !== nextTerminalMeta.columns ||
       this.cache.terminalFrameBuffer.rows !== nextTerminalMeta.rows

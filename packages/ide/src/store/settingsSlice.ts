@@ -1,4 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import type { CpuProfile } from '@m68k/interpreter';
 import {
   defaultEditorTheme,
   defaultEditorThemes,
@@ -17,6 +18,7 @@ export interface SettingsState {
   lineNumbers: boolean;
   registerEditRadix: RegisterEditRadix;
   terminalInputMode: TerminalInputModePreference;
+  cpuProfile: CpuProfile;
 }
 
 export const initialSettingsState: SettingsState = {
@@ -26,10 +28,16 @@ export const initialSettingsState: SettingsState = {
   lineNumbers: true,
   registerEditRadix: 'hex',
   terminalInputMode: 'auto',
+  cpuProfile: 'easy68k',
 };
 
 const registerEditRadices: RegisterEditRadix[] = ['hex', 'dec', 'bin'];
 const terminalInputModes: TerminalInputModePreference[] = ['auto', 'text-input', 'touch-only'];
+const cpuProfiles: CpuProfile[] = ['m68000', 'm68010', 'easy68k'];
+
+export function normalizeCpuProfile(value: unknown): CpuProfile {
+  return cpuProfiles.includes(value as CpuProfile) ? (value as CpuProfile) : 'easy68k';
+}
 
 function getOppositeTheme(currentTheme: EditorThemeId): EditorThemeId {
   return currentTheme === EditorThemeEnum.M68K_DARK
@@ -76,6 +84,9 @@ const settingsSlice = createSlice({
       }
       state.terminalInputMode = action.payload;
     },
+    setCpuProfile(state, action: PayloadAction<CpuProfile>) {
+      state.cpuProfile = normalizeCpuProfile(action.payload);
+    },
     resetSettingsState() {
       return { ...initialSettingsState };
     },
@@ -90,6 +101,7 @@ export const {
   setLineNumbers,
   setRegisterEditRadix,
   setTerminalInputMode,
+  setCpuProfile,
   resetSettingsState,
 } = settingsSlice.actions;
 

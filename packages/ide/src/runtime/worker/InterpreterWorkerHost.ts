@@ -2,6 +2,7 @@ import {
   clearTerminalFrameBufferDirtyRows,
   Emulator,
   type RuntimeSyncVersions,
+  type CpuProfile,
 } from '@m68k/interpreter';
 import {
   cloneTerminalFrameBufferSnapshot,
@@ -101,6 +102,7 @@ function createReplyEvent<T>(
 export class InterpreterWorkerHost {
   private emulator: Emulator | null = null;
   private lastLoadedSource = '';
+  private lastCpuProfile: CpuProfile = 'easy68k';
   private geometry: RuntimeGeometry = { columns: 80, rows: 25 };
   private readySent = false;
   private executionState: WorkerExecutionState = {
@@ -148,6 +150,7 @@ export class InterpreterWorkerHost {
           this.cancelAutomaticInterrupts();
           this.resetPublishedSnapshotState();
           this.lastLoadedSource = command.source;
+          this.lastCpuProfile = command.cpuProfile;
           this.geometry = {
             columns: command.columns,
             rows: command.rows,
@@ -155,6 +158,7 @@ export class InterpreterWorkerHost {
           this.emulator = new Emulator(command.source, {
             columns: command.columns,
             rows: command.rows,
+            cpuProfile: command.cpuProfile,
           });
           this.applyGeometryBridge();
           this.publishFrame({
@@ -207,6 +211,7 @@ export class InterpreterWorkerHost {
             this.emulator = new Emulator(this.lastLoadedSource, {
               columns: this.geometry.columns,
               rows: this.geometry.rows,
+              cpuProfile: this.lastCpuProfile,
             });
           } else {
             this.requireEmulator().reset();
@@ -614,7 +619,7 @@ export class InterpreterWorkerHost {
         plan.hardwareChanged || forceFullSections ? runtime.getHardwareSnapshot() : undefined,
       lastInstruction: includeRuntimeState ? runtime.getLastInstruction() : undefined,
       errors: includeRuntimeState ? [...runtime.getErrors()] : undefined,
-      exception: includeRuntimeState ? runtime.getException() ?? null : undefined,
+      exception: includeRuntimeState ? (runtime.getException() ?? null) : undefined,
       queuedInputLength: includeRuntimeState ? runtime.getQueuedInputLength() : undefined,
       halted: includeRuntimeState ? runtime.isHalted() : undefined,
       waitingForInput: includeRuntimeState ? runtime.isWaitingForInput() : undefined,
@@ -649,8 +654,7 @@ export class InterpreterWorkerHost {
         previousSyncVersions.terminal !== syncVersions.terminal ||
         previousSyncVersions.terminalGeometry !== syncVersions.terminalGeometry,
       hardwareChanged:
-        previousSyncVersions === null ||
-        previousSyncVersions.hardware !== syncVersions.hardware,
+        previousSyncVersions === null || previousSyncVersions.hardware !== syncVersions.hardware,
       includeSymbols:
         snapshotOptions.includeSymbols === true || !this.publishedSymbolsForCurrentProgram,
     };
@@ -691,12 +695,18 @@ export class InterpreterWorkerHost {
 
     if (
       !this.executionState.terminalFocusedContinuousFrames &&
-      (plan.registersChanged || plan.executionChanged || plan.diagnosticsChanged || plan.memoryChanged)
+      (plan.registersChanged ||
+        plan.executionChanged ||
+        plan.diagnosticsChanged ||
+        plan.memoryChanged)
     ) {
       return 'full';
     }
 
-    if (this.getNow() - this.lastContinuousFrameHeartbeatAt >= EXECUTION_FRAME_HEARTBEAT_INTERVAL_MS) {
+    if (
+      this.getNow() - this.lastContinuousFrameHeartbeatAt >=
+      EXECUTION_FRAME_HEARTBEAT_INTERVAL_MS
+    ) {
       return 'heartbeat';
     }
 
@@ -737,9 +747,9 @@ export class InterpreterWorkerHost {
     const stopReason = waitingForInput
       ? 'waiting_for_input'
       : hasException
-          ? 'exception'
-          : halted
-            ? 'halted'
+        ? 'exception'
+        : halted
+          ? 'halted'
           : 'manual_step';
 
     this.publishFrame({
@@ -774,10 +784,13 @@ export class InterpreterWorkerHost {
   }
 
   private scheduleNextExecutionFrame(generation: number, delayMs: number): void {
-    this.executionLoopTimer = setTimeout(() => {
-      this.executionLoopTimer = null;
-      void this.executeExecutionFrame(generation);
-    }, Math.max(0, delayMs));
+    this.executionLoopTimer = setTimeout(
+      () => {
+        this.executionLoopTimer = null;
+        void this.executeExecutionFrame(generation);
+      },
+      Math.max(0, delayMs)
+    );
   }
 
   private async executeExecutionFrame(generation: number): Promise<void> {

@@ -18,13 +18,16 @@ import {
   writePersistedIdeState,
   type PersistedIdeState,
 } from '@/store/persistence';
-import settingsReducer, { initialSettingsState } from '@/store/settingsSlice';
+import settingsReducer, { initialSettingsState, normalizeCpuProfile } from '@/store/settingsSlice';
 import uiShellReducer, { initialUiShellState } from '@/store/uiShellSlice';
 import hardwareReducer from '@/store/hardwareSlice';
 import panelLayoutReducer, { initialPanelLayoutState } from '@/store/panelLayoutSlice';
 import { migrateLegacyPanelLayout, normalizePanelLayoutState } from '@/store/panelLayoutValidation';
 import { resetEmulatorState, setEditorCode } from '@/store/emulatorSlice';
-import { recordPanelWorkspaceCommit, recordPanelWorkspacePersistence } from '@/runtime/idePerformanceTelemetry';
+import {
+  recordPanelWorkspaceCommit,
+  recordPanelWorkspacePersistence,
+} from '@/runtime/idePerformanceTelemetry';
 
 const combinedReducer = combineReducers({
   emulator: emulatorReducer,
@@ -125,13 +128,23 @@ export function createActionSizeGuardMiddleware<RootState>(
   };
 }
 
-function createPanelWorkspaceTelemetryMiddleware(): Middleware<unknown, ReturnType<typeof combinedReducer>> {
+function createPanelWorkspaceTelemetryMiddleware(): Middleware<
+  unknown,
+  ReturnType<typeof combinedReducer>
+> {
   return (api) => (next) => (action) => {
-    if (typeof action !== 'object' || action === null || !('type' in action) || !String(action.type).startsWith('panelLayout/')) return next(action);
+    if (
+      typeof action !== 'object' ||
+      action === null ||
+      !('type' in action) ||
+      !String(action.type).startsWith('panelLayout/')
+    )
+      return next(action);
     const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const previousOwner = api.getState().panelLayout.activeLayout.terminalOwnerPanelId;
     const result = next(action);
-    const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+    const durationMs =
+      (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
     const document = api.getState().panelLayout.activeLayout;
     const panels = Object.values(document.instances);
     const terminalCount = panels.filter((panel) => panel.kind === 'terminal').length;
@@ -191,6 +204,7 @@ export function createIdeStore() {
     ? {
         ...initialSettingsState,
         ...persisted.settings,
+        cpuProfile: normalizeCpuProfile(persisted.settings.cpuProfile),
       }
     : initialState.settings;
   const hydratedHardware = normalizePersistedHardwarePreferences(persisted?.hardware);
@@ -256,6 +270,7 @@ export function createIdeStore() {
         lineNumbers: state.settings.lineNumbers,
         registerEditRadix: state.settings.registerEditRadix,
         terminalInputMode: state.settings.terminalInputMode,
+        cpuProfile: state.settings.cpuProfile,
       },
       uiShell: {
         workspaceTab: state.uiShell.workspaceTab,
@@ -299,7 +314,8 @@ export function createIdeStore() {
     };
     if (!nonLayoutChanged && !layoutChanged) return;
     if (nonLayoutChanged) {
-      if (pendingLayoutWrite !== null && typeof window !== 'undefined') window.clearTimeout(pendingLayoutWrite);
+      if (pendingLayoutWrite !== null && typeof window !== 'undefined')
+        window.clearTimeout(pendingLayoutWrite);
       persist();
     } else if (typeof window !== 'undefined') {
       if (pendingLayoutWrite !== null) window.clearTimeout(pendingLayoutWrite);
@@ -310,9 +326,13 @@ export function createIdeStore() {
   });
 
   if (typeof window !== 'undefined') {
-    window.addEventListener('pagehide', () => {
-      if (pendingLayoutWrite !== null) persist();
-    }, { once: true });
+    window.addEventListener(
+      'pagehide',
+      () => {
+        if (pendingLayoutWrite !== null) persist();
+      },
+      { once: true }
+    );
   }
 
   return store;
