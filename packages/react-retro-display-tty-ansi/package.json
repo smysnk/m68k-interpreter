@@ -56,7 +56,7 @@
     "*.css"
   ],
   "dependencies": {
-    "react-retro-display-tty-ansi-ascii": "^0.1.189"
+    "react-retro-display-tty-ansi-ascii": "0.1.189"
   },
   "devDependencies": {
     "react": "^19.2.7",

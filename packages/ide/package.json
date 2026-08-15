@@ -35,6 +35,7 @@
     "react-redux": "9.3.0",
     "react-resizable-panels": "4.12.2",
     "react-retro-display-tty-ansi": "workspace:*",
+    "react-retro-display-tty-ansi-ascii": "0.1.189",
     "styled-components": "6.4.4"
   },
   "scripts": {
