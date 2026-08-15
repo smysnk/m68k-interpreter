@@ -393,3 +393,241 @@ describe('StrictM68000Core status, stack, and system slice', () => {
     });
   });
 });
+
+describe('StrictM68000Core exception and interrupt frames', () => {
+  it('enters a user-mode trap through the vector table and restores with RTE', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({
+      bus,
+      state: { sr: 0x0015, pc: 0x1000, usp: 0x2800, ssp: 0x3000 },
+    });
+    bus.load(0x1000, Uint8Array.of(0x4e, 0x43)); // TRAP #3
+    bus.write32((32 + 3) * 4, 0x1200);
+    bus.load(0x1200, Uint8Array.of(0x4e, 0x73)); // RTE
+
+    expect(core.step()).toMatchObject({
+      kind: 'exception',
+      pc: 0x1200,
+      fault: { code: 'trap', vector: 35 },
+    });
+    expect(core.state.isSupervisor()).toBe(true);
+    expect(core.state.a[7] >>> 0).toBe(0x2ffa);
+    expect(bus.read16(0x2ffa)).toBe(0x0015);
+    expect(bus.read32(0x2ffc)).toBe(0x1002);
+
+    expect(core.step()).toMatchObject({ kind: 'executed', pcAfter: 0x1002 });
+    expect(core.state.sr).toBe(0x0015);
+    expect(core.state.a[7] >>> 0).toBe(0x2800);
+    expect(core.state.ssp).toBe(0x3000);
+  });
+
+  it('accepts the highest pending unmasked autovector and stacks the old mask', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({
+      bus,
+      state: { sr: 0x2200, pc: 0x1000, ssp: 0x3000 },
+    });
+    bus.write32((24 + 5) * 4, 0x1400);
+    core.requestInterrupt(3);
+    core.requestInterrupt(5);
+
+    expect(core.step()).toMatchObject({
+      kind: 'exception',
+      pc: 0x1400,
+      fault: { code: 'interrupt', vector: 29 },
+    });
+    expect((core.state.sr >>> 8) & 7).toBe(5);
+    expect(bus.read16(0x2ffa)).toBe(0x2200);
+    expect(bus.read32(0x2ffc)).toBe(0x1000);
+  });
+
+  it('leaves masked interrupts pending until the mask permits service', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({
+      bus,
+      state: { sr: 0x2500, pc: 0x1000, ssp: 0x3000 },
+    });
+    bus.load(0x1000, Uint8Array.of(0x4e, 0x71));
+    bus.write32((24 + 4) * 4, 0x1400);
+    core.requestInterrupt(4);
+
+    expect(core.step()).toMatchObject({ kind: 'executed', pcAfter: 0x1002 });
+    core.state.sr = 0x2300;
+    expect(core.step()).toMatchObject({ kind: 'exception', pc: 0x1400 });
+  });
+});
+
+describe('StrictM68000Core migrated instruction families', () => {
+  it('executes MOVE, MOVEA, immediate arithmetic, and quick address arithmetic', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({ bus, state: { sr: 0x2700, pc: 0x1000 } });
+    bus.load(
+      0x1000,
+      Uint8Array.of(
+        0x12,
+        0x00, // MOVE.B D0,D1
+        0x30,
+        0x7c,
+        0xff,
+        0xff, // MOVEA.W #$ffff,A0
+        0x06,
+        0x01,
+        0x00,
+        0x01, // ADDI.B #1,D1
+        0x51,
+        0x48 // SUBQ.W #8,A0
+      )
+    );
+    core.state.d[0] = 0x80;
+    core.state.d[1] = 0x1234_5600;
+
+    core.step();
+    expect(core.state.d[1] >>> 0).toBe(0x1234_5680);
+    expect(core.state.ccr).toBe(0x08);
+    core.step();
+    expect(core.state.a[0]).toBe(-1);
+    core.step();
+    expect(core.state.d[1] >>> 0).toBe(0x1234_5681);
+    core.step();
+    expect(core.state.a[0]).toBe(-9);
+  });
+
+  it('executes both binary ALU directions and address arithmetic', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({
+      bus,
+      state: { sr: 0x2700, pc: 0x1000, addressRegisters: [0x200, 0x100] },
+    });
+    bus.load(0x1000, Uint8Array.of(0xd2, 0x50, 0xd1, 0x50, 0xd3, 0xfc, 0x00, 0x00, 0x00, 0x20));
+    bus.write16(0x200, 3);
+    core.state.d[0] = 2;
+    core.state.d[1] = 4;
+
+    core.step(); // ADD.W (A0),D1
+    expect(core.state.d[1]).toBe(7);
+    core.step(); // ADD.W D0,(A0)
+    expect(bus.read16(0x200)).toBe(5);
+    core.step(); // ADDA.L #$20,A1
+    expect(core.state.a[1]).toBe(0x120);
+  });
+
+  it('executes unary, multiply, divide, exchange, extend, and swap operations', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({ bus, state: { sr: 0x2700, pc: 0x1000 } });
+    bus.load(
+      0x1000,
+      Uint8Array.of(
+        0x42,
+        0x00, // CLR.B D0
+        0xc2,
+        0xfc,
+        0x00,
+        0x03, // MULU #3,D1
+        0x84,
+        0xfc,
+        0x00,
+        0x04, // DIVU #4,D2
+        0xc1,
+        0x41, // EXG D0,D1
+        0x48,
+        0x82, // EXT.W D2
+        0x48,
+        0x42 // SWAP D2
+      )
+    );
+    core.state.d[0] = 0x1234_56ff;
+    core.state.d[1] = 7;
+    core.state.d[2] = 20;
+
+    core.step();
+    expect(core.state.d[0] >>> 0).toBe(0x1234_5600);
+    core.step();
+    expect(core.state.d[1]).toBe(21);
+    core.step();
+    expect(core.state.d[2] & 0xffff).toBe(5);
+    core.step();
+    expect(core.state.d[0]).toBe(21);
+    expect(core.state.d[1] >>> 0).toBe(0x1234_5600);
+    core.step();
+    expect(core.state.d[2] & 0xffff).toBe(5);
+    core.step();
+    expect(core.state.d[2] >>> 0).toBe(0x0005_0000);
+  });
+
+  it('executes control effective addresses and MOVEM register lists', () => {
+    const bus = new RamBus({ size: 0x5000 });
+    const core = new StrictM68000Core({
+      bus,
+      state: {
+        sr: 0x2700,
+        pc: 0x1000,
+        addressRegisters: [0x2000, 0, 0, 0, 0, 0, 0, 0x4000],
+      },
+    });
+    bus.load(0x1000, Uint8Array.of(0x43, 0xd0, 0x48, 0x90, 0x00, 0x03, 0x4e, 0x90));
+    bus.load(0x2000, Uint8Array.of(0x4e, 0x75));
+    core.state.d[0] = 0x1111;
+    core.state.d[1] = 0x2222;
+
+    core.step(); // LEA (A0),A1
+    expect(core.state.a[1] >>> 0).toBe(0x2000);
+    core.step(); // MOVEM.W D0-D1,(A0)
+    expect(bus.read16(0x2000)).toBe(0x1111);
+    expect(bus.read16(0x2002)).toBe(0x2222);
+    core.state.a[0] = 0x2000;
+    core.step(); // JSR (A0)
+    expect(core.state.pc).toBe(0x2000);
+    expect(bus.read32(0x3ffc)).toBe(0x1008);
+  });
+
+  it('applies register shift counts and flags', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({ bus, state: { sr: 0x2700, pc: 0x1000 } });
+    bus.load(0x1000, Uint8Array.of(0xe3, 0x00, 0xe2, 0x68)); // ASL.B #1,D0; LSR.W D1,D0
+    core.state.d[0] = 0x81;
+    core.state.d[1] = 1;
+
+    core.step();
+    expect(core.state.d[0] & 0xff).toBe(2);
+    expect(core.state.ccr & 0x13).toBe(0x13);
+    core.step();
+    expect(core.state.d[0] & 0xffff).toBe(1);
+  });
+});
+
+describe('StrictM68000Core profile extensions', () => {
+  it('rejects MC68010 forms in strict MC68000 mode', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({
+      bus,
+      profile: 'm68000',
+      state: { sr: 0x2700, pc: 0x1000, ssp: 0x3000 },
+    });
+    bus.load(0x1000, Uint8Array.of(0x42, 0xc0)); // MOVE CCR,D0
+
+    expect(core.step()).toMatchObject({
+      kind: 'exception',
+      fault: { code: 'illegal-instruction', vector: 4 },
+    });
+  });
+
+  it('executes MOVE from CCR and RTD in MC68010 mode', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({
+      bus,
+      profile: 'm68010',
+      state: {
+        sr: 0x2715,
+        pc: 0x1000,
+        addressRegisters: [0, 0, 0, 0, 0, 0, 0, 0x3000],
+      },
+    });
+    bus.load(0x1000, Uint8Array.of(0x42, 0xc0, 0x4e, 0x74, 0x00, 0x08));
+    bus.write32(0x3000, 0x1234);
+
+    core.step();
+    expect(core.state.d[0] & 0xffff).toBe(0x15);
+    expect(core.step()).toMatchObject({ kind: 'executed', pcAfter: 0x1234 });
+    expect(core.state.a[7] >>> 0).toBe(0x300c);
+  });
+});

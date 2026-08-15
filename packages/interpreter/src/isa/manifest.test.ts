@@ -47,9 +47,10 @@ describe('MC68000 ISA manifest', () => {
     expect(summary.byProfile.m68000).toBeGreaterThan(100);
     expect(summary.byProfile.m68010).toBe(2);
     expect(summary.byProfile.easy68k).toBe(1);
-    expect(summary.bySupport['legacy-only']).toBeGreaterThan(40);
+    expect(summary.bySupport['legacy-only']).toBe(0);
     expect(summary.bySupport['strict-core-partial']).toBeGreaterThan(5);
-    expect(summary.bySupport['integrated-needs-audit']).toBe(0);
+    expect(summary.bySupport['integrated-needs-audit']).toBeGreaterThan(40);
+    expect(summary.bySupport.missing).toBe(0);
     expect(summary.bySupport.conformant).toBe(0);
     expect(Object.values(summary.bySupport).reduce((total, count) => total + count, 0)).toBe(
       summary.totalForms

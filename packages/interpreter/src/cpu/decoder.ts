@@ -125,6 +125,7 @@ export type DecodedBinaryInstruction =
       register: number;
     }
   | { kind: 'rtr'; length: 2; opcode: number }
+  | { kind: 'rtd'; length: 2; opcode: number }
   | {
       kind: 'move-status';
       length: 2;
@@ -133,6 +134,7 @@ export type DecodedBinaryInstruction =
       mode: number;
       register: number;
     }
+  | { kind: 'move-from-ccr'; length: 2; opcode: number; mode: number; register: number }
   | {
       kind: 'movep';
       length: 2;
@@ -152,6 +154,126 @@ export type DecodedBinaryInstruction =
     }
   | { kind: 'tas'; length: 2; opcode: number; mode: number; register: number }
   | { kind: 'trapv'; length: 2; opcode: number }
+  | {
+      kind: 'move';
+      length: 2;
+      opcode: number;
+      size: OperandSize;
+      sourceMode: number;
+      sourceRegister: number;
+      destinationMode: number;
+      destinationRegister: number;
+    }
+  | {
+      kind: 'movea';
+      length: 2;
+      opcode: number;
+      size: 2 | 4;
+      sourceMode: number;
+      sourceRegister: number;
+      destinationRegister: number;
+    }
+  | {
+      kind: 'binary-alu';
+      length: 2;
+      opcode: number;
+      operation: 'add' | 'sub' | 'and' | 'or' | 'cmp' | 'eor';
+      size: OperandSize;
+      direction: 'ea-to-register' | 'register-to-ea';
+      dataRegister: number;
+      mode: number;
+      register: number;
+    }
+  | {
+      kind: 'address-alu';
+      length: 2;
+      opcode: number;
+      operation: 'adda' | 'suba' | 'cmpa';
+      size: 2 | 4;
+      addressRegister: number;
+      mode: number;
+      register: number;
+    }
+  | {
+      kind: 'immediate-data';
+      length: 2;
+      opcode: number;
+      operation: 'add' | 'sub' | 'and' | 'or' | 'eor' | 'cmp';
+      size: OperandSize;
+      mode: number;
+      register: number;
+    }
+  | {
+      kind: 'quick';
+      length: 2;
+      opcode: number;
+      operation: 'add' | 'sub';
+      size: OperandSize;
+      immediate: number;
+      mode: number;
+      register: number;
+    }
+  | {
+      kind: 'unary';
+      length: 2;
+      opcode: number;
+      operation: 'clr' | 'neg' | 'not' | 'tst';
+      size: OperandSize;
+      mode: number;
+      register: number;
+    }
+  | {
+      kind: 'multiply-divide';
+      length: 2;
+      opcode: number;
+      operation: 'mulu' | 'muls' | 'divu' | 'divs';
+      dataRegister: number;
+      mode: number;
+      register: number;
+    }
+  | {
+      kind: 'control-ea';
+      length: 2;
+      opcode: number;
+      operation: 'jmp' | 'jsr' | 'lea';
+      addressRegister?: number;
+      mode: number;
+      register: number;
+    }
+  | {
+      kind: 'movem';
+      length: 2;
+      opcode: number;
+      direction: 'registers-to-memory' | 'memory-to-registers';
+      size: 2 | 4;
+      mode: number;
+      register: number;
+    }
+  | {
+      kind: 'exg';
+      length: 2;
+      opcode: number;
+      registerKind: 'data-data' | 'address-address' | 'data-address';
+      sourceRegister: number;
+      destinationRegister: number;
+    }
+  | {
+      kind: 'ext';
+      length: 2;
+      opcode: number;
+      size: 2 | 4;
+      register: number;
+    }
+  | { kind: 'swap'; length: 2; opcode: number; register: number }
+  | {
+      kind: 'register-shift';
+      length: 2;
+      opcode: number;
+      operation: 'asr' | 'asl' | 'lsr' | 'lsl' | 'ror' | 'rol';
+      size: OperandSize;
+      count: { kind: 'immediate'; value: number } | { kind: 'register'; register: number };
+      register: number;
+    }
   | { kind: 'unimplemented'; length: 2; opcode: number };
 
 const BRANCH_CONDITION: readonly BranchCondition[] = [
@@ -225,6 +347,8 @@ export function decodeBinaryInstruction(bytes: Uint8Array, offset = 0): DecodedB
       return { kind: 'trapv', length: 2, opcode };
     case 0x4e77:
       return { kind: 'rtr', length: 2, opcode };
+    case 0x4e74:
+      return { kind: 'rtd', length: 2, opcode };
     case 0x4e72:
       return {
         kind: 'stop',
@@ -274,6 +398,16 @@ export function decodeBinaryInstruction(bytes: Uint8Array, offset = 0): DecodedB
         register: opcode & 0x7,
       };
     }
+  }
+
+  if ((opcode & 0xffc0) === 0x42c0) {
+    return {
+      kind: 'move-from-ccr',
+      length: 2,
+      opcode,
+      mode: (opcode >>> 3) & 0x7,
+      register: opcode & 0x7,
+    };
   }
 
   if ((opcode & 0xf138) === 0x0108) {
@@ -532,6 +666,263 @@ export function decodeBinaryInstruction(bytes: Uint8Array, offset = 0): DecodedB
       condition,
       displacement: signExtendByte(shortDisplacement),
     };
+  }
+
+  const moveSize =
+    (opcode & 0xf000) === 0x1000
+      ? 1
+      : (opcode & 0xf000) === 0x2000
+        ? 4
+        : (opcode & 0xf000) === 0x3000
+          ? 2
+          : undefined;
+  if (moveSize !== undefined) {
+    const destinationMode = (opcode >>> 6) & 0x7;
+    const destinationRegister = (opcode >>> 9) & 0x7;
+    if (destinationMode === 1 && moveSize !== 1) {
+      return {
+        kind: 'movea',
+        length: 2,
+        opcode,
+        size: moveSize,
+        sourceMode: (opcode >>> 3) & 0x7,
+        sourceRegister: opcode & 0x7,
+        destinationRegister,
+      };
+    }
+    return {
+      kind: 'move',
+      length: 2,
+      opcode,
+      size: moveSize,
+      sourceMode: (opcode >>> 3) & 0x7,
+      sourceRegister: opcode & 0x7,
+      destinationMode,
+      destinationRegister,
+    };
+  }
+
+  for (const [maskValue, operation] of [
+    [0x0000, 'or'],
+    [0x0200, 'and'],
+    [0x0400, 'sub'],
+    [0x0600, 'add'],
+    [0x0a00, 'eor'],
+    [0x0c00, 'cmp'],
+  ] as const) {
+    if ((opcode & 0xff00) === maskValue) {
+      const size = decodeOperandSize((opcode >>> 6) & 0x3);
+      if (size !== undefined) {
+        return {
+          kind: 'immediate-data',
+          length: 2,
+          opcode,
+          operation,
+          size,
+          mode: (opcode >>> 3) & 0x7,
+          register: opcode & 0x7,
+        };
+      }
+    }
+  }
+
+  if ((opcode & 0xf000) === 0x5000) {
+    const size = decodeOperandSize((opcode >>> 6) & 0x3);
+    if (size !== undefined) {
+      return {
+        kind: 'quick',
+        length: 2,
+        opcode,
+        operation: (opcode & 0x0100) !== 0 ? 'sub' : 'add',
+        size,
+        immediate: (opcode >>> 9) & 0x7 || 8,
+        mode: (opcode >>> 3) & 0x7,
+        register: opcode & 0x7,
+      };
+    }
+  }
+
+  if ((opcode & 0xfff8) === 0x4840) {
+    return { kind: 'swap', length: 2, opcode, register: opcode & 0x7 };
+  }
+  if ((opcode & 0xfff8) === 0x4880 || (opcode & 0xfff8) === 0x48c0) {
+    return {
+      kind: 'ext',
+      length: 2,
+      opcode,
+      size: (opcode & 0x0040) !== 0 ? 4 : 2,
+      register: opcode & 0x7,
+    };
+  }
+
+  if ((opcode & 0xfb80) === 0x4880) {
+    return {
+      kind: 'movem',
+      length: 2,
+      opcode,
+      direction: (opcode & 0x0400) !== 0 ? 'memory-to-registers' : 'registers-to-memory',
+      size: (opcode & 0x0040) !== 0 ? 4 : 2,
+      mode: (opcode >>> 3) & 0x7,
+      register: opcode & 0x7,
+    };
+  }
+
+  if ((opcode & 0xffc0) === 0x4e80 || (opcode & 0xffc0) === 0x4ec0) {
+    return {
+      kind: 'control-ea',
+      length: 2,
+      opcode,
+      operation: (opcode & 0x0040) !== 0 ? 'jmp' : 'jsr',
+      mode: (opcode >>> 3) & 0x7,
+      register: opcode & 0x7,
+    };
+  }
+  if ((opcode & 0xf1c0) === 0x41c0) {
+    return {
+      kind: 'control-ea',
+      length: 2,
+      opcode,
+      operation: 'lea',
+      addressRegister: (opcode >>> 9) & 0x7,
+      mode: (opcode >>> 3) & 0x7,
+      register: opcode & 0x7,
+    };
+  }
+
+  for (const [maskValue, operation] of [
+    [0x4200, 'clr'],
+    [0x4400, 'neg'],
+    [0x4600, 'not'],
+    [0x4a00, 'tst'],
+  ] as const) {
+    if ((opcode & 0xff00) === maskValue) {
+      const size = decodeOperandSize((opcode >>> 6) & 0x3);
+      if (size !== undefined) {
+        return {
+          kind: 'unary',
+          length: 2,
+          opcode,
+          operation,
+          size,
+          mode: (opcode >>> 3) & 0x7,
+          register: opcode & 0x7,
+        };
+      }
+    }
+  }
+
+  for (const [maskValue, registerKind] of [
+    [0xc140, 'data-data'],
+    [0xc148, 'address-address'],
+    [0xc188, 'data-address'],
+  ] as const) {
+    if ((opcode & 0xf1f8) === maskValue) {
+      return {
+        kind: 'exg',
+        length: 2,
+        opcode,
+        registerKind,
+        sourceRegister: (opcode >>> 9) & 0x7,
+        destinationRegister: opcode & 0x7,
+      };
+    }
+  }
+
+  const group = opcode >>> 12;
+  const groupOperation =
+    group === 0x8
+      ? 'or'
+      : group === 0x9
+        ? 'sub'
+        : group === 0xb
+          ? 'cmp'
+          : group === 0xc
+            ? 'and'
+            : group === 0xd
+              ? 'add'
+              : undefined;
+  if (groupOperation !== undefined) {
+    const operationMode = (opcode >>> 6) & 0x7;
+    const dataRegister = (opcode >>> 9) & 0x7;
+    const mode = (opcode >>> 3) & 0x7;
+    const register = opcode & 0x7;
+
+    if (
+      (group === 0x9 || group === 0xb || group === 0xd) &&
+      (operationMode === 3 || operationMode === 7)
+    ) {
+      return {
+        kind: 'address-alu',
+        length: 2,
+        opcode,
+        operation: group === 0x9 ? 'suba' : group === 0xb ? 'cmpa' : 'adda',
+        size: operationMode === 3 ? 2 : 4,
+        addressRegister: dataRegister,
+        mode,
+        register,
+      };
+    }
+
+    if ((group === 0x8 || group === 0xc) && (operationMode === 3 || operationMode === 7)) {
+      return {
+        kind: 'multiply-divide',
+        length: 2,
+        opcode,
+        operation:
+          group === 0x8
+            ? operationMode === 3
+              ? 'divu'
+              : 'divs'
+            : operationMode === 3
+              ? 'mulu'
+              : 'muls',
+        dataRegister,
+        mode,
+        register,
+      };
+    }
+
+    const sizeCode = operationMode & 0x3;
+    const size = decodeOperandSize(sizeCode);
+    if (size !== undefined && operationMode !== 3 && operationMode !== 7) {
+      return {
+        kind: 'binary-alu',
+        length: 2,
+        opcode,
+        operation: group === 0xb && operationMode >= 4 ? 'eor' : groupOperation,
+        size,
+        direction: operationMode >= 4 ? 'register-to-ea' : 'ea-to-register',
+        dataRegister,
+        mode,
+        register,
+      };
+    }
+  }
+
+  if ((opcode & 0xf000) === 0xe000 && ((opcode >>> 6) & 0x3) !== 3) {
+    const size = decodeOperandSize((opcode >>> 6) & 0x3);
+    const kind = (opcode >>> 3) & 0x3;
+    if (size !== undefined && kind !== 2) {
+      const direction = (opcode & 0x0100) !== 0 ? 'l' : 'r';
+      const operation =
+        kind === 0
+          ? (`as${direction}` as const)
+          : kind === 1
+            ? (`ls${direction}` as const)
+            : (`ro${direction}` as const);
+      const registerCount = (opcode & 0x0020) !== 0;
+      return {
+        kind: 'register-shift',
+        length: 2,
+        opcode,
+        operation,
+        size,
+        count: registerCount
+          ? { kind: 'register', register: (opcode >>> 9) & 0x7 }
+          : { kind: 'immediate', value: (opcode >>> 9) & 0x7 || 8 },
+        register: opcode & 0x7,
+      };
+    }
   }
 
   return {

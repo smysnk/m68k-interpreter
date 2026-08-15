@@ -80,6 +80,7 @@ export {
   encodeTrap,
 } from './assembler/encoder';
 export { decodeBinaryInstruction } from './cpu/decoder';
+export { classifyOpcodeWord } from './cpu/opcodeClassifier';
 export { evaluateBranchCondition, evaluateConditionCode } from './cpu/conditions';
 export {
   classifyEffectiveAddress,
@@ -113,6 +114,7 @@ export type {
 } from './assembler/programImage';
 export type { BranchCondition } from './assembler/encoder';
 export type { DecodedBinaryInstruction } from './cpu/decoder';
+export type { OpcodeClassification } from './cpu/opcodeClassifier';
 export type { StrictM68000CoreOptions } from './cpu/core';
 export type { BusAccess, BusAccessSize, BusAccessType, MemoryBus } from './cpu/memoryBus';
 export type { M68000StateOptions } from './cpu/state';
