@@ -81,6 +81,28 @@ export {
 } from './assembler/encoder';
 export { decodeBinaryInstruction } from './cpu/decoder';
 export { evaluateBranchCondition } from './cpu/conditions';
+export {
+  classifyEffectiveAddress,
+  isEffectiveAddressAllowed,
+  resolveEffectiveAddress,
+} from './cpu/effectiveAddress';
+export {
+  CCR_MASK,
+  FLAG_C,
+  FLAG_N,
+  FLAG_V,
+  FLAG_X,
+  FLAG_Z,
+  addResult,
+  compareResult,
+  logicResult,
+  signBit,
+  signExtend,
+  sizeMask,
+  subResult,
+  truncate,
+} from './cpu/alu';
+export { InstructionStream, signExtend8, signExtend16 } from './cpu/instructionStream';
 export { StrictM68000Core } from './cpu/core';
 export { BusFault, RamBus } from './cpu/memoryBus';
 export { M68000State } from './cpu/state';
