@@ -49,7 +49,7 @@ export class StrictM68000Core {
     if (!(this.bus instanceof RamBus)) {
       throw new TypeError('loadProgram requires a RamBus; load custom buses through their own API');
     }
-    this.bus.load(image.entryPoint, image.bytes);
+    this.bus.load(image.loadAddress, image.bytes);
     this.state.pc = image.entryPoint;
   }
 

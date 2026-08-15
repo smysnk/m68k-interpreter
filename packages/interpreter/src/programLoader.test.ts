@@ -54,13 +54,7 @@ END START
     expect(result.symbols.STR_SPLASH_SCR).toBeGreaterThan(result.symbols.SNK_SCR);
     expect(readBytes(result.memoryImage, result.symbols.STR_ESC, 3)).toEqual([0x1b, 0x5b, 0x00]);
     expect(readBytes(result.memoryImage, result.symbols.STR_SPLASH_SCR, 7)).toEqual([
-      0x1b,
-      0x5b,
-      0x32,
-      0x3b,
-      0x32,
-      0x37,
-      0x48,
+      0x1b, 0x5b, 0x32, 0x3b, 0x32, 0x37, 0x48,
     ]);
   });
 
@@ -77,5 +71,18 @@ IRQ1_HANDLER
     expect(result.errors).toEqual([]);
     expect(result.symbols.IRQ1_HANDLER).toBe(0x1004);
     expect(readBytes(result.memoryImage, 0x64, 4)).toEqual([0, 0, 0x10, 0x04]);
+  });
+
+  it('expands DCB directives at each scalar size', () => {
+    const result = loadProgramSource(`ORG $200
+BYTES DCB.B 3,$AA
+WORDS DCB.W 2,$1234
+LONGS DCB.L 1,$89ABCDEF
+END BYTES`);
+
+    expect(result.errors).toEqual([]);
+    expect(readBytes(result.memoryImage, 0x200, 11)).toEqual([
+      0xaa, 0xaa, 0xaa, 0x12, 0x34, 0x12, 0x34, 0x89, 0xab, 0xcd, 0xef,
+    ]);
   });
 });

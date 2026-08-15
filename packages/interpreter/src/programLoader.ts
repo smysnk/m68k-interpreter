@@ -9,6 +9,7 @@ export interface ProgramLoadResult {
   decodedInstructions: DecodedInstruction[];
   sourceLines: string[];
   codeLabels: Record<string, number>;
+  addressLabels: Record<string, number>;
   codeLabelLookup: Record<string, number>;
   symbols: Record<string, number>;
   symbolLookup: Record<string, number>;
@@ -25,7 +26,20 @@ interface PendingLabel {
   line: number;
 }
 
-const DIRECTIVES = new Set(['ORG', 'END', 'EQU', 'DC.B', 'DC.W', 'DC.L', 'DS.B', 'DS.W', 'DS.L']);
+const DIRECTIVES = new Set([
+  'ORG',
+  'END',
+  'EQU',
+  'DC.B',
+  'DC.W',
+  'DC.L',
+  'DCB.B',
+  'DCB.W',
+  'DCB.L',
+  'DS.B',
+  'DS.W',
+  'DS.L',
+]);
 const SYMBOL_PATTERN = /^[_A-Za-z.$][_A-Za-z0-9.$]*$/;
 
 export function loadProgramSource(source: ProgramSource): ProgramLoadResult {
@@ -33,6 +47,7 @@ export function loadProgramSource(source: ProgramSource): ProgramLoadResult {
   const forwardSymbolLookup = collectForwardSymbolAddresses(sourceLines);
   const instructions: Array<[string, number, boolean]> = [];
   const codeLabels: Record<string, number> = {};
+  const addressLabels: Record<string, number> = {};
   const symbols: Record<string, number> = {};
   const symbolLookup = Object.create(forwardSymbolLookup) as Record<string, number>;
   const memoryImage: Record<number, number> = {};
@@ -78,7 +93,11 @@ export function loadProgramSource(source: ProgramSource): ProgramLoadResult {
       }
 
       if (!registerSymbol(attachedLabels[0].name, value, symbols, symbolLookup)) {
-        exception = Strings.DUPLICATE_LABEL + attachedLabels[0].name + Strings.AT_LINE + attachedLabels[0].line;
+        exception =
+          Strings.DUPLICATE_LABEL +
+          attachedLabels[0].name +
+          Strings.AT_LINE +
+          attachedLabels[0].line;
         break;
       }
 
@@ -103,6 +122,7 @@ export function loadProgramSource(source: ProgramSource): ProgramLoadResult {
           exception = Strings.DUPLICATE_LABEL + label.name + Strings.AT_LINE + label.line;
           break;
         }
+        addressLabels[label.name] = instructions.length;
       }
 
       if (exception) {
@@ -131,6 +151,7 @@ export function loadProgramSource(source: ProgramSource): ProgramLoadResult {
           exception = Strings.DUPLICATE_LABEL + label.name + Strings.AT_LINE + label.line;
           break;
         }
+        addressLabels[label.name] = instructions.length;
       }
 
       if (exception) {
@@ -150,12 +171,35 @@ export function loadProgramSource(source: ProgramSource): ProgramLoadResult {
       continue;
     }
 
+    if (upperMnemonic.startsWith('DCB.')) {
+      for (const label of attachedLabels) {
+        if (!registerSymbol(label.name, currentAddress, symbols, symbolLookup)) {
+          exception = Strings.DUPLICATE_LABEL + label.name + Strings.AT_LINE + label.line;
+          break;
+        }
+        addressLabels[label.name] = instructions.length;
+      }
+      if (exception) break;
+      currentAddress = writeRepeatedData(
+        currentAddress,
+        upperMnemonic,
+        operandText,
+        memoryImage,
+        symbolLookup,
+        errors,
+        lineNumber
+      );
+      instructions.push([parsedLine.content.trim(), lineNumber, true]);
+      continue;
+    }
+
     if (upperMnemonic.startsWith('DS.')) {
       for (const label of attachedLabels) {
         if (!registerSymbol(label.name, currentAddress, symbols, symbolLookup)) {
           exception = Strings.DUPLICATE_LABEL + label.name + Strings.AT_LINE + label.line;
           break;
         }
+        addressLabels[label.name] = instructions.length;
       }
 
       if (exception) {
@@ -181,6 +225,7 @@ export function loadProgramSource(source: ProgramSource): ProgramLoadResult {
         break;
       }
       codeLabels[label.name] = instructions.length;
+      addressLabels[label.name] = instructions.length;
     }
 
     if (exception) {
@@ -196,6 +241,7 @@ export function loadProgramSource(source: ProgramSource): ProgramLoadResult {
     decodedInstructions: decodeLoadedInstructions(instructions, symbolLookup),
     sourceLines,
     codeLabels,
+    addressLabels,
     codeLabelLookup: buildCodeLabelLookup(codeLabels),
     symbols,
     symbolLookup,
@@ -252,6 +298,13 @@ function collectForwardSymbolAddresses(sourceLines: readonly string[]): Record<s
         return count + (isQuoted(token) ? token.slice(1, -1).length : 1);
       }, 0);
       currentAddress += scalarBytes * scalarCount;
+      continue;
+    }
+
+    if (upperMnemonic.startsWith('DCB.')) {
+      const [countToken = '0'] = splitCommaSeparated(operandText);
+      const count = resolveExpression(countToken, lookup) ?? 0;
+      currentAddress += Math.max(0, count) * sizeToBytes(directiveToSizeCode(upperMnemonic));
       continue;
     }
 
@@ -320,7 +373,10 @@ function stripComments(line: string): string {
   return line.trimEnd();
 }
 
-function parseStructuredLine(line: string, lineNumber: number): { labels: PendingLabel[]; content?: string } {
+function parseStructuredLine(
+  line: string,
+  lineNumber: number
+): { labels: PendingLabel[]; content?: string } {
   const hasLeadingWhitespace = /^\s/.test(line);
   const trimmed = line.trim();
 
@@ -418,7 +474,12 @@ function writeDefinedData(
     if (isQuoted(token)) {
       const value = token.slice(1, -1);
       for (let index = 0; index < value.length; index++) {
-        currentAddress = writeScalar(memoryImage, currentAddress, value.charCodeAt(index), sizeCode);
+        currentAddress = writeScalar(
+          memoryImage,
+          currentAddress,
+          value.charCodeAt(index),
+          sizeCode
+        );
       }
       continue;
     }
@@ -460,12 +521,37 @@ function reserveDefinedStorage(
   return startAddress + byteCount;
 }
 
+function writeRepeatedData(
+  startAddress: number,
+  directive: string,
+  operandText: string,
+  memoryImage: Record<number, number>,
+  symbolLookup: Record<string, number>,
+  errors: string[],
+  lineNumber: number
+): number {
+  const [countToken = '', valueToken = '0'] = splitCommaSeparated(operandText);
+  const count = resolveExpression(countToken, symbolLookup);
+  const value = resolveExpression(valueToken, symbolLookup);
+  if (count === undefined || value === undefined) {
+    errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + lineNumber);
+    return startAddress;
+  }
+  let address = startAddress;
+  for (let index = 0; index < Math.max(0, count); index += 1) {
+    address = writeScalar(memoryImage, address, value, directiveToSizeCode(directive));
+  }
+  return address;
+}
+
 function directiveToSizeCode(directive: string): number {
   switch (directive.toUpperCase()) {
     case 'DC.L':
+    case 'DCB.L':
     case 'DS.L':
       return CODE_LONG;
     case 'DC.B':
+    case 'DCB.B':
     case 'DS.B':
       return CODE_BYTE;
     default:
@@ -549,11 +635,15 @@ function splitCommaSeparated(value: string): string[] {
 function isQuoted(value: string): boolean {
   return (
     value.length >= 2 &&
-    ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"')))
+    ((value.startsWith("'") && value.endsWith("'")) ||
+      (value.startsWith('"') && value.endsWith('"')))
   );
 }
 
-function resolveExpression(expression: string, symbolLookup: Record<string, number>): number | undefined {
+function resolveExpression(
+  expression: string,
+  symbolLookup: Record<string, number>
+): number | undefined {
   const trimmed = expression.trim();
   if (trimmed === '') {
     return undefined;

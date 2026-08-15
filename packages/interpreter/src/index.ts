@@ -68,6 +68,12 @@ export {
 } from './instructionDecoder';
 export { loadProgramSource } from './programLoader';
 export { createProgramImage, findProgramSource } from './assembler/programImage';
+export { assembleProgramSource } from './assembler/sourceAssembler';
+export type { SourceAssemblyResult } from './assembler/sourceAssembler';
+export {
+  encodeSourceInstruction,
+  estimateSourceInstructionLength,
+} from './assembler/sourceEncoder';
 export {
   encodeBranch,
   encodeIllegal,
