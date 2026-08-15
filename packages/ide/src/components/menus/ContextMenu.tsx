@@ -50,6 +50,11 @@ export default function ContextMenu({
   width?: number;
 }): React.ReactElement | null {
   const position = useMenuPosition({ anchor, menuRef, open, placement, width });
+  const relatedRefsRef = React.useRef(relatedRefs);
+
+  React.useEffect(() => {
+    relatedRefsRef.current = relatedRefs;
+  }, [relatedRefs]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -59,7 +64,7 @@ export default function ContextMenu({
     const handlePointerDown = (event: MouseEvent): void => {
       const target = event.target as Node;
       if (menuRef.current?.contains(target)) return;
-      if (relatedRefs.some((ref) => ref.current?.contains(target))) return;
+      if (relatedRefsRef.current.some((ref) => ref.current?.contains(target))) return;
       onDismiss('outside');
     };
     const handleEscape = (event: KeyboardEvent): void => {
@@ -76,7 +81,7 @@ export default function ContextMenu({
       document.removeEventListener('mousedown', handlePointerDown);
       window.removeEventListener('keydown', handleEscape);
     };
-  }, [autoFocus, menuRef, onDismiss, open, relatedRefs, restoreFocusTo]);
+  }, [autoFocus, menuRef, onDismiss, open, restoreFocusTo]);
 
   if (!open || !anchor) return null;
 

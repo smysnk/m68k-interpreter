@@ -172,7 +172,7 @@ describe('PanelWorkspace', () => {
     });
   });
 
-  it('supports keyboard context-menu invocation, submenu navigation, and focus restoration', () => {
+  it('supports keyboard context-menu invocation, submenu navigation, and focus restoration', async () => {
     renderWithIdeProviders(<PanelWorkspace />, { store });
     const dragButton = screen.getByLabelText('Drag Screen panel');
     const terminal = screen.getByTestId('panel-instance-panel-terminal-1');
@@ -193,6 +193,14 @@ describe('PanelWorkspace', () => {
     const addPanelItem = screen.getByRole('menuitem', { name: 'Add a panel' });
     addPanelItem.focus();
     fireEvent.keyDown(addPanelItem, { key: 'ArrowRight' });
+    const submenu = screen.getByRole('menu', { name: 'Add a panel' });
+    const firstPanelKind = within(submenu).getAllByRole('menuitem')[0]!;
+    firstPanelKind.focus();
+    fireEvent.keyDown(firstPanelKind, { key: 'ArrowLeft' });
+    expect(screen.queryByRole('menu', { name: 'Add a panel' })).not.toBeInTheDocument();
+    await waitFor(() => expect(addPanelItem).toHaveFocus());
+
+    fireEvent.keyDown(addPanelItem, { key: 'ArrowRight' });
     expect(screen.getByRole('menu', { name: 'Add a panel' })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('menu', { name: 'Panel workspace actions' })).not.toBeInTheDocument();
@@ -202,6 +210,25 @@ describe('PanelWorkspace', () => {
     expect(screen.getByRole('menu', { name: 'Panel workspace actions' })).toBeInTheDocument();
     fireEvent.mouseDown(document.body);
     expect(screen.queryByRole('menu', { name: 'Panel workspace actions' })).not.toBeInTheDocument();
+  });
+
+  it('adds after the focused panel when invoked in the compact workspace', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 600 });
+    store.dispatch(focusPanel('panel-registers-2'));
+    renderWithIdeProviders(<PanelWorkspace />, { store });
+
+    const registers = screen.getByTestId('panel-instance-panel-registers-2');
+    fireEvent.contextMenu(registers, { clientX: 180, clientY: 240 });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add a panel' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add Help panel' }));
+
+    expect(
+      store
+        .getState()
+        .panelLayout.activeLayout.columns[1]!.panelIds.map(
+          (id) => store.getState().panelLayout.activeLayout.instances[id]!.kind
+        )
+    ).toEqual(['registers', 'help']);
   });
 
   it('integrates the hardware title and window controls into one header', () => {
