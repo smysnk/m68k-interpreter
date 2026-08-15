@@ -66,7 +66,8 @@ function form(mnemonic: string, name: string, options: FormOptions = {}): Instru
   };
 }
 
-const IMPLEMENTED = 'implemented-needs-audit' as const;
+const IMPLEMENTED = 'legacy-only' as const;
+const STRICT_CORE_PARTIAL = 'strict-core-partial' as const;
 const MISSING = 'missing' as const;
 
 export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
@@ -187,18 +188,18 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
   form('Bcc', 'condition-displacement', {
     sizes: ['byte', 'word'],
     source: ['condition-displacement'],
-    support: IMPLEMENTED,
+    support: STRICT_CORE_PARTIAL,
     notes: 'Current runtime implements only a subset of the fourteen conditional branch forms.',
   }),
   form('BRA', 'displacement', {
     sizes: ['byte', 'word'],
     source: ['condition-displacement'],
-    support: IMPLEMENTED,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('BSR', 'displacement', {
     sizes: ['byte', 'word'],
     source: ['condition-displacement'],
-    support: IMPLEMENTED,
+    support: STRICT_CORE_PARTIAL,
   }),
   ...['BCHG', 'BCLR', 'BSET', 'BTST'].flatMap((mnemonic) => [
     form(mnemonic, 'dynamic-register-bit', {
@@ -293,7 +294,7 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     destination: DATA_REGISTER,
     support: IMPLEMENTED,
   }),
-  form('ILLEGAL', 'implied', { support: MISSING }),
+  form('ILLEGAL', 'implied', { support: STRICT_CORE_PARTIAL }),
   form('JMP', 'control', { source: CONTROL, support: IMPLEMENTED }),
   form('JSR', 'control', { source: CONTROL, support: IMPLEMENTED }),
   form('LEA', 'control-to-address-register', {
@@ -367,6 +368,7 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     sizes: ['long'],
     source: ['quick-immediate'],
     destination: DATA_REGISTER,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('MULS', 'word-source', {
     sizes: ['word'],
@@ -390,7 +392,7 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     sizes: ['byte', 'word', 'long'],
     destination: DATA_ALTERABLE,
   }),
-  form('NOP', 'implied'),
+  form('NOP', 'implied', { support: STRICT_CORE_PARTIAL }),
   form('NOT', 'data-alterable', {
     sizes: ['byte', 'word', 'long'],
     destination: DATA_ALTERABLE,
@@ -421,10 +423,10 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     privileged: true,
   }),
   form('PEA', 'control', { source: CONTROL }),
-  form('RESET', 'implied', { privileged: true }),
-  form('RTE', 'implied', { privileged: true, support: IMPLEMENTED }),
+  form('RESET', 'implied', { privileged: true, support: STRICT_CORE_PARTIAL }),
+  form('RTE', 'implied', { privileged: true, support: STRICT_CORE_PARTIAL }),
   form('RTR', 'implied'),
-  form('RTS', 'implied', { support: IMPLEMENTED }),
+  form('RTS', 'implied', { support: STRICT_CORE_PARTIAL }),
   form('SBCD', 'register', {
     sizes: ['byte'],
     source: DATA_REGISTER,
@@ -442,6 +444,7 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
   form('STOP', 'immediate-status', {
     source: ['immediate'],
     privileged: true,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('SUB', 'ea-from-data-register', {
     sizes: ['byte', 'word', 'long'],
@@ -500,7 +503,7 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
   }),
   form('TRAP', 'vector', {
     source: ['trap-vector'],
-    support: IMPLEMENTED,
+    support: STRICT_CORE_PARTIAL,
     notes: 'Currently intercepted using Easy68K task semantics and requires strict-profile audit.',
   }),
   form('TRAPV', 'implied'),
@@ -597,8 +600,11 @@ export function summarizeIsaCoverage(
     easy68k: 0,
   };
   const bySupport: IsaCoverageSummary['bySupport'] = {
-    'implemented-needs-audit': 0,
     missing: 0,
+    'legacy-only': 0,
+    'strict-core-partial': 0,
+    'integrated-needs-audit': 0,
+    conformant: 0,
     'compatibility-only': 0,
     'extension-only': 0,
   };

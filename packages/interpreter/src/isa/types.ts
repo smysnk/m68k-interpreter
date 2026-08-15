@@ -26,7 +26,13 @@ export type StatusFlag = 'x' | 'n' | 'z' | 'v' | 'c';
 export type FlagEffect = 'affected' | 'cleared' | 'preserved' | 'undefined';
 
 export type InstructionSupport =
-  'implemented-needs-audit' | 'missing' | 'compatibility-only' | 'extension-only';
+  | 'missing'
+  | 'legacy-only'
+  | 'strict-core-partial'
+  | 'integrated-needs-audit'
+  | 'conformant'
+  | 'compatibility-only'
+  | 'extension-only';
 
 export interface InstructionEncoding {
   mask: number;

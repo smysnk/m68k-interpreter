@@ -23,7 +23,7 @@ describe('MC68000 ISA manifest', () => {
       M68000_ISA_MANIFEST.find((instruction) => instruction.id === 'illegal.implied')
     ).toMatchObject({
       minimumProfile: 'm68000',
-      support: 'missing',
+      support: 'strict-core-partial',
     });
   });
 
@@ -47,7 +47,10 @@ describe('MC68000 ISA manifest', () => {
     expect(summary.byProfile.m68000).toBeGreaterThan(100);
     expect(summary.byProfile.m68010).toBe(2);
     expect(summary.byProfile.easy68k).toBe(1);
-    expect(summary.bySupport['implemented-needs-audit']).toBeGreaterThan(40);
+    expect(summary.bySupport['legacy-only']).toBeGreaterThan(40);
+    expect(summary.bySupport['strict-core-partial']).toBeGreaterThan(5);
+    expect(summary.bySupport['integrated-needs-audit']).toBe(0);
+    expect(summary.bySupport.conformant).toBe(0);
     expect(summary.bySupport.missing).toBeGreaterThan(30);
   });
 });
