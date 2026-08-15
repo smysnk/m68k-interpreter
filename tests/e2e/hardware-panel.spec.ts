@@ -285,7 +285,11 @@ test.describe('live EASy68K hardware panels', () => {
   }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openHardwareLab(page, true);
-    await page.getByRole('tab', { name: 'LEDs / Switches / Buttons / IRQs' }).click();
+    await page.getByRole('button', { name: /open view menu/i }).click();
+    await page.getByRole('menuitem', { name: /^add panel$/i }).click();
+    await page
+      .getByRole('menuitem', { name: /add leds \/ switches \/ buttons \/ irqs panel/i })
+      .click();
     const digitalPanel = page.locator('[data-panel-kind="hardware-digital-io"]');
     await expect(digitalPanel).toBeVisible();
     await assertAlignedMatrix(digitalPanel);
