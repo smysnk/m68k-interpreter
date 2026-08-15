@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import panelLayoutReducer, {
   closePanel,
   createPanel,
@@ -14,6 +14,8 @@ import panelLayoutReducer, {
   togglePanelMinimized,
 } from './panelLayoutSlice';
 import { createPanelPreset } from '@/panels/panelPresets';
+import { MAX_PANEL_INSTANCES, PANEL_KINDS, type PanelKind } from './panelLayoutTypes';
+import * as panelLayoutTypes from './panelLayoutTypes';
 import {
   getPanelLayoutInvariantErrors,
   normalizePanelLayoutDocument,
@@ -156,6 +158,71 @@ describe('panelLayoutSlice', () => {
     expect(new Set(displays.map((config) => config.deviceId)).size).toBe(2);
     expect(new Set(displays.map((config) => config.displayBase)).size).toBe(2);
     expect(getPanelLayoutInvariantErrors(state.activeLayout)).toEqual([]);
+  });
+
+  it('creates every registered panel kind through the shared targeted action', () => {
+    let state = panelLayoutReducer(
+      structuredClone(initialPanelLayoutState),
+      resetToPreset('terminal-focus')
+    );
+    for (const kind of PANEL_KINDS) {
+      state = panelLayoutReducer(
+        state,
+        createPanel({ kind, target: { columnId: 'column-1', index: 0 } })
+      );
+    }
+
+    const kinds = Object.values(state.activeLayout.instances).map((panel) => panel.kind);
+    for (const kind of PANEL_KINDS) expect(kinds).toContain(kind);
+    expect(state.activeLayout.columns[0]!.panelIds).toHaveLength(PANEL_KINDS.length + 1);
+    expect(state.activeLayout.focusedPanelId).toBe(
+      `panel-${PANEL_KINDS.at(-1)!}-${PANEL_KINDS.length + 1}`
+    );
+    expect(state.activeLayout.terminalOwnerPanelId).toBe('panel-terminal-1');
+    expect(getPanelLayoutInvariantErrors(state.activeLayout)).toEqual([]);
+  });
+
+  it('preserves exact target ordering and refuses creation at the panel limit', () => {
+    let state = panelLayoutReducer(
+      structuredClone(initialPanelLayoutState),
+      resetToPreset('terminal-focus')
+    );
+    state = panelLayoutReducer(
+      state,
+      createPanel({ kind: 'code', target: { columnId: 'column-1', index: 0 } })
+    );
+    state = panelLayoutReducer(
+      state,
+      createPanel({ kind: 'memory', target: { columnId: 'column-1', index: 1 } })
+    );
+    expect(
+      state.activeLayout.columns[0]!.panelIds.map((id) => state.activeLayout.instances[id]!.kind)
+    ).toEqual(['code', 'memory', 'terminal']);
+
+    while (Object.keys(state.activeLayout.instances).length < MAX_PANEL_INSTANCES) {
+      state = panelLayoutReducer(state, createPanel({ kind: 'help' }));
+    }
+    const instanceIds = Object.keys(state.activeLayout.instances);
+    const nextSequence = state.activeLayout.nextInstanceSequence;
+    state = panelLayoutReducer(state, createPanel({ kind: 'registers' }));
+    expect(Object.keys(state.activeLayout.instances)).toEqual(instanceIds);
+    expect(state.activeLayout.nextInstanceSequence).toBe(nextSequence);
+    expect(getPanelLayoutInvariantErrors(state.activeLayout)).toEqual([]);
+  });
+
+  it('does not mutate layout placement when panel configuration allocation fails', () => {
+    const createConfiguration = vi
+      .spyOn(panelLayoutTypes, 'createPanelConfiguration')
+      .mockImplementation((_kind: PanelKind) => {
+        throw new Error('No address range available');
+      });
+    try {
+      const initial = structuredClone(initialPanelLayoutState);
+      const next = panelLayoutReducer(initial, createPanel({ kind: 'hardware-display' }));
+      expect(next).toEqual(initialPanelLayoutState);
+    } finally {
+      createConfiguration.mockRestore();
+    }
   });
 
   it('migrates a legacy composite hardware panel into two combined panel kinds', () => {

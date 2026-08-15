@@ -85,7 +85,7 @@ describe('Terminal', () => {
     });
 
     const terminalContainer = document.querySelector('.terminal-container') as HTMLElement | null;
-    const retroDisplay = document.querySelector('.retro-lcd') as HTMLElement | null;
+    const retroDisplay = document.querySelector('.retro-screen') as HTMLElement | null;
     expect(terminalContainer).not.toBeNull();
     expect(screen.queryByText(/Display \d+x\d+/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /focus terminal/i })).not.toBeInTheDocument();
@@ -524,7 +524,7 @@ describe('Terminal', () => {
     setViewportWidth(600);
     renderWithIdeProviders(<Terminal />);
 
-    const gridElement = document.querySelector('.retro-lcd__grid') as HTMLElement | null;
+    const gridElement = document.querySelector('.retro-screen__grid') as HTMLElement | null;
     expect(gridElement).not.toBeNull();
     vi.spyOn(gridElement as HTMLElement, 'getBoundingClientRect').mockReturnValue({
       x: 10,
@@ -639,7 +639,7 @@ describe('Terminal', () => {
     setViewportWidth(600);
     renderWithIdeProviders(<Terminal />);
 
-    const gridElement = document.querySelector('.retro-lcd__grid') as HTMLElement | null;
+    const gridElement = document.querySelector('.retro-screen__grid') as HTMLElement | null;
     expect(gridElement).not.toBeNull();
     vi.spyOn(gridElement as HTMLElement, 'getBoundingClientRect').mockReturnValue({
       x: 10,
@@ -741,7 +741,7 @@ describe('Terminal', () => {
     setViewportWidth(600);
     renderWithIdeProviders(<Terminal />);
 
-    const gridElement = document.querySelector('.retro-lcd__grid') as HTMLElement | null;
+    const gridElement = document.querySelector('.retro-screen__grid') as HTMLElement | null;
     expect(gridElement).not.toBeNull();
     vi.spyOn(gridElement as HTMLElement, 'getBoundingClientRect').mockReturnValue({
       x: 10,
@@ -852,7 +852,7 @@ describe('Terminal', () => {
     renderWithIdeProviders(<Terminal />);
 
     const terminalContainer = document.querySelector('.terminal-container') as HTMLElement | null;
-    const retroDisplay = document.querySelector('.retro-lcd') as HTMLElement | null;
+    const retroDisplay = document.querySelector('.retro-screen') as HTMLElement | null;
     expect(terminalContainer).not.toBeNull();
     expect(terminalContainer).toHaveAttribute('data-terminal-theme', 'light');
     expect(retroDisplay).not.toBeNull();
@@ -867,7 +867,7 @@ describe('Terminal', () => {
 
     renderWithIdeProviders(<Terminal />);
 
-    const viewport = document.querySelector('.retro-lcd__viewport') as HTMLDivElement | null;
+    const viewport = document.querySelector('.retro-screen__viewport') as HTMLDivElement | null;
     const terminalScreen = screen.getByTestId('terminal-screen');
     expect(viewport).not.toBeNull();
     expect(viewport).not.toHaveFocus();

@@ -1,6 +1,11 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v2';
+
+async function openViewMenu(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /open app menu/i }).click();
+  await page.getByRole('menuitem', { name: /^view$/i }).click();
+}
 
 test.describe('browser e2e ide shell', () => {
   test('uses a minimal workspace gutter and keeps panel content flush with its frame', async ({
@@ -38,7 +43,7 @@ test.describe('browser e2e ide shell', () => {
     expect(Math.abs(firstPanelBox!.x - firstColumnBox!.x)).toBeLessThanOrEqual(1);
     expect(Math.abs(firstPanelBox!.y - firstColumnBox!.y)).toBeLessThanOrEqual(1);
 
-    await page.getByRole('button', { name: /open view menu/i }).click();
+    await openViewMenu(page);
     await page.getByRole('menuitem', { name: /^add panel/i }).click();
     await page.getByRole('menuitem', { name: /add code panel/i }).click();
 
@@ -85,7 +90,7 @@ test.describe('browser e2e ide shell', () => {
   test('keeps View compact and reveals one contextual submenu at a time', async ({ page }) => {
     await page.goto('/');
 
-    await page.getByRole('button', { name: /open view menu/i }).click();
+    await openViewMenu(page);
     const viewMenu = page.getByRole('menu', { name: 'View options' });
     await expect(viewMenu).toBeVisible();
     await expect(viewMenu.getByRole('menuitem')).toHaveCount(4);
@@ -105,13 +110,11 @@ test.describe('browser e2e ide shell', () => {
   }) => {
     await page.goto('/');
 
-    await page.getByRole('button', { name: /open view menu/i }).click();
+    await openViewMenu(page);
     await page.getByRole('menuitem', { name: /layouts/i }).click();
     await page.getByRole('menuitem', { name: 'Apply Hardware Lab layout' }).click();
 
-    const frames = page.locator(
-      '.panel-column > .panel-frame[data-panel-kind^="hardware-"]'
-    );
+    const frames = page.locator('.panel-column > .panel-frame[data-panel-kind^="hardware-"]');
     await expect(frames).toHaveCount(2);
     const measurements = await frames.evaluateAll((elements) =>
       elements.map((frame) => {
@@ -129,16 +132,9 @@ test.describe('browser e2e ide shell', () => {
     );
 
     for (const measurement of measurements) {
-      expect(measurement.bodyClientHeight).toBeGreaterThanOrEqual(
-        measurement.bodyScrollHeight - 1
-      );
+      expect(measurement.bodyClientHeight).toBeGreaterThanOrEqual(measurement.bodyScrollHeight - 1);
       expect(
-        Math.abs(
-          measurement.frameHeight -
-            measurement.headerHeight -
-            measurement.surfaceHeight -
-            2
-        )
+        Math.abs(measurement.frameHeight - measurement.headerHeight - measurement.surfaceHeight - 2)
       ).toBeLessThanOrEqual(2);
     }
 
@@ -158,28 +154,26 @@ test.describe('browser e2e ide shell', () => {
       overflow: 'visible',
     });
 
-    const displayLayout = await page
-      .getByTestId(/hardware-display-device-/)
-      .evaluate((surface) => {
-        const bezel = surface.querySelector('[data-testid="hardware-seven-segment-bank"]');
-        const surfaceRect = surface.getBoundingClientRect();
-        const bezelRect = bezel?.getBoundingClientRect();
-        const surfaceStyles = window.getComputedStyle(surface);
-        const bezelStyles = bezel ? window.getComputedStyle(bezel) : null;
-        return {
-          bezelBorderRadius: bezelStyles?.borderRadius ?? '',
-          bezelBorderTopWidth: bezelStyles?.borderTopWidth ?? '',
-          bezelHeight: bezelRect?.height ?? 0,
-          bezelWidth: bezelRect?.width ?? 0,
-          bezelX: bezelRect?.x ?? 0,
-          bezelY: bezelRect?.y ?? 0,
-          surfaceHeight: surfaceRect.height,
-          surfacePadding: surfaceStyles.padding,
-          surfaceWidth: surfaceRect.width,
-          surfaceX: surfaceRect.x,
-          surfaceY: surfaceRect.y,
-        };
-      });
+    const displayLayout = await page.getByTestId(/hardware-display-device-/).evaluate((surface) => {
+      const bezel = surface.querySelector('[data-testid="hardware-seven-segment-bank"]');
+      const surfaceRect = surface.getBoundingClientRect();
+      const bezelRect = bezel?.getBoundingClientRect();
+      const surfaceStyles = window.getComputedStyle(surface);
+      const bezelStyles = bezel ? window.getComputedStyle(bezel) : null;
+      return {
+        bezelBorderRadius: bezelStyles?.borderRadius ?? '',
+        bezelBorderTopWidth: bezelStyles?.borderTopWidth ?? '',
+        bezelHeight: bezelRect?.height ?? 0,
+        bezelWidth: bezelRect?.width ?? 0,
+        bezelX: bezelRect?.x ?? 0,
+        bezelY: bezelRect?.y ?? 0,
+        surfaceHeight: surfaceRect.height,
+        surfacePadding: surfaceStyles.padding,
+        surfaceWidth: surfaceRect.width,
+        surfaceX: surfaceRect.x,
+        surfaceY: surfaceRect.y,
+      };
+    });
     expect(displayLayout.surfacePadding).toBe('0px');
     expect(displayLayout.bezelBorderRadius).toBe('0px');
     expect(displayLayout.bezelBorderTopWidth).toBe('0px');
@@ -194,35 +188,37 @@ test.describe('browser e2e ide shell', () => {
 
     const appContainer = page.getByTestId('app-container');
     const appMenuButton = page.getByRole('button', { name: /open app menu/i });
-    const viewMenuButton = page.getByRole('button', { name: /open view menu/i });
     const runButton = page.getByRole('button', { name: /run program/i });
-    const fileExplorerTab = page.getByRole('button', { name: /open file explorer/i });
+    const fileExplorerButton = page.getByRole('button', { name: /open file explorer/i });
     const initialTheme = await appContainer.getAttribute('data-theme');
-    const themeMenuLabel = initialTheme === 'dark' ? /m68k light/i : /m68k dark/i;
     const expectedTheme = initialTheme === 'dark' ? 'light' : 'dark';
+    const themeToggle = page.getByRole('button', {
+      name: initialTheme === 'dark' ? /switch to light mode/i : /switch to dark mode/i,
+    });
 
-    const menuButtonBox = await appMenuButton.boundingBox();
-    const viewMenuButtonBox = await viewMenuButton.boundingBox();
-    const runButtonBox = await runButton.boundingBox();
+    const [fileExplorerButtonBox, menuButtonBox, runButtonBox] = await Promise.all([
+      fileExplorerButton.boundingBox(),
+      appMenuButton.boundingBox(),
+      runButton.boundingBox(),
+    ]);
+    expect(fileExplorerButtonBox).not.toBeNull();
     expect(menuButtonBox).not.toBeNull();
-    expect(viewMenuButtonBox).not.toBeNull();
     expect(runButtonBox).not.toBeNull();
     await expect(page.getByRole('tablist', { name: 'Workspace views' })).toHaveCount(0);
-    expect((menuButtonBox?.x ?? 0) + (menuButtonBox?.width ?? 0)).toBeLessThan(
-      viewMenuButtonBox?.x ?? 0
+    await expect(page.getByRole('button', { name: /open view menu/i })).toHaveCount(0);
+    expect((fileExplorerButtonBox?.x ?? 0) + (fileExplorerButtonBox?.width ?? 0)).toBeLessThan(
+      menuButtonBox?.x ?? 0
     );
-    expect((viewMenuButtonBox?.x ?? 0) + (viewMenuButtonBox?.width ?? 0)).toBeLessThan(
+    expect((menuButtonBox?.x ?? 0) + (menuButtonBox?.width ?? 0)).toBeLessThan(
       runButtonBox?.x ?? 0
     );
-    const explorerTabBox = await fileExplorerTab.boundingBox();
-    expect(explorerTabBox).not.toBeNull();
-    expect(explorerTabBox?.x ?? 999).toBeLessThan(4);
 
     await appMenuButton.click();
     const appMenu = page.getByTestId('navbar-app-menu');
-    const styleMenuItem = page.getByRole('menuitem', { name: /style/i });
+    const viewMenuItem = page.getByRole('menuitem', { name: /^view$/i });
     await expect(appMenu).toBeVisible();
-    await styleMenuItem.click({ trial: true });
+    await expect(viewMenuItem).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /style/i })).toHaveCount(0);
 
     const menuBox = await appMenu.boundingBox();
     const buttonBox = await appMenuButton.boundingBox();
@@ -230,17 +226,11 @@ test.describe('browser e2e ide shell', () => {
     expect(buttonBox).not.toBeNull();
     expect(Math.abs((menuBox?.x ?? 0) - (buttonBox?.x ?? 0))).toBeLessThan(16);
 
-    await styleMenuItem.click();
-
-    const styleSubmenu = page.getByTestId('navbar-style-submenu');
-    const themeMenuItem = page.getByRole('menuitem', { name: themeMenuLabel });
-    await expect(styleSubmenu).toBeVisible();
-    await themeMenuItem.click({ trial: true });
-
-    await themeMenuItem.click();
+    await appMenuButton.click();
+    await themeToggle.click();
     await expect(appContainer).toHaveAttribute('data-theme', expectedTheme);
 
-    await viewMenuButton.click();
+    await openViewMenu(page);
     await page.getByRole('menuitem', { name: /^add panel/i }).click();
     await page.getByRole('menuitem', { name: /add code panel/i }).click();
     await expect(page.getByTestId('assembly-editor')).toBeVisible();

@@ -1,0 +1,72 @@
+name: Retro display upstream compatibility
+
+on:
+  schedule:
+    - cron: '17 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  newest-upstream:
+    name: Newest upstream (informational)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Activate project Yarn
+        run: |
+          package_manager="$(node -p "require('./package.json').packageManager")"
+          corepack prepare "$package_manager" --activate
+
+      - name: Install pinned dependencies
+        run: yarn install --immutable
+
+      - name: Select newest retro display release in the disposable runner
+        run: yarn up react-retro-display-tty-ansi-ascii@latest --exact --no-time-gate
+
+      - name: Record tested version
+        run: |
+          version="$(node -p "require('./node_modules/react-retro-display-tty-ansi-ascii/package.json').version")"
+          echo "### Retro display upstream compatibility" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Testing react-retro-display-tty-ansi-ascii@$version without changing the production pin." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Playwright Chromium
+        run: yarn exec playwright install --with-deps chromium
+
+      - name: Validate public API and terminal contracts
+        continue-on-error: true
+        run: yarn test:retro-display:contract
+
+      - name: Validate types and production build
+        continue-on-error: true
+        run: yarn type-check:ide && yarn build:ide
+
+      - name: Validate Nibbles browser and visual behavior
+        continue-on-error: true
+        run: yarn playwright test --config playwright.config.ts tests/e2e/nibbles-browser.spec.ts tests/e2e/nibbles-mobile.spec.ts
+
+      - name: Capture runtime performance profile
+        continue-on-error: true
+        run: yarn profile:ide-runtime:json
+
+      - name: Upload compatibility artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: retro-display-upstream-${{ github.run_id }}
+          path: .test-results/playwright
+          if-no-files-found: ignore
+          retention-days: 14

@@ -5,8 +5,6 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faBars,
   faCheck,
-  faChevronRight,
-  faDesktop,
   faGaugeHigh,
   faMoon,
   faPlay,
@@ -22,12 +20,9 @@ import {
   requestRun,
   requestStep,
   requestUndo,
-  setEditorTheme,
-  setFollowSystemTheme,
   setLineNumbers,
-  setTerminalInputMode,
   setSpeedMultiplier,
-  setActiveSubmenu,
+  toggleEditorTheme,
   revealPanelKind,
   toggleAppMenu,
   getWorkspacePaneDescriptors,
@@ -37,26 +32,24 @@ import {
 import {
   selectNavbarMenuState,
   selectNavbarPresentationModel,
-  selectNavbarThemeLabel,
 } from '@/store/navbarSelectors';
 import { useCompactShell } from '@/hooks/useCompactShell';
-import { EditorThemeEnum, type EditorThemeId } from '@/theme/editorThemeRegistry';
+import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
 import NavbarViewMenu from './NavbarViewMenu';
 
-const Navbar: React.FC = () => {
+interface NavbarProps {
+  fileExplorerOpen: boolean;
+  onToggleFileExplorer: () => void;
+}
+
+const Navbar: React.FC<NavbarProps> = ({ fileExplorerOpen, onToggleFileExplorer }) => {
   const dispatch = useDispatch<AppDispatch>();
-  const { menuOpen, activeSubmenu } = useSelector((state: RootState) =>
-    selectNavbarMenuState(state)
-  );
-  const themeLabel = useSelector((state: RootState) => selectNavbarThemeLabel(state));
+  const { menuOpen } = useSelector((state: RootState) => selectNavbarMenuState(state));
   const {
     activeWorkspaceTab,
-    darkThemeActive,
-    followSystemActive,
-    lightThemeActive,
+    editorTheme,
     lineNumbers,
     speedMultiplier,
-    terminalInputMode,
   } = useSelector((state: RootState) => selectNavbarPresentationModel(state));
   const isCompactShell = useCompactShell();
   const isFocusedMobileTerminal = isCompactShell && activeWorkspaceTab === 'terminal';
@@ -133,32 +126,14 @@ const Navbar: React.FC = () => {
     dispatch(closeAppMenu());
   };
 
-  const terminalInputModeLabel =
-    terminalInputMode === 'auto'
-      ? 'Auto'
-      : terminalInputMode === 'touch-only'
-        ? 'Touch Only'
-        : 'Text Input';
-
-  const handleThemeSelection = (nextTheme: 'system' | EditorThemeId): void => {
-    if (nextTheme === 'system') {
-      dispatch(setFollowSystemTheme(true));
-    } else {
-      dispatch(setEditorTheme(nextTheme));
-    }
-
-    closeMenu();
+  const handleToggleTheme = (): void => {
+    dispatch(toggleEditorTheme());
   };
+
+  const darkThemeActive = editorTheme === EditorThemeEnum.M68K_DARK;
 
   const handleToggleLineNumbers = (): void => {
     dispatch(setLineNumbers(!lineNumbers));
-    closeMenu();
-  };
-
-  const handleTerminalInputModeSelection = (
-    nextMode: 'auto' | 'text-input' | 'touch-only'
-  ): void => {
-    dispatch(setTerminalInputMode(nextMode));
     closeMenu();
   };
 
@@ -194,10 +169,19 @@ const Navbar: React.FC = () => {
       data-mobile-navbar-mode={isFocusedMobileTerminal ? 'terminal-only' : 'standard'}
     >
       <div className="navbar-left">
-        {!isCompactShell ? (
-          <div aria-hidden="true" className="navbar-accent-mark" data-testid="navbar-accent-mark">
+        {!isFocusedMobileTerminal ? (
+          <button
+            aria-controls="file-explorer-sidebar"
+            aria-expanded={fileExplorerOpen}
+            aria-label={fileExplorerOpen ? 'Close file explorer' : 'Open file explorer'}
+            className="navbar-accent-mark"
+            data-testid="navbar-accent-mark"
+            onClick={onToggleFileExplorer}
+            title={fileExplorerOpen ? 'Close file explorer' : 'Open file explorer'}
+            type="button"
+          >
             68
-          </div>
+          </button>
         ) : null}
         {!isFocusedMobileTerminal ? (
           <div className="navbar-menu-wrap" ref={menuRef}>
@@ -217,7 +201,6 @@ const Navbar: React.FC = () => {
             </button>
           </div>
         ) : null}
-        {!isFocusedMobileTerminal ? <NavbarViewMenu /> : null}
         {isCompactShell ? (
           <div className="navbar-menubar">
             <div className="navbar-view-toggle" role="tablist" aria-label="Workspace views">
@@ -307,6 +290,19 @@ const Navbar: React.FC = () => {
             </label>
           </div>
         ) : null}
+        {!isFocusedMobileTerminal ? (
+          <button
+            aria-label={darkThemeActive ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-pressed={darkThemeActive}
+            className="btn-toolbar btn-toolbar-icon navbar-theme-toggle"
+            data-testid="navbar-theme-toggle"
+            onClick={handleToggleTheme}
+            title={darkThemeActive ? 'Switch to light mode' : 'Switch to dark mode'}
+            type="button"
+          >
+            <FontAwesomeIcon icon={darkThemeActive ? faMoon : faSun} size="sm" />
+          </button>
+        ) : null}
       </div>
       {menuOpen
         ? createPortal(
@@ -323,45 +319,7 @@ const Navbar: React.FC = () => {
                 maxWidth: `${menuPosition.maxWidth}px`,
               }}
             >
-              <button
-                aria-expanded={activeSubmenu === 'style'}
-                aria-haspopup="menu"
-                className={`navbar-menu-item ${activeSubmenu === 'style' ? 'active' : ''}`}
-                onClick={() => dispatch(setActiveSubmenu('style'))}
-                onFocus={() => dispatch(setActiveSubmenu('style'))}
-                onMouseEnter={() => dispatch(setActiveSubmenu('style'))}
-                role="menuitem"
-                type="button"
-              >
-                <span className="navbar-menu-copy">
-                  <span className="navbar-menu-title">Style</span>
-                  <span className="navbar-menu-subtitle">{themeLabel} theme and surface mode</span>
-                </span>
-                <span className="navbar-menu-meta">
-                  <FontAwesomeIcon icon={faChevronRight} size="sm" />
-                </span>
-              </button>
-
-              <button
-                aria-expanded={activeSubmenu === 'terminal-input'}
-                aria-haspopup="menu"
-                className={`navbar-menu-item ${activeSubmenu === 'terminal-input' ? 'active' : ''}`}
-                onClick={() => dispatch(setActiveSubmenu('terminal-input'))}
-                onFocus={() => dispatch(setActiveSubmenu('terminal-input'))}
-                onMouseEnter={() => dispatch(setActiveSubmenu('terminal-input'))}
-                role="menuitem"
-                type="button"
-              >
-                <span className="navbar-menu-copy">
-                  <span className="navbar-menu-title">Terminal Input</span>
-                  <span className="navbar-menu-subtitle">
-                    {terminalInputModeLabel} keyboard and touch behavior
-                  </span>
-                </span>
-                <span className="navbar-menu-meta">
-                  <FontAwesomeIcon icon={faChevronRight} size="sm" />
-                </span>
-              </button>
+              <NavbarViewMenu embedded onSelect={closeMenu} />
 
               <button
                 className={`navbar-menu-item ${lineNumbers ? 'active' : ''}`}
@@ -378,136 +336,6 @@ const Navbar: React.FC = () => {
                 </span>
               </button>
 
-              {activeSubmenu === 'style' ? (
-                <div
-                  className={`navbar-submenu navbar-submenu-${menuPosition.submenuDirection}`}
-                  data-testid="navbar-style-submenu"
-                  role="menu"
-                  aria-label="Style options"
-                >
-                  <button
-                    className={`navbar-menu-item ${followSystemActive ? 'active' : ''}`}
-                    onClick={() => handleThemeSelection('system')}
-                    role="menuitem"
-                    type="button"
-                  >
-                    <span className="navbar-menu-copy">
-                      <span className="navbar-menu-title">Follow System</span>
-                      <span className="navbar-menu-subtitle">Match the OS light and dark mode</span>
-                    </span>
-                    <span className="navbar-menu-meta">
-                      {followSystemActive ? (
-                        <FontAwesomeIcon icon={faCheck} size="sm" />
-                      ) : (
-                        <FontAwesomeIcon icon={faDesktop} size="sm" />
-                      )}
-                    </span>
-                  </button>
-                  <button
-                    className={`navbar-menu-item ${lightThemeActive ? 'active' : ''}`}
-                    onClick={() => handleThemeSelection(EditorThemeEnum.M68K_LIGHT)}
-                    role="menuitem"
-                    type="button"
-                  >
-                    <span className="navbar-menu-copy">
-                      <span className="navbar-menu-title">M68K Light</span>
-                      <span className="navbar-menu-subtitle">
-                        Bright shell with high-contrast terminals
-                      </span>
-                    </span>
-                    <span className="navbar-menu-meta">
-                      {lightThemeActive ? (
-                        <FontAwesomeIcon icon={faCheck} size="sm" />
-                      ) : (
-                        <FontAwesomeIcon icon={faSun} size="sm" />
-                      )}
-                    </span>
-                  </button>
-                  <button
-                    className={`navbar-menu-item ${darkThemeActive ? 'active' : ''}`}
-                    onClick={() => handleThemeSelection(EditorThemeEnum.M68K_DARK)}
-                    role="menuitem"
-                    type="button"
-                  >
-                    <span className="navbar-menu-copy">
-                      <span className="navbar-menu-title">M68K Dark</span>
-                      <span className="navbar-menu-subtitle">
-                        Low-glare shell for terminal-heavy sessions
-                      </span>
-                    </span>
-                    <span className="navbar-menu-meta">
-                      {darkThemeActive ? (
-                        <FontAwesomeIcon icon={faCheck} size="sm" />
-                      ) : (
-                        <FontAwesomeIcon icon={faMoon} size="sm" />
-                      )}
-                    </span>
-                  </button>
-                </div>
-              ) : null}
-              {activeSubmenu === 'terminal-input' ? (
-                <div
-                  className={`navbar-submenu navbar-submenu-${menuPosition.submenuDirection}`}
-                  data-testid="navbar-terminal-input-submenu"
-                  role="menu"
-                  aria-label="Terminal input options"
-                >
-                  <button
-                    className={`navbar-menu-item ${terminalInputMode === 'auto' ? 'active' : ''}`}
-                    onClick={() => handleTerminalInputModeSelection('auto')}
-                    role="menuitem"
-                    type="button"
-                  >
-                    <span className="navbar-menu-copy">
-                      <span className="navbar-menu-title">Auto</span>
-                      <span className="navbar-menu-subtitle">
-                        Use touch-only for mobile Nibbles and text input elsewhere
-                      </span>
-                    </span>
-                    <span className="navbar-menu-meta">
-                      {terminalInputMode === 'auto' ? (
-                        <FontAwesomeIcon icon={faCheck} size="sm" />
-                      ) : null}
-                    </span>
-                  </button>
-                  <button
-                    className={`navbar-menu-item ${terminalInputMode === 'text-input' ? 'active' : ''}`}
-                    onClick={() => handleTerminalInputModeSelection('text-input')}
-                    role="menuitem"
-                    type="button"
-                  >
-                    <span className="navbar-menu-copy">
-                      <span className="navbar-menu-title">Text Input</span>
-                      <span className="navbar-menu-subtitle">
-                        Keep the terminal focused on keyboard-style program input
-                      </span>
-                    </span>
-                    <span className="navbar-menu-meta">
-                      {terminalInputMode === 'text-input' ? (
-                        <FontAwesomeIcon icon={faCheck} size="sm" />
-                      ) : null}
-                    </span>
-                  </button>
-                  <button
-                    className={`navbar-menu-item ${terminalInputMode === 'touch-only' ? 'active' : ''}`}
-                    onClick={() => handleTerminalInputModeSelection('touch-only')}
-                    role="menuitem"
-                    type="button"
-                  >
-                    <span className="navbar-menu-copy">
-                      <span className="navbar-menu-title">Touch Only</span>
-                      <span className="navbar-menu-subtitle">
-                        Disable text capture and map the terminal surface to cell touches
-                      </span>
-                    </span>
-                    <span className="navbar-menu-meta">
-                      {terminalInputMode === 'touch-only' ? (
-                        <FontAwesomeIcon icon={faCheck} size="sm" />
-                      ) : null}
-                    </span>
-                  </button>
-                </div>
-              ) : null}
             </div>,
             document.body
           )

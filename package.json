@@ -29,6 +29,7 @@
     "test:packages": "yarn workspaces foreach -Apt --exclude m68k-interpreter-monorepo run test",
     "test:interpreter": "yarn workspace @m68k/interpreter test",
     "test:ide": "yarn workspace @m68k/ide test",
+    "test:retro-display:contract": "yarn workspace @m68k/ide test --run src/components/retro/RetroScreenUpstreamContract.test.tsx src/components/retro/TouchRetroScreen.test.tsx src/components/Terminal.test.tsx",
     "test:performance": "vitest run --config vitest.performance.config.ts tests/benchmarks/**/*.test.ts --execArgv=--expose-gc",
     "test:performance:test-station": "tsx ./tests/benchmarks/emitEngineBenchmarkSuite.ts",
     "test:performance:nibbles-intro": "vitest run --config vitest.performance.config.ts tests/benchmarks/nibblesIntroProfiling.test.ts --execArgv=--expose-gc",

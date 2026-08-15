@@ -1,6 +1,7 @@
 import React from 'react';
 import { PANEL_KIND_ORDER, PANEL_REGISTRY } from '@/panels/panelRegistry';
 import type { PanelKind } from '@/store';
+import MenuItem from './menus/MenuItem';
 
 export default function PanelKindMenuItems({
   onSelect,
@@ -12,21 +13,13 @@ export default function PanelKindMenuItems({
       {PANEL_KIND_ORDER.map((kind) => {
         const panel = PANEL_REGISTRY[kind];
         return (
-          <button
+          <MenuItem
             aria-label={`Add ${panel.title} panel`}
-            className="navbar-menu-item"
             key={kind}
+            label={panel.title}
+            meta={panel.icon}
             onClick={() => onSelect(kind)}
-            role="menuitem"
-            type="button"
-          >
-            <span className="navbar-menu-copy">
-              <span className="navbar-menu-title">{panel.title}</span>
-            </span>
-            <span aria-hidden="true" className="navbar-menu-meta">
-              {panel.icon}
-            </span>
-          </button>
+          />
         );
       })}
     </>

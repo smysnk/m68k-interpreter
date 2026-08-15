@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { ExecutionState } from '@m68k/interpreter';
 import {
-  RetroLcd,
-  createRetroLcdController,
-  type RetroLcdGeometry,
-  type RetroLcdController,
-} from 'react-retro-display-tty-ansi';
+  RetroScreen,
+  createRetroScreenController,
+  type RetroScreenGeometry,
+  type RetroScreenController,
+} from 'react-retro-display-tty-ansi-ascii';
 import { useTheme } from 'styled-components';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -208,7 +208,7 @@ const Terminal: React.FC<TerminalProps> = ({
   useIdeRenderTelemetry('Terminal');
   const dispatch = useDispatch<AppDispatch>();
   const terminalRef = useRef<HTMLDivElement | null>(null);
-  const controllerRef = useRef<RetroLcdController | null>(null);
+  const controllerRef = useRef<RetroScreenController | null>(null);
   const previousGeometryVersionRef = useRef<number | null>(null);
   const previousVersionRef = useRef<number | null>(null);
   const previousCursorPositionRef = useRef<string>('');
@@ -242,7 +242,7 @@ const Terminal: React.FC<TerminalProps> = ({
   const isNibblesScreenRef = useRef(isNibblesScreen);
 
   if (controllerRef.current === null) {
-    controllerRef.current = createRetroLcdController({
+    controllerRef.current = createRetroScreenController({
       rows: meta.rows,
       cols: meta.columns,
       scrollback: 4096,
@@ -368,7 +368,7 @@ const Terminal: React.FC<TerminalProps> = ({
       return;
     }
 
-    const viewport = terminalRef.current?.querySelector<HTMLDivElement>('.retro-lcd__viewport');
+    const viewport = terminalRef.current?.querySelector<HTMLDivElement>('.retro-screen__viewport');
     viewport?.focus();
   }, [interactive, isTouchOnlyMode, onRequestInteraction]);
 
@@ -560,7 +560,7 @@ const Terminal: React.FC<TerminalProps> = ({
   );
 
   const handleGeometryChange = React.useCallback(
-    (geometry: RetroLcdGeometry): void => {
+    (geometry: RetroScreenGeometry): void => {
       if (!interactive) {
         return;
       }
@@ -704,10 +704,10 @@ const Terminal: React.FC<TerminalProps> = ({
         role={interactive ? 'application' : 'img'}
         aria-label={interactive ? 'M68K interactive terminal' : 'M68K terminal mirror'}
       >
-        <RetroLcd
+        <RetroScreen
           captureKeyboard={interactive && !isTouchOnlyMode}
           captureMouse={false}
-          className="terminal-retro-lcd"
+          className="terminal-retro-screen"
           controller={controllerRef.current}
           cursorMode="hollow"
           displayColorMode="ansi-extended"

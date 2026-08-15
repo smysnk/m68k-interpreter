@@ -1,7 +1,7 @@
 import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faChevronRight, faFileCode, faFolderTree } from '@fortawesome/free-solid-svg-icons';
+import { faFileCode, faFolderTree } from '@fortawesome/free-solid-svg-icons';
 import {
   requestReset,
   selectFileExplorerModel,
@@ -11,38 +11,51 @@ import {
   type AppDispatch,
 } from '@/store';
 
-const FileExplorerSidebar: React.FC = () => {
+interface FileExplorerSidebarProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({ open, onClose }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { files, activeFileId, chromeOffsets, groupedFiles } = useSelector(selectFileExplorerModel);
-  const [isOpen, setIsOpen] = React.useState(false);
-  const closeTimeoutRef = React.useRef<number | null>(null);
+  const sidebarRef = React.useRef<HTMLElement | null>(null);
 
-  const clearCloseTimeout = React.useCallback(() => {
-    if (closeTimeoutRef.current !== null) {
-      window.clearTimeout(closeTimeoutRef.current);
-      closeTimeoutRef.current = null;
+  React.useEffect(() => {
+    if (!open) {
+      return;
     }
-  }, []);
 
-  const openSidebar = React.useCallback(() => {
-    clearCloseTimeout();
-    setIsOpen(true);
-  }, [clearCloseTimeout]);
+    const handlePointerDown = (event: PointerEvent): void => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
 
-  const closeSidebarSoon = React.useCallback(() => {
-    clearCloseTimeout();
-    closeTimeoutRef.current = window.setTimeout(() => {
-      setIsOpen(false);
-      closeTimeoutRef.current = null;
-    }, 120);
-  }, [clearCloseTimeout]);
+      const trigger = document.querySelector<HTMLElement>(
+        '[aria-controls="file-explorer-sidebar"]'
+      );
+      if (sidebarRef.current?.contains(target) || trigger?.contains(target)) {
+        return;
+      }
 
-  React.useEffect(
-    () => () => {
-      clearCloseTimeout();
-    },
-    [clearCloseTimeout]
-  );
+      onClose();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose, open]);
 
   const handleSelectFile = (fileId: string): void => {
     const file = files.find((entry) => entry.id === fileId);
@@ -50,8 +63,7 @@ const FileExplorerSidebar: React.FC = () => {
       return;
     }
 
-    clearCloseTimeout();
-    setIsOpen(false);
+    onClose();
     dispatch(setActiveFile(file.id));
     dispatch(setEditorCode(file.content));
     dispatch(revealPanelKind('code'));
@@ -62,42 +74,29 @@ const FileExplorerSidebar: React.FC = () => {
 
   return (
     <div
-      className={`file-explorer-sidebar ${isOpen ? 'open' : ''}`}
+      className={`file-explorer-sidebar ${open ? 'open' : ''}`}
       data-testid="file-explorer-sidebar-shell"
       style={{
-        top: `${chromeOffsets.top + 12}px`,
-        bottom: `${chromeOffsets.bottom + 12}px`,
+        top: `${chromeOffsets.top}px`,
+        bottom: `${chromeOffsets.bottom}px`,
       }}
     >
-      <button
-        aria-controls="file-explorer-sidebar"
-        aria-expanded={isOpen}
-        aria-label="Open file explorer"
-        className="file-explorer-tab"
-        data-testid="file-explorer-tab"
-        onClick={() => setIsOpen((current) => !current)}
-        onFocus={openSidebar}
-        onMouseEnter={openSidebar}
-        onMouseLeave={closeSidebarSoon}
-        type="button"
-      >
-        <FontAwesomeIcon icon={faChevronRight} size="sm" />
-        <span>Files</span>
-      </button>
-
       <aside
         aria-label="File explorer"
+        aria-hidden={!open}
         className="file-explorer-slideout pane-surface"
         data-testid="file-explorer-sidebar"
         id="file-explorer-sidebar"
-        onMouseEnter={openSidebar}
-        onMouseLeave={closeSidebarSoon}
+        inert={!open}
+        ref={sidebarRef}
       >
         <div className="file-explorer-header">
           <div className="pane-title-group">
             <p className="pane-eyebrow">Workspace</p>
             <h2 className="pane-title">Files</h2>
-            <p className="pane-caption">Choose the source shown in the editor and used when you run.</p>
+            <p className="pane-caption">
+              Choose the source shown in the editor and used when you run.
+            </p>
           </div>
         </div>
 

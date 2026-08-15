@@ -1,5 +1,7 @@
 # M68K Interpreter
 
+[![tests](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml) [![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fsmysnk.github.io%2Fm68k-interpreter%2Fbadges%2Fcoverage.json)](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml) [![site](https://img.shields.io/website?url=https%3A%2F%2Fsmysnk.com%2Fm68k-interpreter&label=site)](https://smysnk.com/m68k-interpreter)
+
 **Hosted Demo:** [**smysnk.com/m68k-interpreter**](https://smysnk.com/m68k-interpreter)
 
 [![M68K Interpreter demo video](assets/m68k-interpreter-demo.webp)](https://github.com/user-attachments/assets/ec1eefff-b997-4261-bd53-46690e0b6075)
@@ -7,10 +9,6 @@
 **[▶ Watch the HD demo](https://github.com/user-attachments/assets/ec1eefff-b997-4261-bd53-46690e0b6075)** · **[Play Nibbles](https://smysnk.com/nibbles)**
 
 This demo is running my old [m68k-nibbles](https://github.com/smysnk/m68k-nibbles) game, which I originally wrote for a college assembly class back in 2007. I always wished someone would eventually build a 68000 browser emulator so I could bring it back to life, so I was excited when I found [gianlucarea's m68k-interpreter project](https://github.com/gianlucarea/m68k-interpreter). I took a little liberty with this fork to adapt the interface, auto-load the game, and add a screen terminal emulator so the project could feel closer to the original experience. If you enjoy this version, please consider showing some support to the upstream project too.
-
-[![tests](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml)
-[![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fsmysnk.github.io%2Fm68k-interpreter%2Fbadges%2Fcoverage.json)](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml)
-[![site](https://img.shields.io/website?url=https%3A%2F%2Fsmysnk.com%2Fm68k-interpreter&label=site)](https://smysnk.com/m68k-interpreter)
 
 A Motorola 68000 assembly emulator that runs entirely in the browser.  
 Write, step through, and debug m68k assembly — no installation needed.
