@@ -95,6 +95,63 @@ export type DecodedBinaryInstruction =
       mode: number;
       register: number;
     }
+  | {
+      kind: 'immediate-status';
+      length: 2;
+      opcode: number;
+      operation: 'or' | 'and' | 'eor';
+      target: 'ccr' | 'sr';
+    }
+  | {
+      kind: 'memory-shift';
+      length: 2;
+      opcode: number;
+      operation: 'asr' | 'asl' | 'lsr' | 'lsl' | 'ror' | 'rol';
+      mode: number;
+      register: number;
+    }
+  | {
+      kind: 'link';
+      length: 2;
+      opcode: number;
+      register: number;
+    }
+  | { kind: 'unlk'; length: 2; opcode: number; register: number }
+  | {
+      kind: 'move-usp';
+      length: 2;
+      opcode: number;
+      direction: 'to-usp' | 'from-usp';
+      register: number;
+    }
+  | { kind: 'rtr'; length: 2; opcode: number }
+  | {
+      kind: 'move-status';
+      length: 2;
+      opcode: number;
+      direction: 'from-sr' | 'to-ccr' | 'to-sr';
+      mode: number;
+      register: number;
+    }
+  | {
+      kind: 'movep';
+      length: 2;
+      opcode: number;
+      direction: 'memory-to-register' | 'register-to-memory';
+      size: 2 | 4;
+      dataRegister: number;
+      addressRegister: number;
+    }
+  | {
+      kind: 'chk';
+      length: 2;
+      opcode: number;
+      dataRegister: number;
+      mode: number;
+      register: number;
+    }
+  | { kind: 'tas'; length: 2; opcode: number; mode: number; register: number }
+  | { kind: 'trapv'; length: 2; opcode: number }
   | { kind: 'unimplemented'; length: 2; opcode: number };
 
 const BRANCH_CONDITION: readonly BranchCondition[] = [
@@ -115,6 +172,18 @@ const BRANCH_CONDITION: readonly BranchCondition[] = [
   'gt',
   'le',
 ];
+
+const IMMEDIATE_STATUS_INSTRUCTIONS: ReadonlyMap<
+  number,
+  { operation: 'or' | 'and' | 'eor'; target: 'ccr' | 'sr' }
+> = new Map([
+  [0x003c, { operation: 'or', target: 'ccr' }],
+  [0x007c, { operation: 'or', target: 'sr' }],
+  [0x023c, { operation: 'and', target: 'ccr' }],
+  [0x027c, { operation: 'and', target: 'sr' }],
+  [0x0a3c, { operation: 'eor', target: 'ccr' }],
+  [0x0a7c, { operation: 'eor', target: 'sr' }],
+]);
 
 function readWord(bytes: Uint8Array, offset: number): number {
   if (offset < 0 || offset + 1 >= bytes.length) {
@@ -152,6 +221,10 @@ export function decodeBinaryInstruction(bytes: Uint8Array, offset = 0): DecodedB
       return { kind: 'illegal', length: 2, opcode };
     case 0x4e70:
       return { kind: 'reset', length: 2, opcode };
+    case 0x4e76:
+      return { kind: 'trapv', length: 2, opcode };
+    case 0x4e77:
+      return { kind: 'rtr', length: 2, opcode };
     case 0x4e72:
       return {
         kind: 'stop',
@@ -161,6 +234,80 @@ export function decodeBinaryInstruction(bytes: Uint8Array, offset = 0): DecodedB
       };
     default:
       break;
+  }
+
+  const immediateStatus = IMMEDIATE_STATUS_INSTRUCTIONS.get(opcode);
+  if (immediateStatus) {
+    return { kind: 'immediate-status', length: 2, opcode, ...immediateStatus };
+  }
+
+  if ((opcode & 0xfff8) === 0x4e50) {
+    return { kind: 'link', length: 2, opcode, register: opcode & 0x7 };
+  }
+
+  if ((opcode & 0xfff8) === 0x4e58) {
+    return { kind: 'unlk', length: 2, opcode, register: opcode & 0x7 };
+  }
+
+  if ((opcode & 0xfff0) === 0x4e60) {
+    return {
+      kind: 'move-usp',
+      length: 2,
+      opcode,
+      direction: (opcode & 0x0008) !== 0 ? 'from-usp' : 'to-usp',
+      register: opcode & 0x7,
+    };
+  }
+
+  for (const [maskValue, direction] of [
+    [0x40c0, 'from-sr'],
+    [0x44c0, 'to-ccr'],
+    [0x46c0, 'to-sr'],
+  ] as const) {
+    if ((opcode & 0xffc0) === maskValue) {
+      return {
+        kind: 'move-status',
+        length: 2,
+        opcode,
+        direction,
+        mode: (opcode >>> 3) & 0x7,
+        register: opcode & 0x7,
+      };
+    }
+  }
+
+  if ((opcode & 0xf138) === 0x0108) {
+    const operationMode = (opcode >>> 6) & 0x3;
+    return {
+      kind: 'movep',
+      length: 2,
+      opcode,
+      direction: operationMode < 2 ? 'memory-to-register' : 'register-to-memory',
+      size: (operationMode & 1) === 0 ? 2 : 4,
+      dataRegister: (opcode >>> 9) & 0x7,
+      addressRegister: opcode & 0x7,
+    };
+  }
+
+  if ((opcode & 0xf1c0) === 0x4180) {
+    return {
+      kind: 'chk',
+      length: 2,
+      opcode,
+      dataRegister: (opcode >>> 9) & 0x7,
+      mode: (opcode >>> 3) & 0x7,
+      register: opcode & 0x7,
+    };
+  }
+
+  if ((opcode & 0xffc0) === 0x4ac0) {
+    return {
+      kind: 'tas',
+      length: 2,
+      opcode,
+      mode: (opcode >>> 3) & 0x7,
+      register: opcode & 0x7,
+    };
   }
 
   if ((opcode & 0xfff0) === 0x4e40) {
@@ -283,6 +430,21 @@ export function decodeBinaryInstruction(bytes: Uint8Array, offset = 0): DecodedB
       mode: (opcode >>> 3) & 0x7,
       register: opcode & 0x7,
     };
+  }
+
+  if ((opcode & 0xf0c0) === 0xe0c0) {
+    const memoryShiftOperations = ['asr', 'asl', 'lsr', 'lsl', 'ror', 'rol'] as const;
+    const operationCode = (opcode >>> 9) & 0x7;
+    if (operationCode < 4 || operationCode > 5) {
+      return {
+        kind: 'memory-shift',
+        length: 2,
+        opcode,
+        operation: memoryShiftOperations[operationCode < 4 ? operationCode : operationCode - 2],
+        mode: (opcode >>> 3) & 0x7,
+        register: opcode & 0x7,
+      };
+    }
   }
 
   if ((opcode & 0xf018) === 0xe010 && ((opcode >>> 3) & 0x3) === 2) {

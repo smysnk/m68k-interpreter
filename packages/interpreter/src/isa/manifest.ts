@@ -148,11 +148,16 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     destination: DATA_ALTERABLE,
     support: IMPLEMENTED,
   }),
-  form('ANDI', 'to-ccr', { sizes: ['byte'], source: ['immediate'] }),
+  form('ANDI', 'to-ccr', {
+    sizes: ['byte'],
+    source: ['immediate'],
+    support: STRICT_CORE_PARTIAL,
+  }),
   form('ANDI', 'to-sr', {
     sizes: ['word'],
     source: ['immediate'],
     privileged: true,
+    support: STRICT_CORE_PARTIAL,
   }),
   ...['ASL', 'ASR', 'LSL', 'LSR', 'ROL', 'ROR'].flatMap((mnemonic) => [
     form(mnemonic, 'register-count', {
@@ -170,6 +175,7 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     form(mnemonic, 'memory-one-bit', {
       sizes: ['word'],
       destination: MEMORY_ALTERABLE,
+      support: STRICT_CORE_PARTIAL,
     }),
   ]),
   ...['ROXL', 'ROXR'].flatMap((mnemonic) => [
@@ -225,6 +231,7 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     sizes: ['word'],
     source: DATA_SOURCE,
     destination: DATA_REGISTER,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('CLR', 'data-alterable', {
     sizes: ['byte', 'word', 'long'],
@@ -285,11 +292,16 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     destination: DATA_ALTERABLE,
     support: IMPLEMENTED,
   }),
-  form('EORI', 'to-ccr', { sizes: ['byte'], source: ['immediate'] }),
+  form('EORI', 'to-ccr', {
+    sizes: ['byte'],
+    source: ['immediate'],
+    support: STRICT_CORE_PARTIAL,
+  }),
   form('EORI', 'to-sr', {
     sizes: ['word'],
     source: ['immediate'],
     privileged: true,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('EXG', 'register-pair', {
     sizes: ['long'],
@@ -314,6 +326,7 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     sizes: ['word'],
     source: ADDRESS_REGISTER,
     destination: ['immediate'],
+    support: STRICT_CORE_PARTIAL,
   }),
   form('MOVE', 'general', {
     sizes: ['byte', 'word', 'long'],
@@ -330,25 +343,30 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
   form('MOVE', 'to-ccr', {
     sizes: ['word'],
     source: DATA_SOURCE,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('MOVE', 'from-sr', {
     sizes: ['word'],
     destination: DATA_ALTERABLE,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('MOVE', 'to-sr', {
     sizes: ['word'],
     source: DATA_SOURCE,
     privileged: true,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('MOVE', 'usp-to-address-register', {
     source: ['none'],
     destination: ADDRESS_REGISTER,
     privileged: true,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('MOVE', 'address-register-to-usp', {
     source: ADDRESS_REGISTER,
     destination: ['none'],
     privileged: true,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('MOVEM', 'registers-to-memory', {
     sizes: ['word', 'long'],
@@ -366,11 +384,13 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     sizes: ['word', 'long'],
     source: DATA_REGISTER,
     destination: ['displacement'],
+    support: STRICT_CORE_PARTIAL,
   }),
   form('MOVEP', 'memory-to-register', {
     sizes: ['word', 'long'],
     source: ['displacement'],
     destination: DATA_REGISTER,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('MOVEQ', 'immediate-to-data-register', {
     sizes: ['long'],
@@ -429,16 +449,20 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     destination: DATA_ALTERABLE,
     support: IMPLEMENTED,
   }),
-  form('ORI', 'to-ccr', { sizes: ['byte'], source: ['immediate'] }),
+  form('ORI', 'to-ccr', {
+    sizes: ['byte'],
+    source: ['immediate'],
+    support: STRICT_CORE_PARTIAL,
+  }),
   form('ORI', 'to-sr', {
     sizes: ['word'],
     source: ['immediate'],
     privileged: true,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('PEA', 'control', { source: CONTROL, support: STRICT_CORE_PARTIAL }),
   form('RESET', 'implied', { privileged: true, support: STRICT_CORE_PARTIAL }),
-  form('RTE', 'implied', { privileged: true, support: STRICT_CORE_PARTIAL }),
-  form('RTR', 'implied'),
+  form('RTR', 'implied', { support: STRICT_CORE_PARTIAL }),
   form('RTS', 'implied', { support: STRICT_CORE_PARTIAL }),
   form('SBCD', 'register', {
     sizes: ['byte'],
@@ -518,19 +542,23 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
   form('TAS', 'data-alterable', {
     sizes: ['byte'],
     destination: DATA_ALTERABLE,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('TRAP', 'vector', {
     source: ['trap-vector'],
     support: STRICT_CORE_PARTIAL,
     notes: 'Currently intercepted using Easy68K task semantics and requires strict-profile audit.',
   }),
-  form('TRAPV', 'implied'),
+  form('TRAPV', 'implied', { support: STRICT_CORE_PARTIAL }),
   form('TST', 'data-source', {
     sizes: ['byte', 'word', 'long'],
     source: DATA_SOURCE,
     support: IMPLEMENTED,
   }),
-  form('UNLK', 'address-register', { source: ADDRESS_REGISTER }),
+  form('UNLK', 'address-register', {
+    source: ADDRESS_REGISTER,
+    support: STRICT_CORE_PARTIAL,
+  }),
   form('MOVE', 'from-ccr', {
     minimumProfile: 'm68010',
     sizes: ['word'],

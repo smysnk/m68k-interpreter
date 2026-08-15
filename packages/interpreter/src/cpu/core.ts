@@ -8,6 +8,8 @@ import {
   FLAG_Z,
   addResult,
   compareResult,
+  logicResult,
+  signExtend,
   signBit,
   subResult,
   truncate,
@@ -71,6 +73,12 @@ export class StrictM68000Core {
   private pop32(): number {
     const value = this.bus.read32(this.state.a[7] >>> 0);
     this.state.a[7] = (this.state.a[7] + 4) | 0;
+    return value;
+  }
+
+  private pop16(): number {
+    const value = this.bus.read16(this.state.a[7] >>> 0);
+    this.state.a[7] = (this.state.a[7] + 2) | 0;
     return value;
   }
 
@@ -140,6 +148,55 @@ export class StrictM68000Core {
         (effectiveExtend ? FLAG_X | FLAG_C : 0) |
         (result === 0 ? FLAG_Z : 0) |
         ((result & signBit(size)) !== 0 ? FLAG_N : 0),
+    };
+  }
+
+  private shiftMemoryWord(
+    value: number,
+    operation: 'asr' | 'asl' | 'lsr' | 'lsl' | 'ror' | 'rol'
+  ): { value: number; ccr: number } {
+    const word = value & 0xffff;
+    const preserveX = operation === 'ror' || operation === 'rol';
+    let result: number;
+    let carry: boolean;
+    let overflow = false;
+
+    switch (operation) {
+      case 'asr':
+        carry = (word & 1) !== 0;
+        result = ((word >>> 1) | (word & 0x8000)) & 0xffff;
+        break;
+      case 'asl':
+        carry = (word & 0x8000) !== 0;
+        result = (word << 1) & 0xffff;
+        overflow = ((word ^ result) & 0x8000) !== 0;
+        break;
+      case 'lsr':
+        carry = (word & 1) !== 0;
+        result = word >>> 1;
+        break;
+      case 'lsl':
+        carry = (word & 0x8000) !== 0;
+        result = (word << 1) & 0xffff;
+        break;
+      case 'ror':
+        carry = (word & 1) !== 0;
+        result = (word >>> 1) | (carry ? 0x8000 : 0);
+        break;
+      case 'rol':
+        carry = (word & 0x8000) !== 0;
+        result = ((word << 1) & 0xffff) | (carry ? 1 : 0);
+        break;
+    }
+
+    return {
+      value: result,
+      ccr:
+        (preserveX ? this.state.ccr & FLAG_X : carry ? FLAG_X : 0) |
+        (carry ? FLAG_C : 0) |
+        (overflow ? FLAG_V : 0) |
+        (result === 0 ? FLAG_Z : 0) |
+        ((result & 0x8000) !== 0 ? FLAG_N : 0),
     };
   }
 
@@ -524,6 +581,267 @@ export class StrictM68000Core {
           this.state.pc = stream.cursor;
           return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 8 + count * 2 };
         }
+        case 'immediate-status': {
+          const immediate = stream.readWord();
+          if (instruction.target === 'sr' && !this.state.isSupervisor()) {
+            return this.faultResult({
+              code: 'privilege-violation',
+              message: `${instruction.operation.toUpperCase()}I to SR requires supervisor mode`,
+              vector: 8,
+            });
+          }
+          const current = instruction.target === 'ccr' ? this.state.ccr : this.state.sr;
+          const mask = instruction.target === 'ccr' ? 0x1f : 0xffff;
+          const operand = immediate & mask;
+          const result =
+            instruction.operation === 'and'
+              ? current & operand
+              : instruction.operation === 'or'
+                ? current | operand
+                : current ^ operand;
+          if (instruction.target === 'ccr') this.state.ccr = result;
+          else this.state.sr = result;
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 20 };
+        }
+        case 'memory-shift': {
+          const allowed = [
+            'address-indirect',
+            'postincrement',
+            'predecrement',
+            'displacement',
+            'indexed',
+            'absolute-short',
+            'absolute-long',
+          ] as const;
+          if (!isEffectiveAddressAllowed(instruction.mode, instruction.register, allowed)) {
+            return this.faultResult({
+              code: 'illegal-instruction',
+              message: 'Memory shifts require a memory-alterable operand',
+              vector: 4,
+            });
+          }
+          const destination = resolveEffectiveAddress(instruction.mode, instruction.register, {
+            state: this.state,
+            bus: this.bus,
+            stream,
+            size: 2,
+            access: 'readwrite',
+          });
+          const result = this.shiftMemoryWord(destination.read(), instruction.operation);
+          destination.write(result.value);
+          this.state.ccr = result.ccr;
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 12 };
+        }
+        case 'link': {
+          const displacement = stream.readSignedWord();
+          this.push32(this.state.a[instruction.register] >>> 0);
+          this.state.a[instruction.register] = this.state.a[7];
+          this.state.a[7] = ((this.state.a[7] >>> 0) + displacement) | 0;
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 16 };
+        }
+        case 'unlk':
+          this.state.a[7] = this.state.a[instruction.register];
+          this.state.a[instruction.register] = this.pop32() | 0;
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 12 };
+        case 'move-usp':
+          if (!this.state.isSupervisor()) {
+            return this.faultResult({
+              code: 'privilege-violation',
+              message: 'MOVE USP requires supervisor mode',
+              vector: 8,
+            });
+          }
+          if (instruction.direction === 'to-usp') {
+            this.state.usp = this.state.a[instruction.register] >>> 0;
+          } else {
+            this.state.a[instruction.register] = this.state.usp | 0;
+          }
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 4 };
+        case 'rtr': {
+          const restoredCcr = this.pop16();
+          const restoredPc = this.pop32();
+          this.state.ccr = restoredCcr;
+          this.state.pc = restoredPc & 0x00ff_ffff;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 20 };
+        }
+        case 'move-status': {
+          const dataSource = [
+            'data-register',
+            'address-indirect',
+            'postincrement',
+            'predecrement',
+            'displacement',
+            'indexed',
+            'absolute-short',
+            'absolute-long',
+            'pc-displacement',
+            'pc-indexed',
+            'immediate',
+          ] as const;
+          const dataAlterable = [
+            'data-register',
+            'address-indirect',
+            'postincrement',
+            'predecrement',
+            'displacement',
+            'indexed',
+            'absolute-short',
+            'absolute-long',
+          ] as const;
+          if (instruction.direction === 'to-sr' && !this.state.isSupervisor()) {
+            return this.faultResult({
+              code: 'privilege-violation',
+              message: 'MOVE to SR requires supervisor mode',
+              vector: 8,
+            });
+          }
+          const allowed = instruction.direction === 'from-sr' ? dataAlterable : dataSource;
+          if (!isEffectiveAddressAllowed(instruction.mode, instruction.register, allowed)) {
+            return this.faultResult({
+              code: 'illegal-instruction',
+              message: `Illegal effective address for MOVE ${instruction.direction}`,
+              vector: 4,
+            });
+          }
+          if (instruction.direction === 'from-sr') {
+            const destination = resolveEffectiveAddress(instruction.mode, instruction.register, {
+              state: this.state,
+              bus: this.bus,
+              stream,
+              size: 2,
+              access: 'write',
+            });
+            destination.write(this.state.sr);
+          } else {
+            const source = resolveEffectiveAddress(instruction.mode, instruction.register, {
+              state: this.state,
+              bus: this.bus,
+              stream,
+              size: 2,
+              access: 'read',
+            });
+            const value = source.read();
+            if (instruction.direction === 'to-ccr') this.state.ccr = value;
+            else this.state.sr = value;
+          }
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 12 };
+        }
+        case 'movep': {
+          const displacement = stream.readSignedWord();
+          const address =
+            ((this.state.a[instruction.addressRegister] >>> 0) + displacement) & 0x00ff_ffff;
+          if (instruction.direction === 'memory-to-register') {
+            let value = 0;
+            for (let index = 0; index < instruction.size; index += 1) {
+              value = (value * 0x100 + this.bus.read8(address + index * 2)) >>> 0;
+            }
+            this.state.d[instruction.dataRegister] =
+              instruction.size === 2
+                ? (this.state.d[instruction.dataRegister] & 0xffff_0000) | value | 0
+                : value | 0;
+          } else {
+            const value = this.state.d[instruction.dataRegister] >>> 0;
+            for (let index = 0; index < instruction.size; index += 1) {
+              const shift = (instruction.size - index - 1) * 8;
+              this.bus.write8(address + index * 2, value >>> shift);
+            }
+          }
+          this.state.pc = stream.cursor;
+          return {
+            kind: 'executed',
+            pcBefore,
+            pcAfter: this.state.pc,
+            cycles: instruction.size === 2 ? 16 : 24,
+          };
+        }
+        case 'chk': {
+          const allowed = [
+            'data-register',
+            'address-indirect',
+            'postincrement',
+            'predecrement',
+            'displacement',
+            'indexed',
+            'absolute-short',
+            'absolute-long',
+            'pc-displacement',
+            'pc-indexed',
+            'immediate',
+          ] as const;
+          if (!isEffectiveAddressAllowed(instruction.mode, instruction.register, allowed)) {
+            return this.faultResult({
+              code: 'illegal-instruction',
+              message: 'CHK requires a data source',
+              vector: 4,
+            });
+          }
+          const source = resolveEffectiveAddress(instruction.mode, instruction.register, {
+            state: this.state,
+            bus: this.bus,
+            stream,
+            size: 2,
+            access: 'read',
+          });
+          const upperBound = signExtend(source.read(), 2);
+          const checked = signExtend(this.state.d[instruction.dataRegister], 2);
+          if (checked < 0 || checked > upperBound) {
+            this.state.ccr = (this.state.ccr & ~FLAG_N) | (checked < 0 ? FLAG_N : 0);
+            return this.faultResult({
+              code: 'chk-exception',
+              message: `CHK value ${checked} is outside 0..${upperBound}`,
+              vector: 6,
+            });
+          }
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 10 };
+        }
+        case 'tas': {
+          const allowed = [
+            'data-register',
+            'address-indirect',
+            'postincrement',
+            'predecrement',
+            'displacement',
+            'indexed',
+            'absolute-short',
+            'absolute-long',
+          ] as const;
+          if (!isEffectiveAddressAllowed(instruction.mode, instruction.register, allowed)) {
+            return this.faultResult({
+              code: 'illegal-instruction',
+              message: 'TAS requires a data-alterable operand',
+              vector: 4,
+            });
+          }
+          const destination = resolveEffectiveAddress(instruction.mode, instruction.register, {
+            state: this.state,
+            bus: this.bus,
+            stream,
+            size: 1,
+            access: 'readwrite',
+          });
+          const value = destination.read();
+          this.state.ccr = logicResult(value, 1, this.state.ccr).ccr;
+          destination.write(value | 0x80);
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 14 };
+        }
+        case 'trapv':
+          if ((this.state.ccr & FLAG_V) !== 0) {
+            return this.faultResult({
+              code: 'trapv',
+              message: 'TRAPV overflow exception',
+              vector: 7,
+            });
+          }
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 4 };
         case 'rts':
           this.state.pc = this.pop32() & 0x00ff_ffff;
           return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 16 };
