@@ -1,13 +1,19 @@
 import type { ProgramImage } from '../assembler/programImage';
 import type { CpuFault, StepResult } from '../core/execution';
-import { evaluateBranchCondition } from './conditions';
+import { FLAG_Z } from './alu';
+import { evaluateBranchCondition, evaluateConditionCode } from './conditions';
 import { decodeBinaryInstruction } from './decoder';
+import {
+  classifyEffectiveAddress,
+  isEffectiveAddressAllowed,
+  resolveEffectiveAddress,
+} from './effectiveAddress';
+import { InstructionStream } from './instructionStream';
 import { BusFault, type MemoryBus, RamBus } from './memoryBus';
 import { M68000State, type M68000StateOptions } from './state';
 
 const FLAG_X = 0x10;
 const FLAG_N = 0x08;
-const FLAG_Z = 0x04;
 
 export interface StrictM68000CoreOptions {
   bus?: MemoryBus;
@@ -83,6 +89,7 @@ export class StrictM68000Core {
       );
       const instruction = decodeBinaryInstruction(instructionBytes);
       const nextPc = (pcBefore + instruction.length) & 0x00ff_ffff;
+      const stream = new InstructionStream(this.bus, pcBefore + 2);
 
       switch (instruction.kind) {
         case 'nop':
@@ -109,6 +116,129 @@ export class StrictM68000Core {
             cycles:
               instruction.condition === 'bsr' ? 18 : taken ? 10 : instruction.length === 2 ? 8 : 12,
           };
+        }
+        case 'pea': {
+          const allowed = [
+            'address-indirect',
+            'displacement',
+            'indexed',
+            'absolute-short',
+            'absolute-long',
+            'pc-displacement',
+            'pc-indexed',
+          ] as const;
+          if (!isEffectiveAddressAllowed(instruction.mode, instruction.register, allowed)) {
+            return this.faultResult({
+              code: 'illegal-instruction',
+              message: 'PEA requires a control addressing mode',
+              vector: 4,
+            });
+          }
+          const operand = resolveEffectiveAddress(instruction.mode, instruction.register, {
+            state: this.state,
+            bus: this.bus,
+            stream,
+            size: 4,
+            access: 'address',
+          });
+          this.push32(operand.resolveAddress());
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 12 };
+        }
+        case 'dbcc': {
+          const displacement = stream.readSignedWord();
+          if (evaluateConditionCode(instruction.condition, this.state.sr)) {
+            this.state.pc = stream.cursor;
+            return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 12 };
+          }
+          const decremented = ((this.state.d[instruction.register] & 0xffff) - 1) & 0xffff;
+          this.state.d[instruction.register] =
+            (this.state.d[instruction.register] & 0xffff_0000) | decremented | 0;
+          this.state.pc =
+            decremented === 0xffff ? stream.cursor : (pcBefore + 2 + displacement) & 0x00ff_ffff;
+          return {
+            kind: 'executed',
+            pcBefore,
+            pcAfter: this.state.pc,
+            cycles: decremented === 0xffff ? 14 : 10,
+          };
+        }
+        case 'scc': {
+          const allowed = [
+            'data-register',
+            'address-indirect',
+            'postincrement',
+            'predecrement',
+            'displacement',
+            'indexed',
+            'absolute-short',
+            'absolute-long',
+          ] as const;
+          if (!isEffectiveAddressAllowed(instruction.mode, instruction.register, allowed)) {
+            return this.faultResult({
+              code: 'illegal-instruction',
+              message: 'Scc requires a data-alterable destination',
+              vector: 4,
+            });
+          }
+          const destination = resolveEffectiveAddress(instruction.mode, instruction.register, {
+            state: this.state,
+            bus: this.bus,
+            stream,
+            size: 1,
+            access: 'write',
+          });
+          destination.write(evaluateConditionCode(instruction.condition, this.state.sr) ? 0xff : 0);
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 8 };
+        }
+        case 'bit': {
+          const destinationClass = classifyEffectiveAddress(instruction.mode, instruction.register);
+          const allowed = [
+            'data-register',
+            'address-indirect',
+            'postincrement',
+            'predecrement',
+            'displacement',
+            'indexed',
+            'absolute-short',
+            'absolute-long',
+          ] as const;
+          if (!allowed.includes(destinationClass as (typeof allowed)[number])) {
+            return this.faultResult({
+              code: 'illegal-instruction',
+              message: `${instruction.operation.toUpperCase()} requires a data destination`,
+              vector: 4,
+            });
+          }
+          const bitNumber =
+            instruction.source.kind === 'register'
+              ? this.state.d[instruction.source.register] >>> 0
+              : stream.readWord();
+          const size = destinationClass === 'data-register' ? 4 : 1;
+          const destination = resolveEffectiveAddress(instruction.mode, instruction.register, {
+            state: this.state,
+            bus: this.bus,
+            stream,
+            size,
+            access: instruction.operation === 'btst' ? 'read' : 'readwrite',
+          });
+          const value = destination.read();
+          const bit = bitNumber % (size === 4 ? 32 : 8);
+          const bitMask = 2 ** bit;
+          const bitWasZero = (value & bitMask) === 0;
+          this.state.ccr = (this.state.ccr & ~FLAG_Z) | (bitWasZero ? FLAG_Z : 0);
+          if (instruction.operation !== 'btst') {
+            const nextValue =
+              instruction.operation === 'bchg'
+                ? value ^ bitMask
+                : instruction.operation === 'bclr'
+                  ? value & ~bitMask
+                  : value | bitMask;
+            destination.write(nextValue);
+          }
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 8 };
         }
         case 'rts':
           this.state.pc = this.pop32() & 0x00ff_ffff;

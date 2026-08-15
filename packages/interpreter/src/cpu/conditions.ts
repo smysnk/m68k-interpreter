@@ -45,3 +45,30 @@ export function evaluateBranchCondition(condition: BranchCondition, sr: number):
       return z || n !== v;
   }
 }
+
+export function evaluateConditionCode(condition: number, sr: number): boolean {
+  if (!Number.isInteger(condition) || condition < 0 || condition > 15) {
+    throw new RangeError(`Condition code must be an integer from 0 through 15: ${condition}`);
+  }
+  if (condition === 0) return true;
+  if (condition === 1) return false;
+  const branchConditions: readonly BranchCondition[] = [
+    'bra',
+    'bsr',
+    'hi',
+    'ls',
+    'cc',
+    'cs',
+    'ne',
+    'eq',
+    'vc',
+    'vs',
+    'pl',
+    'mi',
+    'ge',
+    'lt',
+    'gt',
+    'le',
+  ];
+  return evaluateBranchCondition(branchConditions[condition], sr);
+}

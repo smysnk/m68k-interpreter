@@ -206,13 +206,13 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
       sizes: ['byte', 'long'],
       source: DATA_REGISTER,
       destination: DATA_ALTERABLE,
-      support: mnemonic === 'BTST' ? IMPLEMENTED : MISSING,
+      support: STRICT_CORE_PARTIAL,
     }),
     form(mnemonic, 'static-immediate-bit', {
       sizes: ['byte', 'long'],
       source: ['immediate'],
       destination: DATA_ALTERABLE,
-      support: mnemonic === 'BTST' ? IMPLEMENTED : MISSING,
+      support: STRICT_CORE_PARTIAL,
     }),
   ]),
   form('CHK', 'word-bound', {
@@ -252,6 +252,7 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     sizes: ['word'],
     source: DATA_REGISTER,
     destination: ['condition-displacement'],
+    support: STRICT_CORE_PARTIAL,
   }),
   form('DIVS', 'word-source', {
     sizes: ['word'],
@@ -422,7 +423,7 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     source: ['immediate'],
     privileged: true,
   }),
-  form('PEA', 'control', { source: CONTROL }),
+  form('PEA', 'control', { source: CONTROL, support: STRICT_CORE_PARTIAL }),
   form('RESET', 'implied', { privileged: true, support: STRICT_CORE_PARTIAL }),
   form('RTE', 'implied', { privileged: true, support: STRICT_CORE_PARTIAL }),
   form('RTR', 'implied'),
@@ -440,6 +441,7 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
   form('Scc', 'data-alterable', {
     sizes: ['byte'],
     destination: DATA_ALTERABLE,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('STOP', 'immediate-status', {
     source: ['immediate'],

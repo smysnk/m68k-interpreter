@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { encodeBranch, encodeMoveq, encodeNop, encodeRts, encodeStop } from '../assembler/encoder';
 import { createProgramImage } from '../assembler/programImage';
 import { StrictM68000Core } from './core';
-import { evaluateBranchCondition } from './conditions';
+import { evaluateBranchCondition, evaluateConditionCode } from './conditions';
 import { RamBus } from './memoryBus';
 
 describe('StrictM68000Core byte execution', () => {
@@ -122,6 +122,66 @@ describe('MC68000 condition evaluator', () => {
       expect(evaluateBranchCondition('gt', ccr)).toBe(
         (ccr & 0x04) === 0 && ((ccr & 0x08) !== 0) === ((ccr & 0x02) !== 0)
       );
+      expect(evaluateConditionCode(0, ccr)).toBe(true);
+      expect(evaluateConditionCode(1, ccr)).toBe(false);
     }
+  });
+});
+
+describe('StrictM68000Core condition and bit-operation slice', () => {
+  it('executes PEA through the shared control effective-address path', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({
+      bus,
+      state: {
+        sr: 0x2700,
+        addressRegisters: [0x1234, 0, 0, 0, 0, 0, 0, 0x3000],
+      },
+    });
+    bus.load(0x1000, Uint8Array.of(0x48, 0x50)); // PEA (A0)
+    core.state.pc = 0x1000;
+
+    expect(core.step()).toMatchObject({ kind: 'executed', pcAfter: 0x1002 });
+    expect(core.state.a[7] >>> 0).toBe(0x2ffc);
+    expect(bus.read32(0x2ffc)).toBe(0x1234);
+  });
+
+  it('implements DBcc word-counter termination without touching flags', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({ bus, state: { sr: 0x271f, pc: 0x1000 } });
+    bus.load(0x1000, Uint8Array.of(0x51, 0xc8, 0xff, 0xfe)); // DBF D0,-2
+    core.state.d[0] = 1;
+
+    expect(core.step()).toMatchObject({ pcAfter: 0x1000 });
+    expect(core.state.d[0]).toBe(0);
+    expect(core.state.ccr).toBe(0x1f);
+    expect(core.step()).toMatchObject({ pcAfter: 0x1004 });
+    expect(core.state.d[0] & 0xffff).toBe(0xffff);
+    expect(core.state.ccr).toBe(0x1f);
+  });
+
+  it('writes Scc byte results without changing the condition codes', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({ bus, state: { sr: 0x2700, pc: 0x1000 } });
+    bus.load(0x1000, Uint8Array.of(0x56, 0xc1)); // SNE D1
+    core.state.d[1] = 0x1234_5600;
+
+    expect(core.step()).toMatchObject({ pcAfter: 0x1002 });
+    expect(core.state.d[1] >>> 0).toBe(0x1234_56ff);
+    expect(core.state.ccr).toBe(0);
+  });
+
+  it('normalizes static memory bit numbers modulo eight and preserves non-Z flags', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({
+      bus,
+      state: { sr: 0x271b, pc: 0x1000, addressRegisters: [0x200] },
+    });
+    bus.load(0x1000, Uint8Array.of(0x08, 0xd0, 0x00, 0x0f)); // BSET #15,(A0)
+    bus.write8(0x200, 0);
+
+    expect(core.step()).toMatchObject({ pcAfter: 0x1004 });
+    expect(bus.read8(0x200)).toBe(0x80);
+    expect(core.state.ccr).toBe(0x1f);
   });
 });

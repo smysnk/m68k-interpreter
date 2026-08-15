@@ -80,7 +80,7 @@ export {
   encodeTrap,
 } from './assembler/encoder';
 export { decodeBinaryInstruction } from './cpu/decoder';
-export { evaluateBranchCondition } from './cpu/conditions';
+export { evaluateBranchCondition, evaluateConditionCode } from './cpu/conditions';
 export {
   classifyEffectiveAddress,
   isEffectiveAddressAllowed,

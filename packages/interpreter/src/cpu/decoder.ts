@@ -22,6 +22,31 @@ export type DecodedBinaryInstruction =
       condition: BranchCondition;
       displacement: number;
     }
+  | { kind: 'pea'; length: 2; opcode: number; mode: number; register: number }
+  | {
+      kind: 'dbcc';
+      length: 2;
+      opcode: number;
+      condition: number;
+      register: number;
+    }
+  | {
+      kind: 'scc';
+      length: 2;
+      opcode: number;
+      condition: number;
+      mode: number;
+      register: number;
+    }
+  | {
+      kind: 'bit';
+      length: 2;
+      opcode: number;
+      operation: 'btst' | 'bchg' | 'bclr' | 'bset';
+      source: { kind: 'register'; register: number } | { kind: 'immediate' };
+      mode: number;
+      register: number;
+    }
   | { kind: 'unimplemented'; length: 2; opcode: number };
 
 const BRANCH_CONDITION: readonly BranchCondition[] = [
@@ -99,6 +124,62 @@ export function decodeBinaryInstruction(bytes: Uint8Array, offset = 0): DecodedB
       opcode,
       register: (opcode >>> 9) & 0x7,
       immediate: signExtendByte(opcode & 0xff),
+    };
+  }
+
+  if ((opcode & 0xffc0) === 0x4840 && ((opcode >>> 3) & 0x7) !== 0) {
+    return {
+      kind: 'pea',
+      length: 2,
+      opcode,
+      mode: (opcode >>> 3) & 0x7,
+      register: opcode & 0x7,
+    };
+  }
+
+  if ((opcode & 0xf0f8) === 0x50c8) {
+    return {
+      kind: 'dbcc',
+      length: 2,
+      opcode,
+      condition: (opcode >>> 8) & 0x0f,
+      register: opcode & 0x7,
+    };
+  }
+
+  if ((opcode & 0xf0c0) === 0x50c0) {
+    return {
+      kind: 'scc',
+      length: 2,
+      opcode,
+      condition: (opcode >>> 8) & 0x0f,
+      mode: (opcode >>> 3) & 0x7,
+      register: opcode & 0x7,
+    };
+  }
+
+  const bitOperation = ['btst', 'bchg', 'bclr', 'bset'] as const;
+  if ((opcode & 0xf100) === 0x0100 && ((opcode >>> 3) & 0x7) !== 1) {
+    return {
+      kind: 'bit',
+      length: 2,
+      opcode,
+      operation: bitOperation[(opcode >>> 6) & 0x3],
+      source: { kind: 'register', register: (opcode >>> 9) & 0x7 },
+      mode: (opcode >>> 3) & 0x7,
+      register: opcode & 0x7,
+    };
+  }
+
+  if ((opcode & 0xff00) === 0x0800) {
+    return {
+      kind: 'bit',
+      length: 2,
+      opcode,
+      operation: bitOperation[(opcode >>> 6) & 0x3],
+      source: { kind: 'immediate' },
+      mode: (opcode >>> 3) & 0x7,
+      register: opcode & 0x7,
     };
   }
 
