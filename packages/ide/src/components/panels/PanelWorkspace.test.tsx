@@ -1,6 +1,13 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { fireEvent, screen, within } from '@testing-library/react';
-import { createIdeStore, duplicatePanel, focusPanel, revealPanelKind, setColumnCount, type AppStore } from '@/store';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import {
+  createIdeStore,
+  duplicatePanel,
+  focusPanel,
+  revealPanelKind,
+  setColumnCount,
+  type AppStore,
+} from '@/store';
 import { PANEL_KIND_ORDER, PANEL_REGISTRY } from '@/panels/panelRegistry';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
 import PanelWorkspace from './PanelWorkspace';
@@ -9,7 +16,11 @@ describe('PanelWorkspace', () => {
   let store: AppStore;
   beforeEach(() => {
     window.localStorage.clear();
-    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1280 });
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 1280,
+    });
     store = createIdeStore();
   });
 
@@ -21,9 +32,9 @@ describe('PanelWorkspace', () => {
     expect(screen.getByTestId('panel-instance-panel-registers-2')).toBeInTheDocument();
     const targets = document.querySelectorAll('[data-panel-dock-target]');
     expect(targets).toHaveLength(4);
-    expect(Array.from(targets).map((target) => target.getAttribute('data-panel-dock-relation'))).toEqual([
-      'before', 'after', 'before', 'after',
-    ]);
+    expect(
+      Array.from(targets).map((target) => target.getAttribute('data-panel-dock-relation'))
+    ).toEqual(['before', 'after', 'before', 'after']);
   });
 
   it('creates a passive terminal mirror and transfers ownership explicitly', () => {
@@ -31,7 +42,9 @@ describe('PanelWorkspace', () => {
     renderWithIdeProviders(<PanelWorkspace />, { store });
     expect(screen.getByText('Mirror')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('img', { name: 'M68K terminal mirror' }));
-    expect(store.getState().panelLayout.activeLayout.terminalOwnerPanelId).not.toBe('panel-terminal-1');
+    expect(store.getState().panelLayout.activeLayout.terminalOwnerPanelId).not.toBe(
+      'panel-terminal-1'
+    );
     expect(screen.getAllByTestId('terminal-screen')).toHaveLength(1);
   });
 
@@ -40,7 +53,9 @@ describe('PanelWorkspace', () => {
     renderWithIdeProviders(<PanelWorkspace />, { store });
     expect(store.getState().panelLayout.activeLayout.columns).toHaveLength(3);
     fireEvent.click(screen.getByRole('button', { name: /minimize screen/i }));
-    expect(store.getState().panelLayout.activeLayout.instances['panel-terminal-1']?.minimized).toBe(true);
+    expect(store.getState().panelLayout.activeLayout.instances['panel-terminal-1']?.minimized).toBe(
+      true
+    );
     expect(screen.queryByTestId('terminal-screen')).not.toBeInTheDocument();
   });
 
@@ -107,6 +122,88 @@ describe('PanelWorkspace', () => {
     expect(screen.queryByRole('menu', { name: 'Add panel to column 3' })).not.toBeInTheDocument();
   });
 
+  it('opens the workspace context menu and inserts the selected panel at the captured location', async () => {
+    renderWithIdeProviders(<PanelWorkspace />, { store });
+    const column = screen.getByTestId('panel-column-1');
+    const terminal = screen.getByTestId('panel-instance-panel-terminal-1');
+    vi.spyOn(column, 'getBoundingClientRect').mockReturnValue({
+      bottom: 600,
+      height: 600,
+      left: 0,
+      right: 700,
+      toJSON: () => ({}),
+      top: 0,
+      width: 700,
+      x: 0,
+      y: 0,
+    });
+    vi.spyOn(terminal, 'getBoundingClientRect').mockReturnValue({
+      bottom: 300,
+      height: 300,
+      left: 0,
+      right: 700,
+      toJSON: () => ({}),
+      top: 0,
+      width: 700,
+      x: 0,
+      y: 0,
+    });
+
+    expect(fireEvent.contextMenu(terminal, { clientX: 120, clientY: 80 })).toBe(false);
+    const rootMenu = screen.getByRole('menu', { name: 'Panel workspace actions' });
+    fireEvent.click(within(rootMenu).getByRole('menuitem', { name: 'Add a panel' }));
+    const addMenu = screen.getByRole('menu', { name: 'Add a panel' });
+    expect(
+      within(addMenu)
+        .getAllByRole('menuitem')
+        .map((item) => item.getAttribute('aria-label'))
+    ).toEqual(PANEL_KIND_ORDER.map((kind) => `Add ${PANEL_REGISTRY[kind].title} panel`));
+
+    fireEvent.click(within(addMenu).getByRole('menuitem', { name: 'Add Memory panel' }));
+    const firstColumnKinds = store
+      .getState()
+      .panelLayout.activeLayout.columns[0]!.panelIds.map(
+        (id) => store.getState().panelLayout.activeLayout.instances[id]!.kind
+      );
+    expect(firstColumnKinds).toEqual(['memory', 'terminal']);
+    expect(screen.queryByRole('menu', { name: 'Panel workspace actions' })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId(/panel-instance-panel-memory/)).toHaveFocus();
+    });
+  });
+
+  it('supports keyboard context-menu invocation, submenu navigation, and focus restoration', () => {
+    renderWithIdeProviders(<PanelWorkspace />, { store });
+    const dragButton = screen.getByLabelText('Drag Screen panel');
+    const terminal = screen.getByTestId('panel-instance-panel-terminal-1');
+    vi.spyOn(terminal, 'getBoundingClientRect').mockReturnValue({
+      bottom: 300,
+      height: 300,
+      left: 0,
+      right: 700,
+      toJSON: () => ({}),
+      top: 0,
+      width: 700,
+      x: 0,
+      y: 0,
+    });
+    dragButton.focus();
+
+    fireEvent.keyDown(dragButton, { key: 'F10', shiftKey: true });
+    const addPanelItem = screen.getByRole('menuitem', { name: 'Add a panel' });
+    addPanelItem.focus();
+    fireEvent.keyDown(addPanelItem, { key: 'ArrowRight' });
+    expect(screen.getByRole('menu', { name: 'Add a panel' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('menu', { name: 'Panel workspace actions' })).not.toBeInTheDocument();
+    expect(dragButton).toHaveFocus();
+
+    fireEvent.keyDown(dragButton, { key: 'ContextMenu' });
+    expect(screen.getByRole('menu', { name: 'Panel workspace actions' })).toBeInTheDocument();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole('menu', { name: 'Panel workspace actions' })).not.toBeInTheDocument();
+  });
+
   it('integrates the hardware title and window controls into one header', () => {
     store.dispatch(revealPanelKind('hardware-display'));
     store.dispatch(revealPanelKind('hardware-digital-io'));
@@ -125,8 +222,12 @@ describe('PanelWorkspace', () => {
     ).not.toBeInTheDocument();
 
     const controls = screen.getByRole('toolbar', { name: 'Seven-segment display panel controls' });
-    expect(controls).toContainElement(screen.getByRole('button', { name: 'Minimize Seven-segment display' }));
-    expect(controls).toContainElement(screen.getByRole('button', { name: 'Close Seven-segment display' }));
+    expect(controls).toContainElement(
+      screen.getByRole('button', { name: 'Minimize Seven-segment display' })
+    );
+    expect(controls).toContainElement(
+      screen.getByRole('button', { name: 'Close Seven-segment display' })
+    );
 
     const digitalFrame = screen.getByTestId(/panel-instance-panel-hardware-digital-io/);
     const digitalHeader = digitalFrame.querySelector('.panel-frame-header');
@@ -134,8 +235,14 @@ describe('PanelWorkspace', () => {
     expect(digitalHeader).not.toBeNull();
     expect(digitalBody).not.toBeNull();
     expect(within(digitalHeader as HTMLElement).queryByRole('textbox')).not.toBeInTheDocument();
-    expect(within(digitalBody as HTMLElement).getByRole('button', { name: 'Configure switch address' })).toBeInTheDocument();
-    expect(within(digitalBody as HTMLElement).getByRole('button', { name: 'Request interrupt level 7' })).toBeInTheDocument();
-    expect(screen.queryByTestId(/panel-instance-panel-hardware-interrupts/)).not.toBeInTheDocument();
+    expect(
+      within(digitalBody as HTMLElement).getByRole('button', { name: 'Configure switch address' })
+    ).toBeInTheDocument();
+    expect(
+      within(digitalBody as HTMLElement).getByRole('button', { name: 'Request interrupt level 7' })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId(/panel-instance-panel-hardware-interrupts/)
+    ).not.toBeInTheDocument();
   });
 });

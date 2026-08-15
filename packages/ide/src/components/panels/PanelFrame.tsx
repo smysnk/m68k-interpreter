@@ -3,7 +3,10 @@ import { useDraggable } from '@dnd-kit/core';
 import { useDispatch } from 'react-redux';
 import { PANEL_REGISTRY, getPanelDomIds } from '@/panels/panelRegistry';
 import {
-  closePanel, focusPanel, togglePanelMinimized, type AppDispatch,
+  closePanel,
+  focusPanel,
+  togglePanelMinimized,
+  type AppDispatch,
   type PanelInstance,
 } from '@/store';
 import PanelRenderer from './PanelRenderer';
@@ -15,7 +18,12 @@ interface Props {
   interactive: boolean;
 }
 
-export default function PanelFrame({ draggableEnabled = true, floating = false, instance, interactive }: Props): React.ReactElement {
+export default function PanelFrame({
+  draggableEnabled = true,
+  floating = false,
+  instance,
+  interactive,
+}: Props): React.ReactElement {
   const draggable = useDraggable({
     id: instance.id,
     data: { type: 'panel', panelId: instance.id, title: instance.title, floating },
@@ -56,6 +64,7 @@ function PanelFrameView({
         }
       }}
       ref={drag.setNodeRef}
+      tabIndex={-1}
     >
       <header
         className={`panel-frame-header ${integratedHeader ? 'panel-frame-header-integrated' : ''}`.trim()}
@@ -63,7 +72,10 @@ function PanelFrameView({
         id={ids.headerId}
         onPointerDown={(event) => {
           const target = event.target as HTMLElement;
-          if (target.closest('button, summary, input, select, textarea, a, [contenteditable="true"]')) return;
+          if (
+            target.closest('button, summary, input, select, textarea, a, [contenteditable="true"]')
+          )
+            return;
           drag.listeners?.onPointerDown?.(event);
         }}
       >
@@ -83,10 +95,14 @@ function PanelFrameView({
           </div>
         ) : (
           <>
-            <span aria-hidden="true" className="panel-kind-icon">{entry.icon}</span>
+            <span aria-hidden="true" className="panel-kind-icon">
+              {entry.icon}
+            </span>
             <h2>{instance.title}</h2>
             {instance.kind === 'terminal' ? (
-              <span className={`panel-owner-badge ${interactive ? 'active' : ''}`}>{interactive ? 'Interactive' : 'Mirror'}</span>
+              <span className={`panel-owner-badge ${interactive ? 'active' : ''}`}>
+                {interactive ? 'Interactive' : 'Mirror'}
+              </span>
             ) : null}
           </>
         )}
@@ -104,10 +120,22 @@ function PanelFrameView({
           onPointerDown={(event) => event.stopPropagation()}
           role="toolbar"
         >
-          <button aria-controls={ids.bodyId} aria-expanded={!instance.minimized} aria-label={`${instance.minimized ? 'Restore' : 'Minimize'} ${instance.title}`} onClick={() => dispatch(togglePanelMinimized(instance.id))} type="button">
+          <button
+            aria-controls={ids.bodyId}
+            aria-expanded={!instance.minimized}
+            aria-label={`${instance.minimized ? 'Restore' : 'Minimize'} ${instance.title}`}
+            onClick={() => dispatch(togglePanelMinimized(instance.id))}
+            type="button"
+          >
             {instance.minimized ? '+' : '−'}
           </button>
-          <button aria-label={`Close ${instance.title}`} onClick={() => dispatch(closePanel(instance.id))} type="button">×</button>
+          <button
+            aria-label={`Close ${instance.title}`}
+            onClick={() => dispatch(closePanel(instance.id))}
+            type="button"
+          >
+            ×
+          </button>
         </div>
       </header>
       {!instance.minimized ? <PanelRenderer instance={instance} interactive={interactive} /> : null}
