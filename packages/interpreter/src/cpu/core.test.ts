@@ -185,3 +185,79 @@ describe('StrictM68000Core condition and bit-operation slice', () => {
     expect(core.state.ccr).toBe(0x1f);
   });
 });
+
+describe('StrictM68000Core extend-aware arithmetic slice', () => {
+  it('implements ADDX sticky zero and partial data-register writes', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({ bus, state: { sr: 0x2704, pc: 0x1000 } });
+    bus.load(0x1000, Uint8Array.of(0xd3, 0x00, 0xd3, 0x00)); // ADDX.B D0,D1 twice
+    core.state.d[0] = 0;
+    core.state.d[1] = 0x1234_5600;
+
+    core.step();
+    expect(core.state.d[1] >>> 0).toBe(0x1234_5600);
+    expect(core.state.ccr & 0x04).toBe(0x04);
+
+    core.state.d[0] = 1;
+    core.step();
+    expect(core.state.d[1] >>> 0).toBe(0x1234_5601);
+    expect(core.state.ccr & 0x04).toBe(0);
+  });
+
+  it('applies two ordered predecrements for aliased memory ADDX operands', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({
+      bus,
+      state: { sr: 0x2704, pc: 0x1000, addressRegisters: [0x204] },
+    });
+    bus.load(0x1000, Uint8Array.of(0xd1, 0x08)); // ADDX.B -(A0),-(A0)
+    bus.write8(0x203, 2);
+    bus.write8(0x202, 3);
+
+    core.step();
+
+    expect(core.state.a[0] >>> 0).toBe(0x202);
+    expect(bus.read8(0x202)).toBe(5);
+  });
+
+  it('executes packed BCD carry and sticky-zero behavior', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({ bus, state: { sr: 0x2704, pc: 0x1000 } });
+    bus.load(0x1000, Uint8Array.of(0xc3, 0x00)); // ABCD D0,D1
+    core.state.d[0] = 0x55;
+    core.state.d[1] = 0x45;
+
+    core.step();
+
+    expect(core.state.d[1] & 0xff).toBe(0);
+    expect(core.state.ccr & 0x15).toBe(0x15);
+  });
+
+  it('compares sequential memory operands when CMPM aliases an address register', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({
+      bus,
+      state: { sr: 0x2710, pc: 0x1000, addressRegisters: [0x200] },
+    });
+    bus.load(0x1000, Uint8Array.of(0xb1, 0x08)); // CMPM.B (A0)+,(A0)+
+    bus.write8(0x200, 1);
+    bus.write8(0x201, 2);
+
+    core.step();
+
+    expect(core.state.a[0] >>> 0).toBe(0x202);
+    expect(core.state.ccr).toBe(0x10);
+  });
+
+  it('rotates through X and reports the shifted bit in X and C', () => {
+    const bus = new RamBus({ size: 0x4000 });
+    const core = new StrictM68000Core({ bus, state: { sr: 0x2710, pc: 0x1000 } });
+    bus.load(0x1000, Uint8Array.of(0xe3, 0x10)); // ROXL.B #1,D0
+    core.state.d[0] = 0x1234_5680;
+
+    core.step();
+
+    expect(core.state.d[0] >>> 0).toBe(0x1234_5601);
+    expect(core.state.ccr).toBe(0x11);
+  });
+});

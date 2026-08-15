@@ -1,4 +1,5 @@
 import type { BranchCondition } from '../assembler/encoder';
+import type { OperandSize } from './alu';
 
 export type DecodedBinaryInstruction =
   | { kind: 'nop'; length: 2; opcode: number }
@@ -47,6 +48,53 @@ export type DecodedBinaryInstruction =
       mode: number;
       register: number;
     }
+  | {
+      kind: 'extend-arithmetic';
+      length: 2;
+      opcode: number;
+      operation: 'addx' | 'subx';
+      size: OperandSize;
+      memory: boolean;
+      sourceRegister: number;
+      destinationRegister: number;
+    }
+  | {
+      kind: 'bcd';
+      length: 2;
+      opcode: number;
+      operation: 'abcd' | 'sbcd';
+      memory: boolean;
+      sourceRegister: number;
+      destinationRegister: number;
+    }
+  | {
+      kind: 'unary-extend';
+      length: 2;
+      opcode: number;
+      operation: 'negx' | 'nbcd';
+      size: OperandSize;
+      mode: number;
+      register: number;
+    }
+  | {
+      kind: 'cmpm';
+      length: 2;
+      opcode: number;
+      size: OperandSize;
+      sourceRegister: number;
+      destinationRegister: number;
+    }
+  | {
+      kind: 'rotate-extend';
+      length: 2;
+      opcode: number;
+      direction: 'left' | 'right';
+      size: OperandSize;
+      memory: boolean;
+      count: { kind: 'immediate'; value: number } | { kind: 'register'; register: number };
+      mode: number;
+      register: number;
+    }
   | { kind: 'unimplemented'; length: 2; opcode: number };
 
 const BRANCH_CONDITION: readonly BranchCondition[] = [
@@ -81,6 +129,13 @@ function signExtendByte(value: number): number {
 
 function signExtendWord(value: number): number {
   return (value << 16) >> 16;
+}
+
+function decodeOperandSize(code: number): OperandSize | undefined {
+  if (code === 0) return 1;
+  if (code === 1) return 2;
+  if (code === 2) return 4;
+  return undefined;
 }
 
 export function decodeBinaryInstruction(bytes: Uint8Array, offset = 0): DecodedBinaryInstruction {
@@ -135,6 +190,119 @@ export function decodeBinaryInstruction(bytes: Uint8Array, offset = 0): DecodedB
       mode: (opcode >>> 3) & 0x7,
       register: opcode & 0x7,
     };
+  }
+
+  if ((opcode & 0xff00) === 0x4000) {
+    const size = decodeOperandSize((opcode >>> 6) & 0x3);
+    if (size !== undefined) {
+      return {
+        kind: 'unary-extend',
+        length: 2,
+        opcode,
+        operation: 'negx',
+        size,
+        mode: (opcode >>> 3) & 0x7,
+        register: opcode & 0x7,
+      };
+    }
+  }
+
+  if ((opcode & 0xffc0) === 0x4800) {
+    return {
+      kind: 'unary-extend',
+      length: 2,
+      opcode,
+      operation: 'nbcd',
+      size: 1,
+      mode: (opcode >>> 3) & 0x7,
+      register: opcode & 0x7,
+    };
+  }
+
+  for (const [maskValue, operation] of [
+    [0xd100, 'addx'],
+    [0x9100, 'subx'],
+  ] as const) {
+    if ((opcode & 0xf130) === maskValue) {
+      const size = decodeOperandSize((opcode >>> 6) & 0x3);
+      if (size !== undefined) {
+        return {
+          kind: 'extend-arithmetic',
+          length: 2,
+          opcode,
+          operation,
+          size,
+          memory: (opcode & 0x0008) !== 0,
+          sourceRegister: opcode & 0x7,
+          destinationRegister: (opcode >>> 9) & 0x7,
+        };
+      }
+    }
+  }
+
+  for (const [maskValue, operation] of [
+    [0xc100, 'abcd'],
+    [0x8100, 'sbcd'],
+  ] as const) {
+    if ((opcode & 0xf1f0) === maskValue) {
+      return {
+        kind: 'bcd',
+        length: 2,
+        opcode,
+        operation,
+        memory: (opcode & 0x0008) !== 0,
+        sourceRegister: opcode & 0x7,
+        destinationRegister: (opcode >>> 9) & 0x7,
+      };
+    }
+  }
+
+  if ((opcode & 0xf138) === 0xb108) {
+    const size = decodeOperandSize((opcode >>> 6) & 0x3);
+    if (size !== undefined) {
+      return {
+        kind: 'cmpm',
+        length: 2,
+        opcode,
+        size,
+        sourceRegister: opcode & 0x7,
+        destinationRegister: (opcode >>> 9) & 0x7,
+      };
+    }
+  }
+
+  if ((opcode & 0xfec0) === 0xe4c0) {
+    return {
+      kind: 'rotate-extend',
+      length: 2,
+      opcode,
+      direction: (opcode & 0x0100) !== 0 ? 'left' : 'right',
+      size: 2,
+      memory: true,
+      count: { kind: 'immediate', value: 1 },
+      mode: (opcode >>> 3) & 0x7,
+      register: opcode & 0x7,
+    };
+  }
+
+  if ((opcode & 0xf018) === 0xe010 && ((opcode >>> 3) & 0x3) === 2) {
+    const size = decodeOperandSize((opcode >>> 6) & 0x3);
+    if (size !== undefined) {
+      const registerCount = (opcode & 0x0020) !== 0;
+      return {
+        kind: 'rotate-extend',
+        length: 2,
+        opcode,
+        direction: (opcode & 0x0100) !== 0 ? 'left' : 'right',
+        size,
+        memory: false,
+        count: registerCount
+          ? { kind: 'register', register: (opcode >>> 9) & 0x7 }
+          : { kind: 'immediate', value: (opcode >>> 9) & 0x7 || 8 },
+        mode: 0,
+        register: opcode & 0x7,
+      };
+    }
   }
 
   if ((opcode & 0xf0f8) === 0x50c8) {

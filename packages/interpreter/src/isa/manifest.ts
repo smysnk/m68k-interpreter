@@ -68,18 +68,19 @@ function form(mnemonic: string, name: string, options: FormOptions = {}): Instru
 
 const IMPLEMENTED = 'legacy-only' as const;
 const STRICT_CORE_PARTIAL = 'strict-core-partial' as const;
-const MISSING = 'missing' as const;
 
 export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
   form('ABCD', 'register', {
     sizes: ['byte'],
     source: DATA_REGISTER,
     destination: DATA_REGISTER,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('ABCD', 'predecrement-memory', {
     sizes: ['byte'],
     source: ['predecrement'],
     destination: ['predecrement'],
+    support: STRICT_CORE_PARTIAL,
   }),
   form('ADD', 'ea-to-data-register', {
     sizes: ['byte', 'word', 'long'],
@@ -121,11 +122,13 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     sizes: ['byte', 'word', 'long'],
     source: DATA_REGISTER,
     destination: DATA_REGISTER,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('ADDX', 'predecrement-memory', {
     sizes: ['byte', 'word', 'long'],
     source: ['predecrement'],
     destination: ['predecrement'],
+    support: STRICT_CORE_PARTIAL,
   }),
   form('AND', 'ea-to-data-register', {
     sizes: ['byte', 'word', 'long'],
@@ -174,15 +177,18 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
       sizes: ['byte', 'word', 'long'],
       source: DATA_REGISTER,
       destination: DATA_REGISTER,
+      support: STRICT_CORE_PARTIAL,
     }),
     form(mnemonic, 'immediate-count', {
       sizes: ['byte', 'word', 'long'],
       source: ['quick-immediate'],
       destination: DATA_REGISTER,
+      support: STRICT_CORE_PARTIAL,
     }),
     form(mnemonic, 'memory-one-bit', {
       sizes: ['word'],
       destination: MEMORY_ALTERABLE,
+      support: STRICT_CORE_PARTIAL,
     }),
   ]),
   form('Bcc', 'condition-displacement', {
@@ -247,6 +253,7 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     sizes: ['byte', 'word', 'long'],
     source: ['postincrement'],
     destination: ['postincrement'],
+    support: STRICT_CORE_PARTIAL,
   }),
   form('DBcc', 'data-register-displacement', {
     sizes: ['word'],
@@ -383,7 +390,11 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     destination: DATA_REGISTER,
     support: IMPLEMENTED,
   }),
-  form('NBCD', 'data-alterable', { sizes: ['byte'], destination: DATA_ALTERABLE }),
+  form('NBCD', 'data-alterable', {
+    sizes: ['byte'],
+    destination: DATA_ALTERABLE,
+    support: STRICT_CORE_PARTIAL,
+  }),
   form('NEG', 'data-alterable', {
     sizes: ['byte', 'word', 'long'],
     destination: DATA_ALTERABLE,
@@ -392,6 +403,7 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
   form('NEGX', 'data-alterable', {
     sizes: ['byte', 'word', 'long'],
     destination: DATA_ALTERABLE,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('NOP', 'implied', { support: STRICT_CORE_PARTIAL }),
   form('NOT', 'data-alterable', {
@@ -432,11 +444,13 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     sizes: ['byte'],
     source: DATA_REGISTER,
     destination: DATA_REGISTER,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('SBCD', 'predecrement-memory', {
     sizes: ['byte'],
     source: ['predecrement'],
     destination: ['predecrement'],
+    support: STRICT_CORE_PARTIAL,
   }),
   form('Scc', 'data-alterable', {
     sizes: ['byte'],
@@ -488,11 +502,13 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     sizes: ['byte', 'word', 'long'],
     source: DATA_REGISTER,
     destination: DATA_REGISTER,
+    support: STRICT_CORE_PARTIAL,
   }),
   form('SUBX', 'predecrement-memory', {
     sizes: ['byte', 'word', 'long'],
     source: ['predecrement'],
     destination: ['predecrement'],
+    support: STRICT_CORE_PARTIAL,
   }),
   form('SWAP', 'data-register', {
     sizes: ['word'],

@@ -1,6 +1,17 @@
 import type { ProgramImage } from '../assembler/programImage';
 import type { CpuFault, StepResult } from '../core/execution';
-import { FLAG_Z } from './alu';
+import {
+  FLAG_C,
+  FLAG_N,
+  FLAG_V,
+  FLAG_X,
+  FLAG_Z,
+  addResult,
+  compareResult,
+  signBit,
+  subResult,
+  truncate,
+} from './alu';
 import { evaluateBranchCondition, evaluateConditionCode } from './conditions';
 import { decodeBinaryInstruction } from './decoder';
 import {
@@ -11,9 +22,6 @@ import {
 import { InstructionStream } from './instructionStream';
 import { BusFault, type MemoryBus, RamBus } from './memoryBus';
 import { M68000State, type M68000StateOptions } from './state';
-
-const FLAG_X = 0x10;
-const FLAG_N = 0x08;
 
 export interface StrictM68000CoreOptions {
   bus?: MemoryBus;
@@ -64,6 +72,75 @@ export class StrictM68000Core {
     const value = this.bus.read32(this.state.a[7] >>> 0);
     this.state.a[7] = (this.state.a[7] + 4) | 0;
     return value;
+  }
+
+  private bcdResult(
+    destination: number,
+    source: number,
+    subtract: boolean
+  ): { value: number; ccr: number } {
+    const extend = (this.state.ccr & FLAG_X) !== 0 ? 1 : 0;
+    const stickyZero = (this.state.ccr & FLAG_Z) !== 0;
+    const preservedUndefined = this.state.ccr & (FLAG_N | FLAG_V);
+    let value: number;
+    let carry: boolean;
+
+    if (subtract) {
+      const lowDifference = (destination & 0x0f) - (source & 0x0f) - extend;
+      let difference = (destination & 0xff) - (source & 0xff) - extend;
+      if (lowDifference < 0) difference -= 0x06;
+      carry = difference < 0;
+      if (carry) difference -= 0x60;
+      value = difference & 0xff;
+    } else {
+      const lowSum = (destination & 0x0f) + (source & 0x0f) + extend;
+      let sum = (destination & 0xff) + (source & 0xff) + extend;
+      if (lowSum > 9) sum += 0x06;
+      carry = sum > 0x99;
+      if (carry) sum += 0x60;
+      value = sum & 0xff;
+    }
+
+    return {
+      value,
+      ccr:
+        preservedUndefined |
+        (carry ? FLAG_X | FLAG_C : 0) |
+        (value === 0 && stickyZero ? FLAG_Z : 0),
+    };
+  }
+
+  private rotateThroughExtend(
+    value: number,
+    size: 1 | 2 | 4,
+    count: number,
+    direction: 'left' | 'right'
+  ): { value: number; ccr: number } {
+    let result = truncate(value, size);
+    let extend = (this.state.ccr & FLAG_X) !== 0 ? 1 : 0;
+    const normalizedCount = count & 0x3f;
+
+    for (let index = 0; index < normalizedCount; index += 1) {
+      if (direction === 'left') {
+        const nextExtend = (result & signBit(size)) !== 0 ? 1 : 0;
+        result = truncate(result * 2 + extend, size);
+        extend = nextExtend;
+      } else {
+        const nextExtend = result & 1;
+        result = (result >>> 1) | (extend ? signBit(size) : 0);
+        result = truncate(result, size);
+        extend = nextExtend;
+      }
+    }
+
+    const effectiveExtend = normalizedCount === 0 ? (this.state.ccr & FLAG_X ? 1 : 0) : extend;
+    return {
+      value: result,
+      ccr:
+        (effectiveExtend ? FLAG_X | FLAG_C : 0) |
+        (result === 0 ? FLAG_Z : 0) |
+        ((result & signBit(size)) !== 0 ? FLAG_N : 0),
+    };
   }
 
   step(): StepResult {
@@ -239,6 +316,213 @@ export class StrictM68000Core {
           }
           this.state.pc = stream.cursor;
           return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 8 };
+        }
+        case 'extend-arithmetic': {
+          const source = resolveEffectiveAddress(
+            instruction.memory ? 4 : 0,
+            instruction.sourceRegister,
+            {
+              state: this.state,
+              bus: this.bus,
+              stream,
+              size: instruction.size,
+              access: 'read',
+            }
+          );
+          const sourceValue = source.read();
+          const destination = resolveEffectiveAddress(
+            instruction.memory ? 4 : 0,
+            instruction.destinationRegister,
+            {
+              state: this.state,
+              bus: this.bus,
+              stream,
+              size: instruction.size,
+              access: 'readwrite',
+            }
+          );
+          const destinationValue = destination.read();
+          const extend = (this.state.ccr & FLAG_X) !== 0 ? 1 : 0;
+          const result =
+            instruction.operation === 'addx'
+              ? addResult(
+                  destinationValue,
+                  sourceValue,
+                  instruction.size,
+                  this.state.ccr,
+                  extend,
+                  true
+                )
+              : subResult(
+                  destinationValue,
+                  sourceValue,
+                  instruction.size,
+                  this.state.ccr,
+                  extend,
+                  true
+                );
+          destination.write(result.value);
+          this.state.ccr = result.ccr;
+          this.state.pc = stream.cursor;
+          return {
+            kind: 'executed',
+            pcBefore,
+            pcAfter: this.state.pc,
+            cycles: instruction.memory ? 18 : 8,
+          };
+        }
+        case 'bcd': {
+          const source = resolveEffectiveAddress(
+            instruction.memory ? 4 : 0,
+            instruction.sourceRegister,
+            {
+              state: this.state,
+              bus: this.bus,
+              stream,
+              size: 1,
+              access: 'read',
+            }
+          );
+          const sourceValue = source.read();
+          const destination = resolveEffectiveAddress(
+            instruction.memory ? 4 : 0,
+            instruction.destinationRegister,
+            {
+              state: this.state,
+              bus: this.bus,
+              stream,
+              size: 1,
+              access: 'readwrite',
+            }
+          );
+          const result = this.bcdResult(
+            destination.read(),
+            sourceValue,
+            instruction.operation === 'sbcd'
+          );
+          destination.write(result.value);
+          this.state.ccr = result.ccr;
+          this.state.pc = stream.cursor;
+          return {
+            kind: 'executed',
+            pcBefore,
+            pcAfter: this.state.pc,
+            cycles: instruction.memory ? 18 : 6,
+          };
+        }
+        case 'unary-extend': {
+          const allowed = [
+            'data-register',
+            'address-indirect',
+            'postincrement',
+            'predecrement',
+            'displacement',
+            'indexed',
+            'absolute-short',
+            'absolute-long',
+          ] as const;
+          if (!isEffectiveAddressAllowed(instruction.mode, instruction.register, allowed)) {
+            return this.faultResult({
+              code: 'illegal-instruction',
+              message: `${instruction.operation.toUpperCase()} requires a data-alterable operand`,
+              vector: 4,
+            });
+          }
+          const destination = resolveEffectiveAddress(instruction.mode, instruction.register, {
+            state: this.state,
+            bus: this.bus,
+            stream,
+            size: instruction.size,
+            access: 'readwrite',
+          });
+          const destinationValue = destination.read();
+          const result =
+            instruction.operation === 'nbcd'
+              ? this.bcdResult(0, destinationValue, true)
+              : subResult(
+                  0,
+                  destinationValue,
+                  instruction.size,
+                  this.state.ccr,
+                  (this.state.ccr & FLAG_X) !== 0 ? 1 : 0,
+                  true
+                );
+          destination.write(result.value);
+          this.state.ccr = result.ccr;
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 8 };
+        }
+        case 'cmpm': {
+          const source = resolveEffectiveAddress(3, instruction.sourceRegister, {
+            state: this.state,
+            bus: this.bus,
+            stream,
+            size: instruction.size,
+            access: 'read',
+          });
+          const sourceValue = source.read();
+          const destination = resolveEffectiveAddress(3, instruction.destinationRegister, {
+            state: this.state,
+            bus: this.bus,
+            stream,
+            size: instruction.size,
+            access: 'read',
+          });
+          const result = compareResult(
+            destination.read(),
+            sourceValue,
+            instruction.size,
+            this.state.ccr
+          );
+          this.state.ccr = result.ccr;
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 12 };
+        }
+        case 'rotate-extend': {
+          const allowed = [
+            'address-indirect',
+            'postincrement',
+            'predecrement',
+            'displacement',
+            'indexed',
+            'absolute-short',
+            'absolute-long',
+          ] as const;
+          if (
+            instruction.memory &&
+            !isEffectiveAddressAllowed(instruction.mode, instruction.register, allowed)
+          ) {
+            return this.faultResult({
+              code: 'illegal-instruction',
+              message: 'Memory ROX requires a memory-alterable operand',
+              vector: 4,
+            });
+          }
+          const destination = resolveEffectiveAddress(
+            instruction.memory ? instruction.mode : 0,
+            instruction.register,
+            {
+              state: this.state,
+              bus: this.bus,
+              stream,
+              size: instruction.size,
+              access: 'readwrite',
+            }
+          );
+          const count =
+            instruction.count.kind === 'register'
+              ? this.state.d[instruction.count.register] & 0x3f
+              : instruction.count.value;
+          const result = this.rotateThroughExtend(
+            destination.read(),
+            instruction.size,
+            count,
+            instruction.direction
+          );
+          destination.write(result.value);
+          this.state.ccr = result.ccr;
+          this.state.pc = stream.cursor;
+          return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 8 + count * 2 };
         }
         case 'rts':
           this.state.pc = this.pop32() & 0x00ff_ffff;

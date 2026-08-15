@@ -51,6 +51,8 @@ describe('MC68000 ISA manifest', () => {
     expect(summary.bySupport['strict-core-partial']).toBeGreaterThan(5);
     expect(summary.bySupport['integrated-needs-audit']).toBe(0);
     expect(summary.bySupport.conformant).toBe(0);
-    expect(summary.bySupport.missing).toBeGreaterThan(30);
+    expect(Object.values(summary.bySupport).reduce((total, count) => total + count, 0)).toBe(
+      summary.totalForms
+    );
   });
 });
