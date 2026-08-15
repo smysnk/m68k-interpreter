@@ -465,7 +465,7 @@ START
     expect(emulator.stepInstruction()).toMatchObject({
       kind: 'executed',
       pcBefore: 0,
-      pcAfter: 4,
+      pcAfter: 6,
     });
     expect(emulator.getRegisters()[8]).toBe(1);
   });
@@ -1288,5 +1288,56 @@ IRQ7_COUNT DC.B 0
     expect(emulator.requestInterruptLevel(3)).toBe('accepted');
     expect(emulator.emulationStep()).toBe(true);
     expect(emulator.getException()).toContain('Invalid or missing IRQ 3 autovector');
+  });
+});
+
+describe('Emulator strict-core facade', () => {
+  const strictSource = `
+    ORG $1000
+START MOVEQ #3,D0
+    ADDI.W #4,D0
+    SUBQ.W #1,D0
+    END START`;
+
+  it('makes the byte core authoritative in MC68000 mode', () => {
+    const emulator = new Emulator(strictSource, { cpuProfile: 'm68000' });
+
+    expect(emulator.getPC()).toBe(0x1000);
+    expect(emulator.stepInstruction()).toMatchObject({ kind: 'executed', pcAfter: 0x1002 });
+    expect(emulator.stepInstruction()).toMatchObject({ kind: 'executed', pcAfter: 0x1006 });
+    expect(emulator.stepInstruction()).toMatchObject({ kind: 'executed', pcAfter: 0x1008 });
+    expect(emulator.getRegisters()[8]).toBe(6);
+    expect(Array.from(emulator.readMemoryRange(0x1000, 8))).toEqual([
+      0x70, 0x03, 0x06, 0x40, 0x00, 0x04, 0x53, 0x40,
+    ]);
+  });
+
+  it('keeps Easy68K trap interception out of strict mode', () => {
+    const emulator = new Emulator(
+      `ORG $1000
+START MOVEQ #1,D0
+      TRAP #15
+      END START`,
+      { cpuProfile: 'm68000' }
+    );
+    emulator.stepInstruction();
+    expect(emulator.stepInstruction()).toMatchObject({
+      kind: 'exception',
+      fault: { code: 'trap', vector: 47 },
+    });
+    expect(emulator.getTerminalText().trim()).toBe('');
+  });
+
+  it('resets and undoes strict state through the compatibility facade', () => {
+    const emulator = new Emulator(strictSource, { cpuProfile: 'm68000' });
+    emulator.stepInstruction();
+    expect(emulator.getRegisters()[8]).toBe(3);
+    emulator.undoFromStack();
+    expect(emulator.getRegisters()[8]).toBe(0);
+    expect(emulator.getPC()).toBe(0x1000);
+    emulator.stepInstruction();
+    emulator.reset();
+    expect(emulator.getRegisters()[8]).toBe(0);
+    expect(emulator.getPC()).toBe(0x1000);
   });
 });

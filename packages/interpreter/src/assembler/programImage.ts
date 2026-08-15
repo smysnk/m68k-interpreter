@@ -9,6 +9,7 @@ export interface ProgramImage {
   bytes: Uint8Array;
   loadAddress: number;
   entryPoint: number;
+  endAddress: number;
   sourceMap: readonly ProgramSourceMapEntry[];
 }
 
@@ -46,6 +47,7 @@ export function createProgramImage(
     bytes,
     loadAddress: origin,
     entryPoint: options.entryPoint ?? origin,
+    endAddress: origin + bytes.length,
     sourceMap,
   };
 }

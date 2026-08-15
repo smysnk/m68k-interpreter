@@ -38,6 +38,7 @@ export class StrictM68000Core {
   readonly profile: CpuProfile;
   private stopped = false;
   private pendingInterruptLevel = 0;
+  private programEndAddress: number | undefined;
 
   constructor(options: StrictM68000CoreOptions = {}) {
     this.bus = options.bus ?? new RamBus();
@@ -46,11 +47,10 @@ export class StrictM68000Core {
   }
 
   loadProgram(image: ProgramImage): void {
-    if (!(this.bus instanceof RamBus)) {
-      throw new TypeError('loadProgram requires a RamBus; load custom buses through their own API');
-    }
-    this.bus.load(image.loadAddress, image.bytes);
+    if (this.bus instanceof RamBus) this.bus.load(image.loadAddress, image.bytes);
+    else image.bytes.forEach((byte, offset) => this.bus.write8(image.loadAddress + offset, byte));
     this.state.pc = image.entryPoint;
+    this.programEndAddress = image.endAddress;
   }
 
   private faultResult(fault: CpuFault, stackedPc = this.state.pc): StepResult {
@@ -119,6 +119,10 @@ export class StrictM68000Core {
       throw new RangeError(`Interrupt level must be an integer from 1 through 7: ${level}`);
     }
     this.pendingInterruptLevel = Math.max(this.pendingInterruptLevel, level);
+  }
+
+  isProgramComplete(): boolean {
+    return this.programEndAddress !== undefined && this.state.pc === this.programEndAddress;
   }
 
   private servicePendingInterrupt(): StepResult | undefined {
@@ -339,6 +343,10 @@ export class StrictM68000Core {
         kind: 'halted',
         pc: this.state.pc,
       };
+    }
+
+    if (this.isProgramComplete()) {
+      return { kind: 'completed', pc: this.state.pc };
     }
 
     const pcBefore = this.state.pc >>> 0;
@@ -1142,7 +1150,7 @@ export class StrictM68000Core {
               instruction.operation === 'divs' ? signExtend(source, 2) : source & 0xffff;
             if (divisor === 0) {
               return this.faultResult(
-                { code: 'divide-by-zero', message: 'Division by zero', vector: 5 },
+                { code: 'divide-by-zero', message: 'divide by zero', vector: 5 },
                 stream.cursor
               );
             }

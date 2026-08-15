@@ -156,6 +156,15 @@ export function assembleProgramSource(source: ProgramSource): SourceAssemblyResu
       const [mnemonicToken, operandText] = splitFirst(raw);
       const mnemonic = mnemonicToken.toUpperCase();
       if (mnemonic === 'ORG') cursor = expression(operandText, symbols) ?? cursor;
+      if (
+        mnemonic !== 'END' &&
+        mnemonic !== 'EQU' &&
+        mnemonic !== 'ORG' &&
+        (!isDirective || directiveSize(mnemonic) > 1) &&
+        (cursor & 1) !== 0
+      ) {
+        cursor += 1;
+      }
       instructionAddresses[index] = cursor;
       if (mnemonic === 'END' || mnemonic === 'EQU' || mnemonic === 'ORG') continue;
       if (isDirective) {
@@ -204,6 +213,10 @@ export function assembleProgramSource(source: ProgramSource): SourceAssemblyResu
       continue;
     }
     if (mnemonic === 'END' || mnemonic === 'EQU') continue;
+    if ((!isDirective || directiveSize(mnemonic) > 1) && (cursor & 1) !== 0) {
+      output.set(cursor, 0);
+      cursor += 1;
+    }
     const start = cursor;
     if (isDirective) {
       cursor = emitDirective(output, cursor, mnemonic, operandText, symbols);
@@ -225,6 +238,6 @@ export function assembleProgramSource(source: ProgramSource): SourceAssemblyResu
   return {
     symbols,
     diagnostics,
-    image: { bytes, loadAddress, entryPoint, sourceMap },
+    image: { bytes, loadAddress, entryPoint, endAddress: maximumAddress, sourceMap },
   };
 }

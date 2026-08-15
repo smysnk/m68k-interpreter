@@ -54,8 +54,12 @@ import {
 import type { RuntimeSyncVersions } from '../types/emulator';
 import { enterInterruptStatus, isInterruptLevelEligible, isSupervisorMode } from './statusRegister';
 import { getEasy68kInterruptVectorAddress } from '../devices/easy68kHardware';
-import type { CpuDiagnostic, StepResult } from './execution';
+import type { CpuDiagnostic, CpuFault, StepResult } from './execution';
 import type { CpuProfile } from '../isa/types';
+import { assembleProgramSource } from '../assembler/sourceAssembler';
+import type { ProgramImage, ProgramSourceMapEntry } from '../assembler/programImage';
+import { StrictM68000Core } from '../cpu/core';
+import { BusFault, type MemoryBus } from '../cpu/memoryBus';
 
 // Token type constants
 const TOKEN_IMMEDIATE = 0;
@@ -130,6 +134,9 @@ export class Emulator {
   private pendingExternalInterruptAddress: number | undefined;
   private pendingInterruptLevels = new Set<number>();
   private readonly cpuProfile: CpuProfile;
+  private strictCore: StrictM68000Core | undefined;
+  private strictProgramImage: ProgramImage | undefined;
+  private lastStrictFault: CpuFault | undefined;
   private undoCaptureMode: UndoCaptureMode;
   private undoCheckpointInterval: number;
   private instructionsSinceUndoSnapshot = 0;
@@ -167,6 +174,34 @@ export class Emulator {
     this.memory.setMemory(this.initialMemory);
     this.registers[STACK_POINTER_REGISTER] = DEFAULT_STACK_POINTER;
 
+    if (loadedProgram.exception === undefined && loadedProgram.endPointer !== undefined) {
+      const assembled = assembleProgramSource(program);
+      if (assembled.image === undefined) {
+        this.errors.push(...assembled.diagnostics.map((diagnostic) => diagnostic.message));
+      } else {
+        this.strictProgramImage = assembled.image;
+        this.symbols = Object.fromEntries(
+          Object.keys(loadedProgram.symbols).map((name) => [
+            name,
+            assembled.symbols[name.toLowerCase()] ?? loadedProgram.symbols[name],
+          ])
+        );
+        this.symbolLookup = { ...assembled.symbols };
+        this.strictCore = new StrictM68000Core({
+          bus: this.createStrictMemoryBus(),
+          profile: this.cpuProfile,
+          state: {
+            sr: 0,
+            usp: DEFAULT_STACK_POINTER,
+            ssp: DEFAULT_STACK_POINTER,
+          },
+        });
+        this.strictCore.loadProgram(assembled.image);
+        this.initialMemory = this.memory.getMemory();
+        this.syncStrictStateToFacade();
+      }
+    }
+
     if (loadedProgram.exception) {
       this.exception = loadedProgram.exception;
       return;
@@ -179,6 +214,102 @@ export class Emulator {
 
     this.lastInstruction = this.instructions.length > 0 ? this.instructions[0][0] : '';
     this.resetUndoHistory();
+  }
+
+  private createStrictMemoryBus(): MemoryBus {
+    const ensureAligned = (
+      address: number,
+      size: 1 | 2 | 4,
+      access: 'read' | 'write' | 'fetch'
+    ) => {
+      const normalized = address & 0x00ff_ffff;
+      if (size > 1 && (normalized & 1) !== 0) {
+        throw new BusFault(
+          'address-error',
+          normalized,
+          access,
+          size,
+          `Unaligned ${size * 8}-bit bus access at ${normalized.toString(16)}`
+        );
+      }
+      return normalized;
+    };
+    const compatibilityBus = this.cpuProfile === 'easy68k';
+    return {
+      read8: (address) =>
+        compatibilityBus
+          ? this.readBusByte(ensureAligned(address, 1, 'read'))
+          : this.memory.getByte(ensureAligned(address, 1, 'read')),
+      read16: (address) =>
+        compatibilityBus
+          ? this.readBusWord(ensureAligned(address, 2, 'read'))
+          : this.memory.getWord(ensureAligned(address, 2, 'read')),
+      read32: (address) =>
+        compatibilityBus
+          ? this.readBusLong(ensureAligned(address, 4, 'read'))
+          : this.memory.getLong(ensureAligned(address, 4, 'read')),
+      write8: (address, value) =>
+        compatibilityBus
+          ? this.writeBusByte(ensureAligned(address, 1, 'write'), value)
+          : this.memory.setByte(ensureAligned(address, 1, 'write'), value),
+      write16: (address, value) =>
+        compatibilityBus
+          ? this.writeBusWord(ensureAligned(address, 2, 'write'), value)
+          : this.memory.setWord(ensureAligned(address, 2, 'write'), value),
+      write32: (address, value) =>
+        compatibilityBus
+          ? this.writeBusLong(ensureAligned(address, 4, 'write'), value)
+          : this.memory.setLong(ensureAligned(address, 4, 'write'), value),
+    };
+  }
+
+  private syncStrictStateToFacade(lastInstructionAddress = this.strictCore?.state.pc): void {
+    if (this.strictCore === undefined) return;
+    for (let register = 0; register < 8; register += 1) {
+      this.registers[register] = this.strictCore.state.a[register];
+      this.registers[register + 8] = this.strictCore.state.d[register];
+    }
+    this.pc = this.strictCore.state.pc;
+    this.statusRegister = this.strictCore.state.sr;
+    this.userStackPointer = this.strictCore.state.isSupervisor()
+      ? this.strictCore.state.usp
+      : this.strictCore.state.a[7] >>> 0;
+    this.supervisorStackPointer = this.strictCore.state.isSupervisor()
+      ? this.strictCore.state.a[7] >>> 0
+      : this.strictCore.state.ssp;
+    const sourceMap = this.strictProgramImage?.sourceMap;
+    let source: ProgramSourceMapEntry | undefined;
+    if (sourceMap !== undefined && lastInstructionAddress !== undefined) {
+      let low = 0;
+      let high = sourceMap.length - 1;
+      while (low <= high) {
+        const middle = (low + high) >>> 1;
+        const candidate = sourceMap[middle];
+        if (lastInstructionAddress < candidate.address) high = middle - 1;
+        else if (lastInstructionAddress >= candidate.address + candidate.length) low = middle + 1;
+        else {
+          source = candidate;
+          break;
+        }
+      }
+    }
+    if (source !== undefined) {
+      this.line = source.line;
+      this.lastInstruction =
+        this.clonedInstructions[source.line - 1]?.trim() ?? this.lastInstruction;
+    }
+  }
+
+  private syncFacadeStateToStrict(): void {
+    if (this.strictCore === undefined) return;
+    this.strictCore.state.sr = this.statusRegister;
+    this.strictCore.state.usp = this.userStackPointer;
+    this.strictCore.state.ssp = this.supervisorStackPointer;
+    for (let register = 0; register < 8; register += 1) {
+      this.strictCore.state.a[register] = this.registers[register];
+      this.strictCore.state.d[register] = this.registers[register + 8];
+    }
+    this.strictCore.state.pc = this.pc;
   }
 
   private get ccr(): number {
@@ -252,6 +383,7 @@ export class Emulator {
 
     if (
       before.lastInstruction !== this.lastInstruction ||
+      before.pc !== this.pc ||
       before.line !== this.line ||
       before.halted !== this.halted ||
       before.waitingForInput !== this.waitingForInput
@@ -278,6 +410,13 @@ export class Emulator {
 
   private resolveExternalInterruptAddress(address: number): number | undefined {
     const normalizedAddress = address >>> 0;
+
+    if (
+      this.strictProgramImage?.sourceMap.some((entry) => entry.address === normalizedAddress) ===
+      true
+    ) {
+      return normalizedAddress;
+    }
 
     if (this.isValidHandlerAddress(normalizedAddress)) {
       return normalizedAddress;
@@ -912,6 +1051,10 @@ export class Emulator {
    * Returns true if execution should stop
    */
   emulationStep(): boolean {
+    if (this.strictCore !== undefined) {
+      const result = this.stepStrictCore();
+      return result.kind === 'halted' || result.kind === 'completed' || result.kind === 'exception';
+    }
     const runtimeSyncSnapshot = this.snapshotRuntimeSyncState();
 
     try {
@@ -976,7 +1119,114 @@ export class Emulator {
     }
   }
 
+  private stepStrictCore(): StepResult {
+    if (this.strictCore === undefined) {
+      throw new TypeError('Strict core is not active');
+    }
+    const runtimeSyncSnapshot = this.snapshotRuntimeSyncState();
+    this.syncFacadeStateToStrict();
+    const pcBefore = this.strictCore.state.pc;
+    if (this.halted) return { kind: 'halted', pc: this.strictCore.state.pc };
+    if (this.strictCore.isProgramComplete()) return this.strictCore.step();
+    if (this.cpuProfile === 'easy68k' && this.pendingExternalInterruptAddress !== undefined) {
+      const handlerAddress = this.pendingExternalInterruptAddress;
+      this.pendingExternalInterruptAddress = undefined;
+      this.strictCore.state.a[7] = (this.strictCore.state.a[7] - 4) | 0;
+      this.memory.setLong(this.strictCore.state.a[7] >>> 0, pcBefore);
+      this.strictCore.state.pc = handlerAddress;
+      this.waitingForInput = false;
+      this.pendingInputTask = undefined;
+      this.syncStrictStateToFacade(pcBefore);
+      this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
+      return { kind: 'executed', pcBefore, pcAfter: handlerAddress, cycles: 44 };
+    }
+    if (this.cpuProfile === 'easy68k' && this.waitingForInput) {
+      if (this.inputQueue.length === 0) return { kind: 'waiting', pc: this.strictCore.state.pc };
+      const byte = this.inputQueue.shift() ?? 0;
+      this.strictCore.state.d[0] = (this.strictCore.state.d[0] & 0xffff_ff00) | (byte & 0xff);
+      this.waitingForInput = false;
+      this.pendingInputTask = undefined;
+      this.syncStrictStateToFacade(pcBefore);
+      this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
+      return {
+        kind: 'executed',
+        pcBefore: this.strictCore.state.pc,
+        pcAfter: this.strictCore.state.pc,
+      };
+    }
+    this.maybeCaptureUndoSnapshot();
+    if (this.cpuProfile === 'easy68k') {
+      const missingLevel = [...this.pendingInterruptLevels]
+        .sort((left, right) => right - left)
+        .find((level) => this.memory.getLong(getEasy68kInterruptVectorAddress(level)) === 0);
+      if (missingLevel !== undefined) {
+        this.pendingInterruptLevels.delete(missingLevel);
+        this.exception = `Invalid or missing IRQ ${missingLevel} autovector at $${getEasy68kInterruptVectorAddress(
+          missingLevel
+        )
+          .toString(16)
+          .toUpperCase()}`;
+        const result: StepResult = {
+          kind: 'exception',
+          pc: pcBefore,
+          fault: { code: 'missing-autovector', message: this.exception },
+        };
+        this.lastStrictFault = result.fault;
+        this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
+        return result;
+      }
+    }
+    for (const level of this.pendingInterruptLevels) this.strictCore.requestInterrupt(level);
+    this.pendingInterruptLevels.clear();
+    const result = this.handleStrictEasy68kTrap() ?? this.strictCore.step();
+    this.lastStrictFault = result.kind === 'exception' ? result.fault : undefined;
+    this.halted = result.kind === 'halted';
+    this.syncStrictStateToFacade(pcBefore);
+    this.markUndoProgress();
+    this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
+    return result;
+  }
+
+  private handleStrictEasy68kTrap(): StepResult | undefined {
+    if (this.strictCore === undefined || this.cpuProfile !== 'easy68k') return undefined;
+    const pcBefore = this.strictCore.state.pc >>> 0;
+    const opcode = this.memory.getWord(pcBefore);
+    if ((opcode & 0xfff0) !== 0x4e40) return undefined;
+    const vector = opcode & 0x0f;
+    const task = this.memory.getWord(pcBefore + 2);
+    const pcAfter = (pcBefore + 4) & 0x00ff_ffff;
+
+    if (vector === 11 && task === 0) {
+      this.strictCore.state.pc = pcAfter;
+      this.halted = true;
+      return { kind: 'halted', pc: pcAfter };
+    }
+    if (vector !== 15) return undefined;
+    if (task === 1) {
+      this.terminal.writeByte(this.strictCore.state.d[0] & 0xff);
+    } else if (task === 3) {
+      this.strictCore.state.pc = pcAfter;
+      if (this.inputQueue.length === 0) {
+        this.waitingForInput = true;
+        this.pendingInputTask = task;
+        return { kind: 'waiting', pc: pcAfter };
+      }
+      const byte = this.inputQueue.shift() ?? 0;
+      this.strictCore.state.d[0] = (this.strictCore.state.d[0] & 0xffff_ff00) | (byte & 0xff);
+    } else if (task === 4) {
+      this.strictCore.state.ccr =
+        this.inputQueue.length > 0
+          ? this.strictCore.state.ccr & ~0x04
+          : this.strictCore.state.ccr | 0x04;
+    } else {
+      return undefined;
+    }
+    this.strictCore.state.pc = pcAfter;
+    return { kind: 'executed', pcBefore, pcAfter, cycles: 4 };
+  }
+
   stepInstruction(): StepResult {
+    if (this.strictCore !== undefined) return this.stepStrictCore();
     const pcBefore = this.pc;
     const shouldStop = this.emulationStep();
 
@@ -2211,6 +2461,7 @@ export class Emulator {
 
     const runtimeSyncSnapshot = this.snapshotRuntimeSyncState();
     this.registers[register] = value | 0;
+    this.syncFacadeStateToStrict();
     this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
   }
 
@@ -2268,6 +2519,9 @@ export class Emulator {
   }
 
   readMemoryRange(address: number, length: number): Uint8Array {
+    if (this.strictCore !== undefined && this.cpuProfile !== 'easy68k') {
+      return this.memory.readRange(address, length);
+    }
     return Uint8Array.from({ length }, (_, index) => this.readBusByte(address + index));
   }
 
@@ -2341,15 +2595,21 @@ export class Emulator {
   }
 
   writeMemoryByte(address: number, value: number): void {
-    this.writeBusByte(address, value);
+    if (this.strictCore !== undefined && this.cpuProfile !== 'easy68k') {
+      this.memory.setByte(address, value);
+    } else this.writeBusByte(address, value);
   }
 
   writeMemoryWord(address: number, value: number): void {
-    this.writeBusWord(address, value);
+    if (this.strictCore !== undefined && this.cpuProfile !== 'easy68k') {
+      this.memory.setWord(address, value);
+    } else this.writeBusWord(address, value);
   }
 
   writeMemoryLong(address: number, value: number): void {
-    this.writeBusLong(address, value);
+    if (this.strictCore !== undefined && this.cpuProfile !== 'easy68k') {
+      this.memory.setLong(address, value);
+    } else this.writeBusLong(address, value);
   }
 
   raiseExternalInterrupt(handlerAddress: number): boolean {
@@ -2446,6 +2706,17 @@ export class Emulator {
   }
 
   getDiagnostics(): CpuDiagnostic[] {
+    if (this.lastStrictFault !== undefined) {
+      return [
+        {
+          code: this.lastStrictFault.code,
+          severity: 'error',
+          message: this.lastStrictFault.message,
+          source: this.line > 0 ? { line: this.line } : undefined,
+          instructionAddress: this.pc,
+        },
+      ];
+    }
     const diagnostics = this.errors.map((message): CpuDiagnostic => ({
       code: 'legacy-execution-error',
       severity: 'error',
@@ -2468,7 +2739,7 @@ export class Emulator {
   }
 
   getException(): string | undefined {
-    return this.exception;
+    return this.exception ?? this.lastStrictFault?.message;
   }
 
   getCpuProfile(): CpuProfile {
@@ -2523,6 +2794,8 @@ export class Emulator {
     this.halted = false;
     this.pendingInputTask = undefined;
     this.instructionsSinceUndoSnapshot = 0;
+    this.lastStrictFault = undefined;
+    this.syncFacadeStateToStrict();
     this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
   }
 
@@ -2551,6 +2824,16 @@ export class Emulator {
     this.exception = undefined;
     this.errors = [];
     this.line = 0;
+    this.lastStrictFault = undefined;
+    if (this.strictProgramImage !== undefined) {
+      this.strictCore = new StrictM68000Core({
+        bus: this.createStrictMemoryBus(),
+        profile: this.cpuProfile,
+        state: { sr: 0, usp: DEFAULT_STACK_POINTER, ssp: DEFAULT_STACK_POINTER },
+      });
+      this.strictCore.loadProgram(this.strictProgramImage);
+      this.syncStrictStateToFacade();
+    }
     this.resetUndoHistory();
     this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
   }
