@@ -19,7 +19,15 @@ import {
   type PanelKind,
 } from '@/store';
 
-export default function NavbarViewMenu(): React.ReactElement {
+interface NavbarViewMenuProps {
+  embedded?: boolean;
+  onSelect?: () => void;
+}
+
+export default function NavbarViewMenu({
+  embedded = false,
+  onSelect,
+}: NavbarViewMenuProps): React.ReactElement {
   const dispatch = useDispatch<AppDispatch>();
   const {
     activeLayout: layout,
@@ -82,13 +90,19 @@ export default function NavbarViewMenu(): React.ReactElement {
 
   const toggle = (): void => {
     const nextOpen = !open;
-    if (nextOpen) dispatch(closeAppMenu());
+    if (nextOpen && !embedded) dispatch(closeAppMenu());
     setActiveSubmenu(null);
     setOpen(nextOpen);
+  };
+  const openEmbeddedMenu = (): void => {
+    if (!embedded) return;
+    setActiveSubmenu(null);
+    setOpen(true);
   };
   const closeMenu = (): void => {
     setActiveSubmenu(null);
     setOpen(false);
+    onSelect?.();
   };
   const chooseColumnCount = (count: number): void => {
     dispatch(setColumnCount(count));
@@ -120,260 +134,313 @@ export default function NavbarViewMenu(): React.ReactElement {
   };
 
   return (
-    <div className="navbar-menu-wrap navbar-view-menu-wrap">
+    <div
+      className={`navbar-menu-wrap navbar-view-menu-wrap ${embedded ? 'navbar-view-menu-wrap-embedded' : ''}`.trim()}
+    >
       <button
         aria-controls="navbar-view-menu"
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label="Open view menu"
-        className={`btn-toolbar navbar-menu-button navbar-view-menu-button ${open ? 'active' : ''}`}
-        data-testid="navbar-view-menu-button"
-        onClick={toggle}
+        aria-label={embedded ? 'View' : 'Open view menu'}
+        className={
+          embedded
+            ? `navbar-menu-item ${open ? 'active' : ''}`
+            : `btn-toolbar navbar-menu-button navbar-view-menu-button ${open ? 'active' : ''}`
+        }
+        data-testid={embedded ? 'navbar-view-menu-item' : 'navbar-view-menu-button'}
+        onClick={embedded ? openEmbeddedMenu : toggle}
+        onFocus={embedded ? openEmbeddedMenu : undefined}
+        onMouseEnter={embedded ? openEmbeddedMenu : undefined}
         ref={buttonRef}
+        role={embedded ? 'menuitem' : undefined}
         type="button"
       >
-        <FontAwesomeIcon icon={faTableColumns} size="sm" />
-        <span>View</span>
+        {embedded ? (
+          <>
+            <span className="navbar-menu-copy">
+              <span className="navbar-menu-title">View</span>
+              <span className="navbar-menu-subtitle">Panels, columns, and layouts</span>
+            </span>
+            <span className="navbar-menu-meta">
+              <FontAwesomeIcon icon={faChevronRight} size="sm" />
+            </span>
+          </>
+        ) : (
+          <>
+            <FontAwesomeIcon icon={faTableColumns} size="sm" />
+            <span>View</span>
+          </>
+        )}
       </button>
       {open
-        ? createPortal(
-            <div
-              aria-label="View options"
-              className="navbar-menu navbar-view-menu"
-              data-testid="navbar-view-menu"
-              id="navbar-view-menu"
-              ref={layerRef}
-              role="menu"
-              style={{
-                top: position.top,
-                left: position.left,
-                maxWidth: `${position.maxWidth}px`,
-              }}
-            >
-              <button
-                aria-controls="navbar-view-columns-submenu"
-                aria-expanded={activeSubmenu === 'columns'}
-                aria-haspopup="menu"
-                aria-label="Columns"
-                className={`navbar-menu-item ${activeSubmenu === 'columns' ? 'active' : ''}`}
-                onClick={() => setActiveSubmenu('columns')}
-                onFocus={() => setActiveSubmenu('columns')}
-                onMouseEnter={() => setActiveSubmenu('columns')}
-                role="menuitem"
-                type="button"
+        ? (() => {
+            const viewMenu = (
+              <div
+                aria-label="View options"
+                className={
+                  embedded
+                    ? `navbar-submenu navbar-view-menu navbar-submenu-${position.submenuDirection}`
+                    : 'navbar-menu navbar-view-menu'
+                }
+                data-testid="navbar-view-menu"
+                id="navbar-view-menu"
+                ref={layerRef}
+                role="menu"
+                style={
+                  embedded
+                    ? undefined
+                    : {
+                        top: position.top,
+                        left: position.left,
+                        maxWidth: `${position.maxWidth}px`,
+                      }
+                }
               >
-                <span className="navbar-menu-copy">
-                  <span className="navbar-menu-title">Columns</span>
-                  <span className="navbar-menu-subtitle">
-                    {layout.columnCount} {layout.columnCount === 1 ? 'column' : 'columns'}
-                  </span>
-                </span>
-                <span className="navbar-menu-meta">
-                  <FontAwesomeIcon icon={faChevronRight} size="sm" />
-                </span>
-              </button>
-              <button
-                aria-controls="navbar-view-add-panel-submenu"
-                aria-expanded={activeSubmenu === 'add-panel'}
-                aria-haspopup="menu"
-                aria-label="Add Panel"
-                className={`navbar-menu-item ${activeSubmenu === 'add-panel' ? 'active' : ''}`}
-                onClick={() => setActiveSubmenu('add-panel')}
-                onFocus={() => setActiveSubmenu('add-panel')}
-                onMouseEnter={() => setActiveSubmenu('add-panel')}
-                role="menuitem"
-                type="button"
-              >
-                <span className="navbar-menu-copy">
-                  <span className="navbar-menu-title">Add Panel</span>
-                  <span className="navbar-menu-subtitle">Choose a panel type</span>
-                </span>
-                <span className="navbar-menu-meta">
-                  <FontAwesomeIcon icon={faChevronRight} size="sm" />
-                </span>
-              </button>
-              <button
-                aria-controls="navbar-view-layouts-submenu"
-                aria-expanded={activeSubmenu === 'layouts'}
-                aria-haspopup="menu"
-                aria-label="Layouts"
-                className={`navbar-menu-item ${activeSubmenu === 'layouts' ? 'active' : ''}`}
-                onClick={() => setActiveSubmenu('layouts')}
-                onFocus={() => setActiveSubmenu('layouts')}
-                onMouseEnter={() => setActiveSubmenu('layouts')}
-                role="menuitem"
-                type="button"
-              >
-                <span className="navbar-menu-copy">
-                  <span className="navbar-menu-title">Layouts</span>
-                  <span className="navbar-menu-subtitle">
-                    {layout.name}{activeLayoutDirty ? ' (modified)' : ''}
-                  </span>
-                </span>
-                <span className="navbar-menu-meta">
-                  <FontAwesomeIcon icon={faChevronRight} size="sm" />
-                </span>
-              </button>
-              <button
-                aria-controls="navbar-view-saved-views-submenu"
-                aria-expanded={activeSubmenu === 'saved-views'}
-                aria-haspopup="menu"
-                aria-label="Saved Views"
-                className={`navbar-menu-item ${activeSubmenu === 'saved-views' ? 'active' : ''}`}
-                onClick={() => setActiveSubmenu('saved-views')}
-                onFocus={() => setActiveSubmenu('saved-views')}
-                onMouseEnter={() => setActiveSubmenu('saved-views')}
-                role="menuitem"
-                type="button"
-              >
-                <span className="navbar-menu-copy">
-                  <span className="navbar-menu-title">Saved Views</span>
-                  <span className="navbar-menu-subtitle">
-                    {userViewOrder.length
-                      ? `${userViewOrder.length} saved ${userViewOrder.length === 1 ? 'view' : 'views'}`
-                      : 'Save or restore a workspace'}
-                  </span>
-                </span>
-                <span className="navbar-menu-meta">
-                  <FontAwesomeIcon icon={faChevronRight} size="sm" />
-                </span>
-              </button>
-
-              {activeSubmenu === 'columns' ? (
-                <div
-                  aria-label="Column count"
-                  className={`navbar-submenu navbar-view-submenu navbar-submenu-${position.submenuDirection}`}
-                  data-testid="navbar-view-columns-submenu"
-                  id="navbar-view-columns-submenu"
-                  role="menu"
+                <button
+                  aria-controls="navbar-view-columns-submenu"
+                  aria-expanded={activeSubmenu === 'columns'}
+                  aria-haspopup="menu"
+                  aria-label="Columns"
+                  className={`navbar-menu-item ${activeSubmenu === 'columns' ? 'active' : ''}`}
+                  onClick={() => setActiveSubmenu('columns')}
+                  onFocus={() => setActiveSubmenu('columns')}
+                  onMouseEnter={() => setActiveSubmenu('columns')}
+                  role="menuitem"
+                  type="button"
                 >
-                  <span className="navbar-view-menu-heading">Column count</span>
-                  <div className="navbar-view-menu-columns">
-                  {[1, 2, 3, 4].map((count) => (
-                    <button
-                      aria-checked={layout.columnCount === count}
-                      aria-label={`${count} ${count === 1 ? 'column' : 'columns'}`}
-                      className={`navbar-view-column-item ${layout.columnCount === count ? 'active' : ''}`}
-                      key={count}
-                      onClick={() => chooseColumnCount(count)}
-                      role="menuitemradio"
-                      type="button"
-                    >
-                      <span>{count}</span>
-                      {layout.columnCount === count ? <FontAwesomeIcon icon={faCheck} size="xs" /> : null}
-                    </button>
-                  ))}
+                  <span className="navbar-menu-copy">
+                    <span className="navbar-menu-title">Columns</span>
+                    <span className="navbar-menu-subtitle">
+                      {layout.columnCount} {layout.columnCount === 1 ? 'column' : 'columns'}
+                    </span>
+                  </span>
+                  <span className="navbar-menu-meta">
+                    <FontAwesomeIcon icon={faChevronRight} size="sm" />
+                  </span>
+                </button>
+                <button
+                  aria-controls="navbar-view-add-panel-submenu"
+                  aria-expanded={activeSubmenu === 'add-panel'}
+                  aria-haspopup="menu"
+                  aria-label="Add Panel"
+                  className={`navbar-menu-item ${activeSubmenu === 'add-panel' ? 'active' : ''}`}
+                  onClick={() => setActiveSubmenu('add-panel')}
+                  onFocus={() => setActiveSubmenu('add-panel')}
+                  onMouseEnter={() => setActiveSubmenu('add-panel')}
+                  role="menuitem"
+                  type="button"
+                >
+                  <span className="navbar-menu-copy">
+                    <span className="navbar-menu-title">Add Panel</span>
+                    <span className="navbar-menu-subtitle">Choose a panel type</span>
+                  </span>
+                  <span className="navbar-menu-meta">
+                    <FontAwesomeIcon icon={faChevronRight} size="sm" />
+                  </span>
+                </button>
+                <button
+                  aria-controls="navbar-view-layouts-submenu"
+                  aria-expanded={activeSubmenu === 'layouts'}
+                  aria-haspopup="menu"
+                  aria-label="Layouts"
+                  className={`navbar-menu-item ${activeSubmenu === 'layouts' ? 'active' : ''}`}
+                  onClick={() => setActiveSubmenu('layouts')}
+                  onFocus={() => setActiveSubmenu('layouts')}
+                  onMouseEnter={() => setActiveSubmenu('layouts')}
+                  role="menuitem"
+                  type="button"
+                >
+                  <span className="navbar-menu-copy">
+                    <span className="navbar-menu-title">Layouts</span>
+                    <span className="navbar-menu-subtitle">
+                      {layout.name}
+                      {activeLayoutDirty ? ' (modified)' : ''}
+                    </span>
+                  </span>
+                  <span className="navbar-menu-meta">
+                    <FontAwesomeIcon icon={faChevronRight} size="sm" />
+                  </span>
+                </button>
+                <button
+                  aria-controls="navbar-view-saved-views-submenu"
+                  aria-expanded={activeSubmenu === 'saved-views'}
+                  aria-haspopup="menu"
+                  aria-label="Saved Views"
+                  className={`navbar-menu-item ${activeSubmenu === 'saved-views' ? 'active' : ''}`}
+                  onClick={() => setActiveSubmenu('saved-views')}
+                  onFocus={() => setActiveSubmenu('saved-views')}
+                  onMouseEnter={() => setActiveSubmenu('saved-views')}
+                  role="menuitem"
+                  type="button"
+                >
+                  <span className="navbar-menu-copy">
+                    <span className="navbar-menu-title">Saved Views</span>
+                    <span className="navbar-menu-subtitle">
+                      {userViewOrder.length
+                        ? `${userViewOrder.length} saved ${userViewOrder.length === 1 ? 'view' : 'views'}`
+                        : 'Save or restore a workspace'}
+                    </span>
+                  </span>
+                  <span className="navbar-menu-meta">
+                    <FontAwesomeIcon icon={faChevronRight} size="sm" />
+                  </span>
+                </button>
+
+                {activeSubmenu === 'columns' ? (
+                  <div
+                    aria-label="Column count"
+                    className={`navbar-submenu navbar-view-submenu navbar-submenu-${position.submenuDirection}`}
+                    data-testid="navbar-view-columns-submenu"
+                    id="navbar-view-columns-submenu"
+                    role="menu"
+                  >
+                    <span className="navbar-view-menu-heading">Column count</span>
+                    <div className="navbar-view-menu-columns">
+                      {[1, 2, 3, 4].map((count) => (
+                        <button
+                          aria-checked={layout.columnCount === count}
+                          aria-label={`${count} ${count === 1 ? 'column' : 'columns'}`}
+                          className={`navbar-view-column-item ${layout.columnCount === count ? 'active' : ''}`}
+                          key={count}
+                          onClick={() => chooseColumnCount(count)}
+                          role="menuitemradio"
+                          type="button"
+                        >
+                          <span>{count}</span>
+                          {layout.columnCount === count ? (
+                            <FontAwesomeIcon icon={faCheck} size="xs" />
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ) : null}
+                ) : null}
 
-              {activeSubmenu === 'add-panel' ? (
-                <div
-                  aria-label="Add panel"
-                  className={`navbar-submenu navbar-view-submenu navbar-submenu-${position.submenuDirection}`}
-                  data-testid="navbar-view-add-panel-submenu"
-                  id="navbar-view-add-panel-submenu"
-                  role="menu"
-                >
-                  <PanelKindMenuItems onSelect={addPanel} />
-                </div>
-              ) : null}
+                {activeSubmenu === 'add-panel' ? (
+                  <div
+                    aria-label="Add panel"
+                    className={`navbar-submenu navbar-view-submenu navbar-submenu-${position.submenuDirection}`}
+                    data-testid="navbar-view-add-panel-submenu"
+                    id="navbar-view-add-panel-submenu"
+                    role="menu"
+                  >
+                    <PanelKindMenuItems onSelect={addPanel} />
+                  </div>
+                ) : null}
 
-              {activeSubmenu === 'layouts' ? (
-                <div
-                  aria-label="Workspace layouts"
-                  className={`navbar-submenu navbar-view-submenu navbar-submenu-${position.submenuDirection}`}
-                  data-testid="navbar-view-layouts-submenu"
-                  id="navbar-view-layouts-submenu"
-                  role="menu"
-                >
-                  {PANEL_PRESETS.map((preset) => (
+                {activeSubmenu === 'layouts' ? (
+                  <div
+                    aria-label="Workspace layouts"
+                    className={`navbar-submenu navbar-view-submenu navbar-submenu-${position.submenuDirection}`}
+                    data-testid="navbar-view-layouts-submenu"
+                    id="navbar-view-layouts-submenu"
+                    role="menu"
+                  >
+                    {PANEL_PRESETS.map((preset) => (
+                      <button
+                        aria-label={`Apply ${preset.name} layout`}
+                        className="navbar-menu-item"
+                        key={preset.id}
+                        onClick={() => applyPreset(preset.id)}
+                        role="menuitem"
+                        type="button"
+                      >
+                        <span className="navbar-menu-copy">
+                          <span className="navbar-menu-title">{preset.name}</span>
+                          <span className="navbar-menu-subtitle">{preset.description}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {activeSubmenu === 'saved-views' ? (
+                  <div
+                    aria-label="Saved workspace views"
+                    className={`navbar-submenu navbar-view-submenu navbar-submenu-${position.submenuDirection}`}
+                    data-testid="navbar-view-saved-views-submenu"
+                    id="navbar-view-saved-views-submenu"
+                    role="menu"
+                  >
+                    {activeSourceViewId && userViews[activeSourceViewId] && activeLayoutDirty ? (
+                      <button
+                        className="navbar-menu-item"
+                        onClick={saveCurrentView}
+                        role="menuitem"
+                        type="button"
+                      >
+                        <span className="navbar-menu-copy">
+                          <span className="navbar-menu-title">Save current view</span>
+                          <span className="navbar-menu-subtitle">
+                            Update {userViews[activeSourceViewId].name}
+                          </span>
+                        </span>
+                      </button>
+                    ) : null}
                     <button
-                      aria-label={`Apply ${preset.name} layout`}
                       className="navbar-menu-item"
-                      key={preset.id}
-                      onClick={() => applyPreset(preset.id)}
+                      onClick={saveViewAs}
                       role="menuitem"
                       type="button"
                     >
                       <span className="navbar-menu-copy">
-                        <span className="navbar-menu-title">{preset.name}</span>
-                        <span className="navbar-menu-subtitle">{preset.description}</span>
+                        <span className="navbar-menu-title">Save view as…</span>
+                        <span className="navbar-menu-subtitle">
+                          Create a reusable workspace view
+                        </span>
                       </span>
                     </button>
-                  ))}
-                </div>
-              ) : null}
+                    {userViewOrder.length ? (
+                      <span className="navbar-view-menu-subheading">Saved views</span>
+                    ) : (
+                      <span className="navbar-view-menu-empty">No saved views yet</span>
+                    )}
+                    {userViewOrder.map((id) => {
+                      const view = userViews[id];
+                      if (!view) return null;
+                      return (
+                        <span className="navbar-view-saved-row" key={id}>
+                          <button
+                            aria-current={activeSourceViewId === id}
+                            aria-label={`Restore ${view.name} layout`}
+                            className="navbar-menu-item"
+                            onClick={() => restoreSavedView(id)}
+                            role="menuitem"
+                            type="button"
+                          >
+                            <span className="navbar-menu-copy">
+                              <span className="navbar-menu-title">{view.name}</span>
+                            </span>
+                          </button>
+                          <button
+                            aria-label={`Rename ${view.name}`}
+                            className="navbar-view-row-action"
+                            onClick={() => {
+                              const name = window.prompt('Rename workspace view', view.name);
+                              if (name) dispatch(renameView({ viewId: id, name }));
+                            }}
+                            type="button"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            aria-label={`Delete ${view.name}`}
+                            className="navbar-view-row-action"
+                            onClick={() => dispatch(deleteView(id))}
+                            type="button"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            );
 
-              {activeSubmenu === 'saved-views' ? (
-                <div
-                  aria-label="Saved workspace views"
-                  className={`navbar-submenu navbar-view-submenu navbar-submenu-${position.submenuDirection}`}
-                  data-testid="navbar-view-saved-views-submenu"
-                  id="navbar-view-saved-views-submenu"
-                  role="menu"
-                >
-                  {activeSourceViewId && userViews[activeSourceViewId] && activeLayoutDirty ? (
-                    <button className="navbar-menu-item" onClick={saveCurrentView} role="menuitem" type="button">
-                      <span className="navbar-menu-copy">
-                        <span className="navbar-menu-title">Save current view</span>
-                        <span className="navbar-menu-subtitle">Update {userViews[activeSourceViewId].name}</span>
-                      </span>
-                    </button>
-                  ) : null}
-                  <button className="navbar-menu-item" onClick={saveViewAs} role="menuitem" type="button">
-                    <span className="navbar-menu-copy">
-                      <span className="navbar-menu-title">Save view as…</span>
-                      <span className="navbar-menu-subtitle">Create a reusable workspace view</span>
-                    </span>
-                  </button>
-                  {userViewOrder.length ? <span className="navbar-view-menu-subheading">Saved views</span> : (
-                    <span className="navbar-view-menu-empty">No saved views yet</span>
-                  )}
-                  {userViewOrder.map((id) => {
-                    const view = userViews[id];
-                    if (!view) return null;
-                    return (
-                      <span className="navbar-view-saved-row" key={id}>
-                        <button
-                          aria-current={activeSourceViewId === id}
-                          aria-label={`Restore ${view.name} layout`}
-                          className="navbar-menu-item"
-                          onClick={() => restoreSavedView(id)}
-                          role="menuitem"
-                          type="button"
-                        >
-                          <span className="navbar-menu-copy">
-                            <span className="navbar-menu-title">{view.name}</span>
-                          </span>
-                        </button>
-                        <button
-                          aria-label={`Rename ${view.name}`}
-                          className="navbar-view-row-action"
-                          onClick={() => {
-                            const name = window.prompt('Rename workspace view', view.name);
-                            if (name) dispatch(renameView({ viewId: id, name }));
-                          }}
-                          type="button"
-                        >
-                          ✎
-                        </button>
-                        <button
-                          aria-label={`Delete ${view.name}`}
-                          className="navbar-view-row-action"
-                          onClick={() => dispatch(deleteView(id))}
-                          type="button"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>,
-            document.body,
-          )
+            return embedded ? viewMenu : createPortal(viewMenu, document.body);
+          })()
         : null}
     </div>
   );

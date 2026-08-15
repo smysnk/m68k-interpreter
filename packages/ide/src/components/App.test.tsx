@@ -4,7 +4,14 @@ import App, { AppShell } from './App';
 import FileExplorerSidebar from './FileExplorerSidebar';
 import { nibblesSource } from '@/programs/nibbles';
 import { useEmulatorStore } from '@/stores/emulatorStore';
-import { createIdeStore, ideStore, resetFilesState, resetSettingsState, resetToPreset, setActiveFile } from '@/store';
+import {
+  createIdeStore,
+  ideStore,
+  resetFilesState,
+  resetSettingsState,
+  resetToPreset,
+  setActiveFile,
+} from '@/store';
 import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
 import { IDE_PERSISTENCE_KEY } from '@/store/persistence';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
@@ -12,15 +19,6 @@ import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
 vi.mock('@vercel/analytics/react', () => ({
   Analytics: () => null,
 }));
-
-function openAppMenu(): void {
-  fireEvent.click(screen.getByRole('button', { name: /open app menu/i }));
-}
-
-function openStyleMenu(): void {
-  openAppMenu();
-  fireEvent.click(screen.getByRole('menuitem', { name: /style/i }));
-}
 
 function mockSystemTheme(theme: 'light' | 'dark'): void {
   Object.defineProperty(window, 'matchMedia', {
@@ -49,6 +47,11 @@ function setViewportWidth(width: number): void {
   window.dispatchEvent(new Event('resize'));
 }
 
+function openViewMenu(): void {
+  fireEvent.click(screen.getByRole('button', { name: /open app menu/i }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^view$/i }));
+}
+
 describe('App', () => {
   beforeEach(() => {
     mockSystemTheme('light');
@@ -64,10 +67,10 @@ describe('App', () => {
 
   it('loads the selected sidebar file into the editor', async () => {
     const store = createIdeStore();
+    const closeSidebar = vi.fn();
 
-    renderWithIdeProviders(<FileExplorerSidebar />, { store });
+    renderWithIdeProviders(<FileExplorerSidebar open onClose={closeSidebar} />, { store });
 
-    fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
     fireEvent.click(await screen.findByRole('button', { name: /scratch\.asm/i }));
 
     await waitFor(() => {
@@ -76,7 +79,6 @@ describe('App', () => {
       expect(store.getState().emulator.editorCode).toContain('Write your M68K assembly code here');
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
     fireEvent.click(await screen.findByRole('button', { name: /nibbles\.asm/i }));
 
     await waitFor(() => {
@@ -84,12 +86,30 @@ describe('App', () => {
       expect(window.editorCode).toContain('END NIBBLES');
     });
 
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /open file explorer/i })).toHaveAttribute(
-        'aria-expanded',
-        'false'
-      );
-    });
+    expect(closeSidebar).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens the file explorer from the navbar brand and dismisses it from outside', () => {
+    render(<App />);
+
+    const trigger = screen.getByRole('button', { name: /open file explorer/i });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByLabelText('File explorer')).toHaveAttribute('aria-hidden', 'true');
+
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole('button', { name: /close file explorer/i })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    expect(screen.getByLabelText('File explorer')).toHaveAttribute('aria-hidden', 'false');
+
+    fireEvent.pointerDown(screen.getByTestId('desktop-workspace-shell'));
+
+    expect(screen.getByRole('button', { name: /open file explorer/i })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
   });
 
   it('omits the compact workspace switcher from the desktop navbar', () => {
@@ -106,7 +126,10 @@ describe('App', () => {
     render(<App />);
 
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-shell-mode', 'mobile');
-    expect(screen.getByTestId('app-container')).toHaveAttribute('data-terminal-view-mode', 'focused');
+    expect(screen.getByTestId('app-container')).toHaveAttribute(
+      'data-terminal-view-mode',
+      'focused'
+    );
     expect(screen.queryByTestId('resize-handle-root')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Interpreter engine')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Open file explorer')).not.toBeInTheDocument();
@@ -115,18 +138,23 @@ describe('App', () => {
     expect(screen.getByRole('tab', { name: /registers/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: /registers/i }));
 
-    expect(screen.getByTestId('app-container')).toHaveAttribute('data-terminal-view-mode', 'standard');
+    expect(screen.getByTestId('app-container')).toHaveAttribute(
+      'data-terminal-view-mode',
+      'standard'
+    );
     expect(screen.queryByRole('tablist', { name: 'Open panels' })).not.toBeInTheDocument();
     expect(screen.getByText('Flags')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    openViewMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: /^add panel$/i }));
     expect(screen.getByRole('menuitem', { name: /add memory panel/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /add seven-segment display panel/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitem', { name: /add seven-segment display panel/i })
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('menuitem', { name: /add memory panel/i }));
 
     expect(screen.getByLabelText('Start Address')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    openViewMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: /^add panel$/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /add seven-segment display panel/i }));
 
@@ -144,7 +172,7 @@ describe('App', () => {
 
     render(<App />);
 
-    fireEvent.mouseEnter(screen.getByRole('button', { name: /open file explorer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
     fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
 
     const layout = ideStore.getState().panelLayout.activeLayout;
@@ -155,11 +183,11 @@ describe('App', () => {
   it('adds registers, memory, and hardware as independent panel instances', () => {
     render(<App />);
     expect(screen.getAllByText('Flags').length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    openViewMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: /^add panel$/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /add memory panel/i }));
     expect(screen.getByLabelText('Start Address')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /open view menu/i }));
+    openViewMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: /^add panel$/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /add seven-segment display panel/i }));
     expect(screen.getByTestId(/hardware-display-device-/)).toBeInTheDocument();
@@ -212,7 +240,9 @@ describe('App', () => {
 
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-theme', 'dark');
     expect(store.getState().panelLayout.activeLayout.columns).toHaveLength(3);
-    expect(Object.values(store.getState().panelLayout.activeLayout.instances).map((panel) => panel.kind)).toEqual(['code', 'memory', 'help']);
+    expect(
+      Object.values(store.getState().panelLayout.activeLayout.instances).map((panel) => panel.kind)
+    ).toEqual(['code', 'memory', 'help']);
     expect(screen.getByRole('heading', { name: 'Help' })).toBeVisible();
     expect(store.getState().files.activeFileId).toBe('example:nibbles.asm');
     expect(store.getState().emulator.editorCode).toBe(nibblesSource);
@@ -225,27 +255,37 @@ describe('App', () => {
 
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-theme', 'dark');
     expect(document.documentElement.dataset.theme).toBe('dark');
-    expect(document.querySelector('.terminal-container')).toHaveAttribute('data-terminal-theme', 'dark');
-    expect(document.querySelector('.retro-screen')).toHaveAttribute('data-display-surface-mode', 'dark');
+    expect(document.querySelector('.terminal-container')).toHaveAttribute(
+      'data-terminal-theme',
+      'dark'
+    );
+    expect(document.querySelector('.retro-screen')).toHaveAttribute(
+      'data-display-surface-mode',
+      'dark'
+    );
     expect(screen.getByRole('button', { name: /open app menu/i })).toBeInTheDocument();
     expect(screen.queryByText(/Engine:/)).not.toBeInTheDocument();
   });
 
-  it('lets the app menu style selector switch the whole IDE theme', () => {
+  it('lets the navbar theme toggle switch the whole IDE theme', () => {
     mockSystemTheme('dark');
 
     render(<App />);
 
-    openStyleMenu();
-    fireEvent.click(screen.getByRole('menuitem', { name: /m68k light/i }));
+    fireEvent.click(screen.getByRole('button', { name: /switch to light mode/i }));
 
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-theme', 'light');
     expect(document.documentElement.dataset.theme).toBe('light');
-    expect(document.querySelector('.terminal-container')).toHaveAttribute('data-terminal-theme', 'light');
-    expect(document.querySelector('.retro-screen')).toHaveAttribute('data-display-surface-mode', 'light');
+    expect(document.querySelector('.terminal-container')).toHaveAttribute(
+      'data-terminal-theme',
+      'light'
+    );
+    expect(document.querySelector('.retro-screen')).toHaveAttribute(
+      'data-display-surface-mode',
+      'light'
+    );
 
-    openStyleMenu();
-    fireEvent.click(screen.getByRole('menuitem', { name: /m68k dark/i }));
+    fireEvent.click(screen.getByRole('button', { name: /switch to dark mode/i }));
 
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-theme', 'dark');
     expect(document.documentElement.dataset.theme).toBe('dark');

@@ -75,17 +75,23 @@ async function loadAndRun(page: Page, source: string, expectedSymbol = 'LOOP'): 
 }
 
 async function selectTheme(page: Page, theme: 'M68K Dark' | 'M68K Light'): Promise<void> {
+  const targetTheme = theme === 'M68K Dark' ? 'dark' : 'light';
+  const appContainer = page.getByTestId('app-container');
+  if ((await appContainer.getAttribute('data-theme')) !== targetTheme) {
+    await page
+      .getByRole('button', { name: new RegExp(`switch to ${targetTheme} mode`, 'i') })
+      .click();
+  }
+  await expect(page.getByTestId('app-container')).toHaveAttribute('data-theme', targetTheme);
+}
+
+async function openViewMenu(page: Page): Promise<void> {
   await page.getByRole('button', { name: /open app menu/i }).click();
-  await page.getByRole('menuitem', { name: /style/i }).click();
-  await page.getByRole('menuitem', { name: theme }).click();
-  await expect(page.getByTestId('app-container')).toHaveAttribute(
-    'data-theme',
-    theme === 'M68K Dark' ? 'dark' : 'light'
-  );
+  await page.getByRole('menuitem', { name: /^view$/i }).click();
 }
 
 async function selectColumnCount(page: Page, count: number): Promise<void> {
-  await page.getByRole('button', { name: /open view menu/i }).click();
+  await openViewMenu(page);
   await page.getByRole('menuitem', { name: 'Columns' }).click();
   await page
     .getByRole('menuitemradio', { name: `${count} column${count === 1 ? '' : 's'}` })
@@ -93,7 +99,7 @@ async function selectColumnCount(page: Page, count: number): Promise<void> {
 }
 
 async function addPanel(page: Page, panelName: string): Promise<void> {
-  await page.getByRole('button', { name: /open view menu/i }).click();
+  await openViewMenu(page);
   await page.getByRole('menuitem', { name: 'Add Panel' }).click();
   await page.getByRole('menuitem', { name: `Add ${panelName} panel` }).click();
 }
@@ -272,9 +278,7 @@ test.describe('live EASy68K hardware panels', () => {
         page
           .locator('[data-panel-kind="hardware-digital-io"]')
           .getByRole('button', { name: 'Configure led address' })
-          .evaluateAll((buttons) =>
-            buttons.map((button) => button.getAttribute('data-address'))
-          )
+          .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('data-address')))
       )
       .toContain('00E00050');
     expect(browserErrors).toEqual([]);
@@ -285,7 +289,7 @@ test.describe('live EASy68K hardware panels', () => {
   }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openHardwareLab(page, true);
-    await page.getByRole('button', { name: /open view menu/i }).click();
+    await openViewMenu(page);
     await page.getByRole('menuitem', { name: /^add panel$/i }).click();
     await page
       .getByRole('menuitem', { name: /add leds \/ switches \/ buttons \/ irqs panel/i })

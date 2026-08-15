@@ -160,10 +160,22 @@ function AppShell(): React.ReactElement {
   const panelLayout = useSelector(selectActivePanelLayout);
   const bottomChromeOffset = useSelector((state: RootState) => state.uiShell.chromeOffsets.bottom);
   const isCompactShell = useCompactShell();
+  const [isFileExplorerOpen, setIsFileExplorerOpen] = React.useState(false);
   const focusedPanel = panelLayout.focusedPanelId
     ? panelLayout.instances[panelLayout.focusedPanelId]
     : undefined;
   const isFocusedMobileTerminal = isCompactShell && focusedPanel?.kind === 'terminal';
+  const closeFileExplorer = React.useCallback(() => setIsFileExplorerOpen(false), []);
+  const toggleFileExplorer = React.useCallback(
+    () => setIsFileExplorerOpen((current) => !current),
+    []
+  );
+
+  React.useEffect(() => {
+    if (isFocusedMobileTerminal) {
+      setIsFileExplorerOpen(false);
+    }
+  }, [isFocusedMobileTerminal]);
 
   return (
     <div
@@ -179,9 +191,14 @@ function AppShell(): React.ReactElement {
       }
     >
       <div className="app-chrome-top" ref={navbarShellRef}>
-        <Navbar />
+        <Navbar
+          fileExplorerOpen={isFileExplorerOpen}
+          onToggleFileExplorer={toggleFileExplorer}
+        />
       </div>
-      {!isFocusedMobileTerminal ? <FileExplorerSidebar /> : null}
+      {!isFocusedMobileTerminal ? (
+        <FileExplorerSidebar open={isFileExplorerOpen} onClose={closeFileExplorer} />
+      ) : null}
       <main className={`main-content ${isCompactShell ? 'main-content-mobile' : ''}`.trim()}>
         <div className={isCompactShell ? 'mobile-workspace-shell' : 'main-shell'} data-testid={isCompactShell ? 'mobile-workspace-shell' : 'desktop-workspace-shell'}>
           <PanelWorkspace />

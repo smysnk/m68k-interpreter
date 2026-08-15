@@ -41,14 +41,18 @@ const StatusBar: React.FC = () => {
     >
       {isCompactShell ? (
         <div className="status-bar-inline" data-testid="status-bar-inline">
-          <span className={`status-pill status-pill-${model.runtime.tone}`}>{model.runtime.label}</span>
+          <span className={`status-pill status-pill-${model.runtime.tone}`}>
+            {model.runtime.label}
+          </span>
           {websiteLink}
           {coffeeLink}
         </div>
       ) : (
         <>
           <div className="status-bar-section status-bar-section-left">
-            <span className={`status-pill status-pill-${model.runtime.tone}`}>{model.runtime.label}</span>
+            <span className={`status-pill status-pill-${model.runtime.tone}`}>
+              {model.runtime.label}
+            </span>
           </div>
           <div className="status-bar-section status-bar-section-center" />
           <div className="status-bar-section status-bar-section-right">

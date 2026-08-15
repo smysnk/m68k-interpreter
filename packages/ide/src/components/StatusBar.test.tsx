@@ -16,6 +16,7 @@ describe('StatusBar', () => {
     renderWithIdeProviders(<StatusBar />);
 
     expect(screen.getByLabelText('IDE status bar')).toBeInTheDocument();
+    expect(screen.queryByText('Files')).not.toBeInTheDocument();
     expect(screen.getByText('Ready')).toBeInTheDocument();
     expect(screen.queryByText(/Inspector:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Help:/)).not.toBeInTheDocument();
@@ -25,7 +26,10 @@ describe('StatusBar', () => {
     expect(screen.queryByText(/Cursor/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Frame:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Stop:/)).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'smysnk.com' })).toHaveAttribute('href', 'https://smysnk.com');
+    expect(screen.getByRole('link', { name: 'smysnk.com' })).toHaveAttribute(
+      'href',
+      'https://smysnk.com'
+    );
     expect(screen.getByRole('link', { name: /buy me a coffee/i })).toHaveAttribute(
       'href',
       'https://buymeacoffee.com/josh1g'
