@@ -71,6 +71,7 @@ function PanelFrameView({
         data-panel-drag-activator={instance.id}
         id={ids.headerId}
         onPointerDown={(event) => {
+          if (event.button !== 0) return;
           const target = event.target as HTMLElement;
           if (
             target.closest('button, summary, input, select, textarea, a, [contenteditable="true"]')

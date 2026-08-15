@@ -172,6 +172,17 @@ describe('PanelWorkspace', () => {
     });
   });
 
+  it('reserves secondary-button header interaction for the workspace context menu', () => {
+    renderWithIdeProviders(<PanelWorkspace />, { store });
+    const header = screen.getByRole('heading', { name: 'Screen' }).closest('.panel-frame-header');
+    expect(header).not.toBeNull();
+
+    fireEvent.pointerDown(header!, { button: 2 });
+    expect(screen.queryByTestId('panel-drag-overlay')).not.toBeInTheDocument();
+    fireEvent.contextMenu(header!, { clientX: 40, clientY: 40 });
+    expect(screen.getByRole('menu', { name: 'Panel workspace actions' })).toBeInTheDocument();
+  });
+
   it('supports keyboard context-menu invocation, submenu navigation, and focus restoration', async () => {
     renderWithIdeProviders(<PanelWorkspace />, { store });
     const dragButton = screen.getByLabelText('Drag Screen panel');
