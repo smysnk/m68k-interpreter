@@ -99,7 +99,7 @@ describe('workspace integration', () => {
         expect(getEmulatorTerminalText()).toContain('Joshua Bellamy');
         expect(getEmulatorTerminalText()).toContain('smysnk.com');
         expect(document.querySelector('.terminal-container')).toHaveAttribute('data-terminal-theme', 'light');
-        expect(document.querySelector('.retro-lcd')).toHaveAttribute('data-display-surface-mode', 'light');
+        expect(document.querySelector('.retro-screen')).toHaveAttribute('data-display-surface-mode', 'light');
       },
       { timeout: 30000 }
     );

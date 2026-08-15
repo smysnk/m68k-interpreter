@@ -1,4 +1,4 @@
-import type { RetroLcdGeometry } from 'react-retro-display-tty-ansi';
+import type { RetroScreenGeometry } from 'react-retro-display-tty-ansi-ascii';
 
 export interface NormalizedTerminalGeometry {
   columns: number;
@@ -13,7 +13,7 @@ export function createTerminalGeometrySignature(columns: number, rows: number): 
 }
 
 export function normalizeTerminalGeometry(
-  geometry: Pick<RetroLcdGeometry, 'cols' | 'rows' | 'innerWidth' | 'innerHeight'>
+  geometry: Pick<RetroScreenGeometry, 'cols' | 'rows' | 'innerWidth' | 'innerHeight'>
 ): NormalizedTerminalGeometry | null {
   if (
     !Number.isFinite(geometry.innerWidth) ||

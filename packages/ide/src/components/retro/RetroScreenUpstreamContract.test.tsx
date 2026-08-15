@@ -12,7 +12,7 @@ describe('react-retro-display upstream contract', () => {
 
     render(
       <RetroScreen
-        className="terminal-retro-lcd"
+        className="terminal-retro-screen"
         controller={controller}
         gridMode="auto"
         mode="terminal"

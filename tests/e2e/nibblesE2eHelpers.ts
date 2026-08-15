@@ -102,7 +102,7 @@ async function withNodeTimeout<T>(
 }
 
 async function focusTerminalViewport(page: Page): Promise<void> {
-  const viewport = page.locator('[data-testid="terminal-screen"] .retro-lcd__viewport').first();
+  const viewport = page.locator('[data-testid="terminal-screen"] .retro-screen__viewport').first();
   await viewport.waitFor({ state: 'visible', timeout: 30_000 });
   await viewport.focus();
 }
@@ -739,7 +739,7 @@ export async function readTerminalText(page: Page): Promise<string> {
         return '';
       }
 
-      const lines = Array.from(screen.querySelectorAll<HTMLElement>('.retro-lcd__line'));
+      const lines = Array.from(screen.querySelectorAll<HTMLElement>('.retro-screen__line'));
       if (lines.length > 0) {
         return lines.map((line) => (line.textContent ?? '').replace(/\u00a0/g, ' ')).join('\n');
       }
@@ -805,7 +805,7 @@ export async function readRuntimeState(page: Page): Promise<NibblesRuntimeState>
         ? runtimeLines.join('\n')
         : runtime.getTerminalText?.() ?? null;
     const screenElement = document.querySelector<HTMLElement>('[data-testid="terminal-screen"]');
-    const lines = Array.from(screenElement?.querySelectorAll('.retro-lcd__line') ?? []);
+    const lines = Array.from(screenElement?.querySelectorAll('.retro-screen__line') ?? []);
     const startIndex = Math.max(lines.length - Math.max(terminalMeta?.rows ?? 1, 1), 0);
     const renderedLines: string[] = [];
     for (let index = startIndex; index < lines.length; index += 1) {
@@ -909,7 +909,7 @@ export async function readTerminalSnapshot(page: Page): Promise<TerminalBrowserS
       rows: snapshot.rows ?? 0,
       lines: Array.isArray(snapshot.lines) ? snapshot.lines.slice() : [],
       cursorVisible:
-        document.querySelector('[data-testid="terminal-screen"] .retro-lcd__cursor') !== null,
+        document.querySelector('[data-testid="terminal-screen"] .retro-screen__cursor') !== null,
       cells: Array.isArray(snapshot.cells)
         ? snapshot.cells.map((row: Array<any>) =>
             row.map((cell) => ({
@@ -1001,7 +1001,7 @@ async function readRuntimeSurfaceState(page: Page): Promise<NibblesRuntimeSurfac
         ? runtimeLines.join('\n')
         : runtime?.getTerminalText?.() ?? null;
     const screenElement = document.querySelector<HTMLElement>('[data-testid="terminal-screen"]');
-    const lines = Array.from(screenElement?.querySelectorAll('.retro-lcd__line') ?? []);
+    const lines = Array.from(screenElement?.querySelectorAll('.retro-screen__line') ?? []);
     const startIndex = Math.max(lines.length - Math.max(terminalMeta?.rows ?? 1, 1), 0);
     const renderedLines: string[] = [];
 
@@ -1151,7 +1151,7 @@ export async function touchTerminalCell(page: Page, row: number, col: number): P
       const overlay =
         screenElement.querySelector<HTMLElement>('[data-testid="terminal-touch-overlay"]') ??
         screenElement;
-      const grid = screenElement.querySelector<HTMLElement>('.retro-lcd__grid');
+      const grid = screenElement.querySelector<HTMLElement>('.retro-screen__grid');
       if (!grid) {
         throw new Error('Terminal grid was unavailable');
       }
@@ -1299,7 +1299,7 @@ export async function startGameplayFromIntroKeyboard(
   const startedAt = Date.now();
   await focusTerminalViewport(page);
   for (const key of options.keys) {
-    await page.locator('[data-testid="terminal-screen"] .retro-lcd__viewport').first().press(key);
+    await page.locator('[data-testid="terminal-screen"] .retro-screen__viewport').first().press(key);
     await delay(50);
   }
 

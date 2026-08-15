@@ -2930,10 +2930,10 @@ input.register-segment-input[type='text'] {
 }
 
 .terminal-screen[data-terminal-input-mode='touch-only'],
-.terminal-screen[data-terminal-input-mode='touch-only'] .terminal-retro-lcd,
-.terminal-screen[data-terminal-input-mode='touch-only'] .retro-lcd__screen,
-.terminal-screen[data-terminal-input-mode='touch-only'] .retro-lcd__viewport,
-.terminal-screen[data-terminal-input-mode='touch-only'] .retro-lcd__grid {
+.terminal-screen[data-terminal-input-mode='touch-only'] .terminal-retro-screen,
+.terminal-screen[data-terminal-input-mode='touch-only'] .retro-screen__screen,
+.terminal-screen[data-terminal-input-mode='touch-only'] .retro-screen__viewport,
+.terminal-screen[data-terminal-input-mode='touch-only'] .retro-screen__grid {
   touch-action: none;
   overscroll-behavior: contain;
   -webkit-touch-callout: none;
@@ -2941,7 +2941,7 @@ input.register-segment-input[type='text'] {
   user-select: none;
 }
 
-.terminal-screen[data-terminal-game-screen='true'] .retro-lcd__cursor {
+.terminal-screen[data-terminal-game-screen='true'] .retro-screen__cursor {
   display: none !important;
 }
 
@@ -2952,38 +2952,38 @@ input.register-segment-input[type='text'] {
     0 0 22px color-mix(in srgb, var(--ide-accent) 18%, transparent);
 }
 
-.terminal-screen[data-terminal-focused='true'] .retro-lcd {
+.terminal-screen[data-terminal-focused='true'] .retro-screen {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--ide-accent) 18%, transparent),
     0 0 24px color-mix(in srgb, var(--ide-accent) 16%, transparent),
     0 18px 40px rgba(0, 0, 0, 0.28),
-    inset 0 0 0 1px color-mix(in srgb, var(--retro-lcd-color), transparent 94%),
-    inset 0 0 48px color-mix(in srgb, var(--retro-lcd-color), transparent 84%);
+    inset 0 0 0 1px color-mix(in srgb, var(--retro-screen-color), transparent 94%),
+    inset 0 0 48px color-mix(in srgb, var(--retro-screen-color), transparent 84%);
 }
 
-.terminal-retro-lcd {
+.terminal-retro-screen {
   width: 100%;
   height: 100%;
   min-height: 0;
 }
 
-.terminal-retro-lcd .retro-lcd__screen {
+.terminal-retro-screen .retro-screen__screen {
   inset: 6px;
 }
 
-.terminal-retro-lcd .retro-lcd__viewport {
+.terminal-retro-screen .retro-screen__viewport {
   height: 100%;
 }
 
-.terminal-retro-lcd .retro-lcd__grid,
-.terminal-retro-lcd .retro-lcd__probe,
-.terminal-retro-lcd .retro-lcd__input {
+.terminal-retro-screen .retro-screen__grid,
+.terminal-retro-screen .retro-screen__probe,
+.terminal-retro-screen .retro-screen__input {
   font-size: 15px;
   line-height: 15px;
   letter-spacing: 0;
 }
 
-.terminal-retro-lcd .retro-lcd__viewport:focus {
+.terminal-retro-screen .retro-screen__viewport:focus {
   outline: none;
 }
 
@@ -3132,13 +3132,13 @@ input.register-segment-input[type='text'] {
     background: var(--ide-bg);
   }
 
-  .terminal-retro-lcd .retro-lcd__screen {
+  .terminal-retro-screen .retro-screen__screen {
     inset: 4px;
   }
 
-  .terminal-retro-lcd .retro-lcd__grid,
-  .terminal-retro-lcd .retro-lcd__probe,
-  .terminal-retro-lcd .retro-lcd__input {
+  .terminal-retro-screen .retro-screen__grid,
+  .terminal-retro-screen .retro-screen__probe,
+  .terminal-retro-screen .retro-screen__input {
     font-size: 16px;
     line-height: 16px;
   }

@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import 'react-retro-display-tty-ansi/styles.css';
+import 'react-retro-display-tty-ansi-ascii/styles.css';
 import './styles/main.css';
 import App from './components/App';
 

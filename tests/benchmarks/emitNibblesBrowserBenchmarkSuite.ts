@@ -238,11 +238,11 @@ async function waitForTerminalMarker(
 
 async function readTerminalText(page: Page): Promise<string> {
   return page.getByTestId('terminal-screen').evaluate((element) => {
-    const lines = Array.from(element.querySelectorAll('.retro-lcd__line'));
+    const lines = Array.from(element.querySelectorAll('.retro-screen__line'));
 
     return lines
       .map((line) =>
-        Array.from(line.querySelectorAll('.retro-lcd__cell'))
+        Array.from(line.querySelectorAll('.retro-screen__cell'))
           .map((cell) => {
             const text = cell.textContent ?? '';
             return text === '\u00a0' ? ' ' : text;
@@ -255,8 +255,8 @@ async function readTerminalText(page: Page): Promise<string> {
 
 async function readTerminalGeometry(page: Page): Promise<{ rows: number; columns: number }> {
   return page.getByTestId('terminal-screen').evaluate((element) => {
-    const lines = Array.from(element.querySelectorAll('.retro-lcd__line'));
-    const columns = lines.length > 0 ? lines[0]?.querySelectorAll('.retro-lcd__cell').length ?? 0 : 0;
+    const lines = Array.from(element.querySelectorAll('.retro-screen__line'));
+    const columns = lines.length > 0 ? lines[0]?.querySelectorAll('.retro-screen__cell').length ?? 0 : 0;
 
     return {
       rows: lines.length,

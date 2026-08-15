@@ -226,7 +226,7 @@ describe('App', () => {
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-theme', 'dark');
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(document.querySelector('.terminal-container')).toHaveAttribute('data-terminal-theme', 'dark');
-    expect(document.querySelector('.retro-lcd')).toHaveAttribute('data-display-surface-mode', 'dark');
+    expect(document.querySelector('.retro-screen')).toHaveAttribute('data-display-surface-mode', 'dark');
     expect(screen.getByRole('button', { name: /open app menu/i })).toBeInTheDocument();
     expect(screen.queryByText(/Engine:/)).not.toBeInTheDocument();
   });
@@ -242,7 +242,7 @@ describe('App', () => {
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-theme', 'light');
     expect(document.documentElement.dataset.theme).toBe('light');
     expect(document.querySelector('.terminal-container')).toHaveAttribute('data-terminal-theme', 'light');
-    expect(document.querySelector('.retro-lcd')).toHaveAttribute('data-display-surface-mode', 'light');
+    expect(document.querySelector('.retro-screen')).toHaveAttribute('data-display-surface-mode', 'light');
 
     openStyleMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: /m68k dark/i }));

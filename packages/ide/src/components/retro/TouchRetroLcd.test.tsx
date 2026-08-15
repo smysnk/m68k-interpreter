@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { createRetroLcdController, RetroLcd } from 'react-retro-display-tty-ansi';
+import { createRetroScreenController, RetroScreen } from 'react-retro-display-tty-ansi-ascii';
 
 function mockGridRect(): HTMLElement {
-  const grid = document.querySelector('.retro-lcd__grid') as HTMLElement | null;
+  const grid = document.querySelector('.retro-screen__grid') as HTMLElement | null;
   expect(grid).not.toBeNull();
   vi.spyOn(grid as HTMLElement, 'getBoundingClientRect').mockReturnValue({
     x: 10,
@@ -20,7 +20,7 @@ function mockGridRect(): HTMLElement {
 }
 
 function readMeasuredGeometry(): { rows: number; cols: number } {
-  const display = document.querySelector('.retro-lcd') as HTMLElement | null;
+  const display = document.querySelector('.retro-screen') as HTMLElement | null;
   expect(display).not.toBeNull();
   const rows = Number(display?.getAttribute('data-rows'));
   const cols = Number(display?.getAttribute('data-cols'));
@@ -32,17 +32,17 @@ function readMeasuredGeometry(): { rows: number; cols: number } {
   };
 }
 
-describe('RetroLcd touch input', () => {
+describe('RetroScreen touch input', () => {
   it('maps pointer presses into 1-based terminal cells', async () => {
     const onTouchCell = vi.fn(async () => undefined);
-    const controller = createRetroLcdController({
+    const controller = createRetroScreenController({
       rows: 5,
       cols: 10,
     });
 
     render(
-      <RetroLcd
-        className="terminal-retro-lcd"
+      <RetroScreen
+        className="terminal-retro-screen"
         controller={controller}
         gridMode="auto"
         mode="terminal"
@@ -55,7 +55,7 @@ describe('RetroLcd touch input', () => {
     );
 
     await waitFor(() => {
-      expect(document.querySelector('.retro-lcd__grid')).not.toBeNull();
+      expect(document.querySelector('.retro-screen__grid')).not.toBeNull();
     });
 
     mockGridRect();
@@ -86,14 +86,14 @@ describe('RetroLcd touch input', () => {
 
   it('treats a long press as a single touch until the pointer is released', async () => {
     const onTouchCell = vi.fn(async () => undefined);
-    const controller = createRetroLcdController({
+    const controller = createRetroScreenController({
       rows: 5,
       cols: 10,
     });
 
     render(
-      <RetroLcd
-        className="terminal-retro-lcd"
+      <RetroScreen
+        className="terminal-retro-screen"
         controller={controller}
         gridMode="auto"
         mode="terminal"
@@ -106,7 +106,7 @@ describe('RetroLcd touch input', () => {
     );
 
     await waitFor(() => {
-      expect(document.querySelector('.retro-lcd__grid')).not.toBeNull();
+      expect(document.querySelector('.retro-screen__grid')).not.toBeNull();
     });
 
     mockGridRect();
@@ -164,14 +164,14 @@ describe('RetroLcd touch input', () => {
   });
 
   it('does not render the touch overlay when touch input is disabled', () => {
-    const controller = createRetroLcdController({
+    const controller = createRetroScreenController({
       rows: 5,
       cols: 10,
     });
 
     render(
-      <RetroLcd
-        className="terminal-retro-lcd"
+      <RetroScreen
+        className="terminal-retro-screen"
         controller={controller}
         gridMode="auto"
         mode="terminal"
