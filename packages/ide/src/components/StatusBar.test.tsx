@@ -44,7 +44,10 @@ describe('StatusBar', () => {
 
     await user.click(screen.getByRole('button', { name: 'Emulation mode: Easy68K' }));
 
-    expect(screen.getByRole('menu', { name: 'Select emulation mode' })).toBeInTheDocument();
+    expect(screen.getByRole('menu', { name: 'Select emulation mode' })).toHaveClass(
+      'context-menu-surface',
+      'navbar-menu'
+    );
     expect(screen.getByRole('menuitemradio', { name: 'Easy68K' })).toHaveAttribute(
       'aria-checked',
       'true'

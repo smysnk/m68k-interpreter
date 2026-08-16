@@ -14,9 +14,22 @@ test.describe('browser e2e ide shell', () => {
     await page.goto('/');
 
     const selectMode = async (currentLabel: string, nextLabel: string): Promise<void> => {
-      await page.getByRole('button', { name: `Emulation mode: ${currentLabel}` }).click();
+      const modeButton = page.getByRole('button', { name: `Emulation mode: ${currentLabel}` });
+      const scrollPositionBeforeOpen = await page.evaluate(() => ({ x: scrollX, y: scrollY }));
+      await modeButton.click();
       const menu = page.getByRole('menu', { name: 'Select emulation mode' });
       await expect(menu).toBeVisible();
+      await expect(menu).toHaveCSS('position', 'fixed');
+      expect(await page.evaluate(() => ({ x: scrollX, y: scrollY }))).toEqual(
+        scrollPositionBeforeOpen
+      );
+      const [menuBox, modeButtonBox] = await Promise.all([
+        menu.boundingBox(),
+        modeButton.boundingBox(),
+      ]);
+      expect(menuBox).not.toBeNull();
+      expect(modeButtonBox).not.toBeNull();
+      expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(modeButtonBox!.y);
       await expect(menu.getByRole('menuitemradio', { checked: true })).toHaveAccessibleName(
         currentLabel
       );
