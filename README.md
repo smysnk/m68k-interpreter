@@ -1,6 +1,4 @@
-# M68K Interpreter
-
-[![tests](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml) [![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fsmysnk.github.io%2Fm68k-interpreter%2Fbadges%2Fcoverage.json)](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml) [![site](https://img.shields.io/website?url=https%3A%2F%2Fsmysnk.com%2Fm68k-interpreter&label=site)](https://smysnk.com/m68k-interpreter)
+# M68K Interpreter [![tests](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml) [![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fsmysnk.github.io%2Fm68k-interpreter%2Fbadges%2Fcoverage.json)](https://github.com/smysnk/m68k-interpreter/actions/workflows/ci-cd.yml) [![site](https://img.shields.io/website?url=https%3A%2F%2Fsmysnk.com%2Fm68k-interpreter&label=site)](https://smysnk.com/m68k-interpreter)
 
 **Hosted Demo:** [**smysnk.com/m68k-interpreter**](https://smysnk.com/m68k-interpreter)
 
