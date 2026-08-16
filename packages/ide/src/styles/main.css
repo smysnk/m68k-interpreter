@@ -622,12 +622,20 @@ pre {
 }
 
 .status-mode-menu-group-label {
-  padding: 8px 12px 4px;
+  padding: 6px 10px 3px;
   color: var(--ide-text-muted);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.status-mode-menu {
+  padding: 6px;
+}
+
+.status-mode-menu .navbar-menu-item {
+  padding: 7px 10px;
 }
 
 .status-bar-link:hover,

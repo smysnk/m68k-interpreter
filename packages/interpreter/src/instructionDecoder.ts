@@ -1,5 +1,6 @@
 import { CODE_BYTE, CODE_LONG, CODE_WORD } from './core/operations';
 import { Strings } from './core/strings';
+import type { FullIndexedExtension } from './cpu/effectiveAddressCodec';
 
 const TOKEN_IMMEDIATE = 0;
 const TOKEN_OFFSET = 1;
@@ -19,9 +20,19 @@ export interface DecodedOperand {
   label?: string;
   indexRegister?: number;
   indexSize?: number;
+  indexScale?: 1 | 2 | 4 | 8;
   preDecrement?: boolean;
   postIncrement?: boolean;
   registerList?: number[];
+  bitField?: {
+    offset: number;
+    offsetRegister?: number;
+    width: number;
+    widthRegister?: number;
+  };
+  registerPair?: readonly [number, number];
+  fullIndex?: FullIndexedExtension;
+  pcRelative?: boolean;
 }
 
 export interface DecodedInstruction {
@@ -46,6 +57,7 @@ interface OperandParseResult {
 interface IndexRegisterParseResult {
   indexRegister?: number;
   indexSize?: number;
+  indexScale?: 1 | 2 | 4 | 8;
   error?: string;
 }
 
@@ -82,9 +94,14 @@ function cloneDecodedOperand(operand: DecodedOperand): DecodedOperand {
     label: operand.label,
     indexRegister: operand.indexRegister,
     indexSize: operand.indexSize,
+    indexScale: operand.indexScale,
     preDecrement: operand.preDecrement,
     postIncrement: operand.postIncrement,
     registerList: operand.registerList ? [...operand.registerList] : undefined,
+    bitField: operand.bitField ? { ...operand.bitField } : undefined,
+    registerPair: operand.registerPair ? [...operand.registerPair] as [number, number] : undefined,
+    fullIndex: operand.fullIndex ? { ...operand.fullIndex } : undefined,
+    pcRelative: operand.pcRelative,
   };
 }
 
@@ -224,6 +241,96 @@ function parseOperandToken(
 ): OperandParseResult {
   const trimmed = token.trim();
 
+  const bitFieldMatch = /^(.*?)\{\s*([^:]+)\s*:\s*([^}]+)\s*\}$/.exec(trimmed);
+  if (bitFieldMatch !== null) {
+    const base = parseOperandToken(bitFieldMatch[1].trim(), symbolLookup);
+    if (base.operand === undefined) return base;
+    const parseFieldPart = (part: string): { value: number; register?: number } | undefined => {
+      const register = /^d[0-7]$/i.test(part.trim()) ? parseRegister(part.trim()) : undefined;
+      if (register !== undefined) return { value: register - 8, register: register - 8 };
+      const value = parseNumericValue(part.trim());
+      return value === undefined ? undefined : { value };
+    };
+    const offset = parseFieldPart(bitFieldMatch[2]);
+    const width = parseFieldPart(bitFieldMatch[3]);
+    if (offset === undefined || width === undefined) return { errors: [Strings.UNKNOWN_OPERAND] };
+    return {
+      operand: {
+        ...base.operand,
+        bitField: {
+          offset: offset.value,
+          offsetRegister: offset.register,
+          width: width.value,
+          widthRegister: width.register,
+        },
+      },
+      errors: base.errors,
+    };
+  }
+
+  const registerPairMatch = /^\(?\s*([ad][0-7]|sp)\s*\)?\s*:\s*\(?\s*([ad][0-7]|sp)\s*\)?$/i.exec(trimmed);
+  if (registerPairMatch !== null) {
+    const left = parseRegister(registerPairMatch[1]);
+    const right = parseRegister(registerPairMatch[2]);
+    if (left === undefined || right === undefined) return { errors: [Strings.INVALID_REGISTER] };
+    return {
+      operand: { value: 0, type: TOKEN_REGISTER_LIST, registerPair: [left, right] },
+      errors: [],
+    };
+  }
+
+  const indirectMatch = /^\(\s*\[([^\]]*)\]\s*(?:,\s*(.*))?\)$/i.exec(trimmed);
+  if (indirectMatch !== null) {
+    const bracketParts = indirectMatch[1].split(',').map((part) => part.trim()).filter(Boolean);
+    const trailingParts = (indirectMatch[2] ?? '').split(',').map((part) => part.trim()).filter(Boolean);
+    const displacement = parseNumericValue(bracketParts[0] ?? '0') ?? 0;
+    const baseToken = bracketParts[1] ?? 'a0';
+    const baseSuppressed = /^z(?:a[0-7]|pc)$/i.test(baseToken);
+    const normalizedBaseToken = baseSuppressed ? baseToken.slice(1) : baseToken;
+    const pcRelative = /^pc$/i.test(normalizedBaseToken);
+    const baseRegister = pcRelative ? 0 : parseRegister(normalizedBaseToken);
+    if (!pcRelative && (baseRegister === undefined || baseRegister >= 8)) {
+      return { errors: [Strings.NOT_AN_ADDRESS_REGISTER] };
+    }
+    const preindexed = bracketParts.length >= 3;
+    const indexToken = preindexed ? bracketParts[2] : trailingParts[0];
+    const outerToken = preindexed ? trailingParts[0] : trailingParts[1];
+    const index = indexToken ? parseIndexRegister(indexToken) : undefined;
+    if (index?.error) return { errors: [index.error] };
+    const outer = outerToken === undefined ? 0 : parseNumericValue(outerToken);
+    if (outer === undefined) return { errors: [Strings.UNKNOWN_OPERAND] };
+    const displacementShape = (value: number) =>
+      value === 0
+        ? ({ size: 'null' } as const)
+        : value >= -0x8000 && value <= 0x7fff
+          ? ({ size: 'word', value } as const)
+          : ({ size: 'long', value } as const);
+    const parsedIndex = index?.indexRegister === undefined
+      ? undefined
+      : {
+          kind: index.indexRegister < 8 ? 'address' as const : 'data' as const,
+          register: index.indexRegister < 8 ? index.indexRegister : index.indexRegister - 8,
+          size: index.indexSize === CODE_LONG ? 'long' as const : 'word' as const,
+          scale: index.indexScale ?? 1,
+        };
+    return {
+      operand: {
+        value: baseRegister ?? 0,
+        type: TOKEN_OFFSET_ADDR,
+        pcRelative,
+        fullIndex: {
+          format: 'full',
+          baseSuppressed,
+          index: parsedIndex,
+          baseDisplacement: displacementShape(displacement),
+          indirect: preindexed ? 'preindexed' : 'postindexed',
+          outerDisplacement: displacementShape(outer),
+        },
+      },
+      errors: [],
+    };
+  }
+
   if (trimmed.includes('/') || /^[adsp][0-7]?\s*-\s*[adsp][0-7]?/i.test(trimmed)) {
     const registerList = parseRegisterList(trimmed);
     if (registerList !== undefined) {
@@ -302,7 +409,12 @@ function parseOperandToken(
         ? 0
         : (parseNumericValue(displacementToken) ??
           resolveSymbolAddress(symbolLookup, displacementToken));
-    const registerOperand = parseOperandToken(registerToken, symbolLookup).operand;
+    const baseSuppressed = /^z(?:a[0-7]|pc)$/i.test(registerToken);
+    const normalizedRegisterToken = baseSuppressed ? registerToken.slice(1) : registerToken;
+    const pcRelative = /^pc$/i.test(normalizedRegisterToken);
+    const registerOperand = pcRelative
+      ? ({ value: 0, type: TOKEN_REG_ADDR } as DecodedOperand)
+      : parseOperandToken(normalizedRegisterToken, symbolLookup).operand;
 
     if (registerOperand?.type !== TOKEN_REG_ADDR) {
       return {
@@ -322,6 +434,7 @@ function parseOperandToken(
           value: registerOperand.value,
           type: TOKEN_OFFSET_ADDR,
           offset: displacementValue,
+          pcRelative,
         },
         errors: [],
       };
@@ -334,6 +447,34 @@ function parseOperandToken(
       };
     }
 
+    if (displacementValue < -128 || displacementValue > 127) {
+      const indexRegister = indexedOperand.indexRegister as number;
+      return {
+        operand: {
+          value: registerOperand.value,
+          type: TOKEN_OFFSET_ADDR,
+          pcRelative,
+          fullIndex: {
+            format: 'full',
+            baseSuppressed,
+            index: {
+              kind: indexRegister < 8 ? 'address' : 'data',
+              register: indexRegister < 8 ? indexRegister : indexRegister - 8,
+              size: indexedOperand.indexSize === CODE_LONG ? 'long' : 'word',
+              scale: indexedOperand.indexScale ?? 1,
+            },
+            baseDisplacement:
+              displacementValue < -0x8000 || displacementValue > 0x7fff
+                ? { size: 'long', value: displacementValue }
+                : { size: 'word', value: displacementValue },
+            indirect: 'none',
+            outerDisplacement: { size: 'null' },
+          },
+        },
+        errors: [],
+      };
+    }
+
     return {
       operand: {
         value: registerOperand.value,
@@ -341,6 +482,8 @@ function parseOperandToken(
         offset: displacementValue,
         indexRegister: indexedOperand.indexRegister,
         indexSize: indexedOperand.indexSize,
+        indexScale: indexedOperand.indexScale,
+        pcRelative,
       },
       errors: [],
     };
@@ -503,7 +646,8 @@ function parseRegisterList(token: string): DecodedOperand | undefined {
 }
 
 function parseIndexRegister(token: string): IndexRegisterParseResult {
-  const [registerToken, sizeToken] = token.split('.').map((part) => part.trim());
+  const [indexToken, scaleToken] = token.split('*').map((part) => part.trim());
+  const [registerToken, sizeToken] = indexToken.split('.').map((part) => part.trim());
   const register = parseRegister(registerToken);
 
   if (register === undefined) {
@@ -523,9 +667,13 @@ function parseIndexRegister(token: string): IndexRegisterParseResult {
     }
   }
 
+  const scale = scaleToken === undefined ? 1 : Number(scaleToken);
+  if (![1, 2, 4, 8].includes(scale)) return { error: 'Index scale must be 1, 2, 4, or 8' };
+
   return {
     indexRegister: register,
     indexSize,
+    indexScale: scale as 1 | 2 | 4 | 8,
   };
 }
 

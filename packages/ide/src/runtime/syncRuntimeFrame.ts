@@ -104,6 +104,10 @@ export interface RuntimeFrameSyncCache {
   vbr: number;
   sfc: number;
   dfc: number;
+  isp: number;
+  msp: number;
+  cacr: number;
+  caar: number;
 }
 
 export function createRuntimeFrameSyncCache(): RuntimeFrameSyncCache {
@@ -126,6 +130,10 @@ export function createRuntimeFrameSyncCache(): RuntimeFrameSyncCache {
     vbr: Number.NaN,
     sfc: Number.NaN,
     dfc: Number.NaN,
+    isp: Number.NaN,
+    msp: Number.NaN,
+    cacr: Number.NaN,
+    caar: Number.NaN,
   };
 }
 
@@ -159,6 +167,10 @@ function ensureCacheForRuntime(
   cache.vbr = Number.NaN;
   cache.sfc = Number.NaN;
   cache.dfc = Number.NaN;
+  cache.isp = Number.NaN;
+  cache.msp = Number.NaN;
+  cache.cacr = Number.NaN;
+  cache.caar = Number.NaN;
   return cache;
 }
 
@@ -332,6 +344,10 @@ export function syncRuntimeFrameToIde(
       const vbr = emulator.getVBR?.() ?? 0;
       const sfc = emulator.getSFC?.() ?? 0;
       const dfc = emulator.getDFC?.() ?? 0;
+      const isp = emulator.getISP?.() ?? 0;
+      const msp = emulator.getMSP?.() ?? 0;
+      const cacr = emulator.getCACR?.() ?? 0;
+      const caar = emulator.getCAAR?.() ?? 0;
       registersChanged =
         !cache ||
         cache.rawRegisters === null ||
@@ -343,6 +359,10 @@ export function syncRuntimeFrameToIde(
         cache.vbr !== vbr ||
         cache.sfc !== sfc ||
         cache.dfc !== dfc ||
+        cache.isp !== isp ||
+        cache.msp !== msp ||
+        cache.cacr !== cacr ||
+        cache.caar !== caar ||
         !rawRegistersEqual(cache.rawRegisters, rawRegisters);
 
       if (registers === undefined) {
@@ -350,7 +370,7 @@ export function syncRuntimeFrameToIde(
           registers = cache.registers;
           reusedRegisters = true;
         } else {
-          registers = buildRegisters(rawRegisters, pc, ccr, sr, usp, ssp, vbr, sfc, dfc);
+          registers = buildRegisters(rawRegisters, pc, ccr, sr, usp, ssp, vbr, sfc, dfc, isp, msp, cacr, caar);
           if (cache) {
             cache.rawRegisters = Int32Array.from(rawRegisters);
             cache.registers = registers;
@@ -362,6 +382,10 @@ export function syncRuntimeFrameToIde(
             cache.vbr = vbr;
             cache.sfc = sfc;
             cache.dfc = dfc;
+            cache.isp = isp;
+            cache.msp = msp;
+            cache.cacr = cacr;
+            cache.caar = caar;
           }
         }
       }

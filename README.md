@@ -33,6 +33,23 @@ Write, step through, and debug m68k assembly — no installation needed.
 - browser execution uses the worker-backed strict runtime
 - CPU model and machine profile are selected independently from the bottom status bar
 
+## Compatibility and instruction coverage
+
+| CPU | Added forms | Total inherited forms | Address bits | Integer profile |
+| --- | ---: | ---: | ---: | :---: |
+| MC68000 | 116 | 116 | 24 | ✓ |
+| MC68010 | 7 | 123 | 24 | ✓ |
+| MC68020 | 40 | 163 | 32 | ✓ |
+
+MC68020 support is functional rather than cycle-accurate. It includes the integer
+architecture, all 18 effective-address categories, 32-bit sparse addressing,
+three stack banks, control/cache state, exception frames, and coprocessor absence
+behavior. MC68881/MC68882 floating-point arithmetic and MC68851 MMU semantics are
+separate future profiles. See the generated
+[MC68020 inventory](docs/generated/MC68020_FUNCTIONAL_INVENTORY.md).
+Validation details and the two open release-evidence gates are recorded in the
+[MC68020 execution report](docs/MC68020_FUNCTIONAL_CONFORMANCE_EXECUTION_REPORT.md).
+
 ## IDE architecture
 
 - The shell follows a view/controller Redux pattern

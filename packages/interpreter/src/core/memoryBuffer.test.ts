@@ -231,4 +231,16 @@ describe('memoryBuffer', () => {
     expect(readMemoryBufferByte(snapshot, 0x33)).toBe(0x00);
     expect(readMemoryBufferByte(target, 0x33)).toBe(0x04);
   });
+
+  it('stores distant bytes across the full unsigned 32-bit address space sparsely', () => {
+    const memoryBuffer = createMemoryBuffer({}, 0x1000);
+    writeMemoryBufferByte(memoryBuffer, 0x10, 0x11);
+    writeMemoryBufferByte(memoryBuffer, 0xffff_fffe, 0xaa);
+    expect(readMemoryBufferByte(memoryBuffer, 0xffff_fffe)).toBe(0xaa);
+    expect(getMemoryBufferPageCount(memoryBuffer)).toBe(2);
+    expect(getMemoryBufferAddressRange(memoryBuffer)).toEqual({
+      minAddress: 0x10,
+      maxAddress: 0xffff_fffe,
+    });
+  });
 });

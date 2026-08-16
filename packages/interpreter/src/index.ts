@@ -111,23 +111,27 @@ export {
 } from './cpu/alu';
 export { InstructionStream, signExtend8, signExtend16 } from './cpu/instructionStream';
 export { StrictM68000Core } from './cpu/core';
-export { BusFault, RamBus } from './cpu/memoryBus';
+export { BusFault, RamBus, SparseRamBus } from './cpu/memoryBus';
+export { createAddressSpacePolicy } from './cpu/addressSpace';
+export { TranslatingMemoryBus, AddressTranslationFault } from './cpu/addressTranslation';
+export { CoprocessorRegistry } from './cpu/coprocessor';
 export { MappedMemoryBus } from './machine/mappedMemoryBus';
 export {
   BareMachineAdapter,
   Easy68kMachineAdapter,
   createMachineAdapter,
 } from './machine/machineAdapter';
-export { M68000State } from './cpu/state';
+export { M68000State, M68kCpuState } from './cpu/state';
 export type {
   ProgramImage,
   ProgramImageChunk,
+  ProgramImageSegment,
   ProgramSourceMapEntry,
 } from './assembler/programImage';
 export type { BranchCondition } from './assembler/encoder';
 export type { DecodedBinaryInstruction } from './cpu/decoder';
 export type { OpcodeClassification } from './cpu/opcodeClassifier';
-export type { StrictM68000CoreOptions } from './cpu/core';
+export type { M68kSystemSnapshot, StrictM68000CoreOptions } from './cpu/core';
 export type {
   AddressRange,
   BusAccess,
@@ -142,19 +146,63 @@ export type {
   MemoryMappedDevice,
 } from './cpu/memoryBus';
 export type { MachineAdapter, MachineSnapshot, MachineTrapContext } from './machine/machineAdapter';
-export type { CpuStateSnapshot, M68000StateOptions } from './cpu/state';
+export type { CpuStateSnapshot, M68000StateOptions, M68kCpuStateOptions } from './cpu/state';
 export {
+  M68K_CONTROL_REGISTER,
   MC68010_CONTROL_REGISTER,
+  controlRegistersForModel,
   controlRegisterFromSelector,
   maskControlRegisterValue,
 } from './cpu/controlRegisters';
-export type { Mc68010ControlRegister } from './cpu/controlRegisters';
+export type { Mc68010ControlRegister, M68kControlRegister } from './cpu/controlRegisters';
+export { CPU_CAPABILITIES, cpuSupports, getCpuCapabilities } from './isa/cpuCapabilities';
+export type {
+  CpuCapabilities,
+  CpuInstructionFeature,
+} from './isa/cpuCapabilities';
+export type { AddressSpacePolicy } from './cpu/addressSpace';
+export {
+  MC68020_EFFECTIVE_ADDRESS_MODES,
+  decodeIndexedExtension,
+  encodeIndexedExtension,
+} from './cpu/effectiveAddressCodec';
+export { decodeExceptionFrame, encodeExceptionFrame } from './cpu/exceptionFrames';
+export type { DecodedExceptionFrame, ExceptionFrameInput } from './cpu/exceptionFrames';
+export type {
+  BriefIndexedExtension,
+  Displacement,
+  FullIndexedExtension,
+  IndexedExtension,
+  IndexRegister,
+} from './cpu/effectiveAddressCodec';
+export type {
+  AddressTranslationPort,
+  AddressTranslationRequest,
+  AddressTranslationResult,
+  AddressTranslationStateSnapshot,
+} from './cpu/addressTranslation';
+export type {
+  CoprocessorDevice,
+  CoprocessorOperation,
+  CoprocessorRequest,
+  CoprocessorResult,
+  CoprocessorStateSnapshot,
+} from './cpu/coprocessor';
+export type {
+  ModuleAccessPort,
+  ModuleAccessResult,
+  ModuleCallRequest,
+  ModuleReturnRequest,
+} from './cpu/moduleAccess';
+export { NO_MODULE_ACCESS } from './cpu/moduleAccess';
 export {
   MC68010_ARCHITECTURAL_DIFFERENCES,
   MC68010_DEFERRED_PHYSICAL_BUS_SCOPE,
   MC68010_INSTRUCTION_INVENTORY,
 } from './isa/mc68010Inventory';
 export type { Mc68010InstructionInventoryEntry } from './isa/mc68010Inventory';
+export { MC68020_EXTENSION_LEGALITY, isMc68020ExtensionLegal } from './isa/mc68020Inventory';
+export type { Mc68020ExtensionLegalityRule } from './isa/mc68020Inventory';
 export {
   M68000_ISA_MANIFEST,
   MACHINE_COMPATIBILITY_EVIDENCE,
@@ -175,7 +223,11 @@ export type { CpuModelDefinition, MachineProfileDefinition } from './isa/emulati
 export type {
   CpuModel,
   CpuProfile,
+  CoprocessorAttachment,
+  CoprocessorConfiguration,
+  CoprocessorId,
   EmulationConfig,
+  ExecutionAccuracy,
   EffectiveAddressClass,
   FlagEffect,
   InstructionEncoding,
@@ -186,6 +238,7 @@ export type {
   IsaManifestValidationIssue,
   MachineCompatibilityEvidence,
   MachineProfile,
+  M68kSystemConfiguration,
   StatusFlag,
 } from './isa/types';
 export * from './devices/deviceAddressMap';

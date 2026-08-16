@@ -83,6 +83,15 @@ export interface MemoryBus {
   write8(address: number, value: number, access?: BusAccessInput): void;
   write16(address: number, value: number, access?: BusAccessInput): void;
   write32(address: number, value: number, access?: BusAccessInput): void;
+  load?(address: number, bytes: Uint8Array): void;
+  readRange?(address: number, length: number): Uint8Array;
+  atomicCompareExchange?(
+    address: number,
+    size: BusAccessSize,
+    expected: number,
+    replacement: number,
+    access?: BusAccessInput
+  ): { value: number; exchanged: boolean };
   breakpointAcknowledge?(vector: number): boolean;
   beginInstructionTransaction?(): unknown;
   commitInstructionTransaction?(transaction: unknown): void;
@@ -108,21 +117,50 @@ const ADDRESS_MASK = 0x00ff_ffff;
 export class RamBus implements MemoryBus {
   private readonly bytes: Uint8Array;
   private readonly trace: BusTraceEvent[] | undefined;
+  private readonly addressSpace: AddressSpacePolicy;
+  private readonly addressMask: number;
+  private readonly allowsUnalignedData: boolean;
   private readonly transactionBytes = new Map<number, number>();
   private activeTransaction = 0;
   private nextTransaction = 1;
 
-  constructor(options: { size?: number; trace?: BusTraceEvent[] } = {}) {
+  constructor(
+    options: {
+      size?: number;
+      trace?: BusTraceEvent[];
+      cpuModel?: CpuModel;
+      addressSpace?: AddressSpacePolicy;
+    } = {}
+  ) {
     const size = options.size ?? ADDRESS_MASK + 1;
-    if (!Number.isInteger(size) || size <= 0 || size > ADDRESS_MASK + 1) {
-      throw new RangeError(`RAM size must be from 1 through ${ADDRESS_MASK + 1}: ${size}`);
+    if (!Number.isInteger(size) || size <= 0 || size > 0x7fff_ffff) {
+      throw new RangeError(`RAM size must be from 1 through ${0x7fff_ffff}: ${size}`);
     }
     this.bytes = new Uint8Array(size);
     this.trace = options.trace;
+    this.addressSpace = options.addressSpace ?? createAddressSpacePolicy(options.cpuModel ?? 'm68000');
+    this.addressMask = this.addressSpace.mask;
+    this.allowsUnalignedData = this.addressSpace.allowsUnalignedData;
   }
 
   private normalize(address: number, access: BusAccessInput, size: BusAccessSize): number {
-    const normalized = address & ADDRESS_MASK;
+    const normalized = (address & this.addressMask) >>> 0;
+    if (
+      size > 1 &&
+      (normalized & 1) !== 0 &&
+      (busOperation(access, 'read') === 'fetch' || !this.allowsUnalignedData)
+    ) {
+      const operation = busOperation(access, 'read');
+      const functionCode = typeof access === 'string' ? undefined : access.functionCode;
+      throw new BusFault(
+        'address-error',
+        normalized,
+        operation,
+        size,
+        `Unaligned ${size * 8}-bit bus access at ${normalized.toString(16)}`,
+        functionCode
+      );
+    }
     if (normalized + size > this.bytes.length) {
       const operation = busOperation(access, 'read');
       const functionCode = typeof access === 'string' ? undefined : access.functionCode;
@@ -132,18 +170,6 @@ export class RamBus implements MemoryBus {
         operation,
         size,
         `Bus access exceeds installed RAM at ${normalized.toString(16)}`,
-        functionCode
-      );
-    }
-    if (size > 1 && (normalized & 1) !== 0) {
-      const operation = busOperation(access, 'read');
-      const functionCode = typeof access === 'string' ? undefined : access.functionCode;
-      throw new BusFault(
-        'address-error',
-        normalized,
-        operation,
-        size,
-        `Unaligned ${size * 8}-bit bus access at ${normalized.toString(16)}`,
         functionCode
       );
     }
@@ -275,4 +301,131 @@ export class RamBus implements MemoryBus {
     }
     return result;
   }
+
+  atomicCompareExchange(
+    address: number,
+    size: BusAccessSize,
+    expected: number,
+    replacement: number,
+    access: BusAccessInput = 'write'
+  ): { value: number; exchanged: boolean } {
+    const value = size === 1 ? this.read8(address, access) : size === 2 ? this.read16(address, access) : this.read32(address, access);
+    const mask = size === 1 ? 0xff : size === 2 ? 0xffff : 0xffff_ffff;
+    const exchanged = (value & mask) === (expected & mask);
+    if (exchanged) {
+      if (size === 1) this.write8(address, replacement, access);
+      else if (size === 2) this.write16(address, replacement, access);
+      else this.write32(address, replacement, access);
+    }
+    return { value: value >>> 0, exchanged };
+  }
 }
+
+export class SparseRamBus implements MemoryBus {
+  private readonly bytes = new Map<number, number>();
+  private readonly transactionBytes = new Map<number, number | undefined>();
+  private activeTransaction = 0;
+  private nextTransaction = 1;
+
+  constructor(private readonly addressSpace: AddressSpacePolicy) {}
+
+  private address(address: number, access: BusAccessInput, size: BusAccessSize): number {
+    return this.addressSpace.assertAccess(address, access, size);
+  }
+
+  private remember(address: number): void {
+    if (this.activeTransaction !== 0 && !this.transactionBytes.has(address)) {
+      this.transactionBytes.set(address, this.bytes.get(address));
+    }
+  }
+
+  read8(address: number, access: BusAccessInput = 'read'): number {
+    return this.bytes.get(this.address(address, access, 1)) ?? 0;
+  }
+
+  read16(address: number, access: BusAccessInput = 'read'): number {
+    const normalized = this.address(address, access, 2);
+    return ((this.read8(normalized, access) << 8) | this.read8(normalized + 1, access)) >>> 0;
+  }
+
+  read32(address: number, access: BusAccessInput = 'read'): number {
+    const normalized = this.address(address, access, 4);
+    return (
+      ((this.read8(normalized, access) << 24) |
+        (this.read8(normalized + 1, access) << 16) |
+        (this.read8(normalized + 2, access) << 8) |
+        this.read8(normalized + 3, access)) >>>
+      0
+    );
+  }
+
+  write8(address: number, value: number, access: BusAccessInput = 'write'): void {
+    const normalized = this.address(address, access, 1);
+    this.remember(normalized);
+    this.bytes.set(normalized, value & 0xff);
+  }
+
+  write16(address: number, value: number, access: BusAccessInput = 'write'): void {
+    const normalized = this.address(address, access, 2);
+    this.write8(normalized, value >>> 8, access);
+    this.write8(normalized + 1, value, access);
+  }
+
+  write32(address: number, value: number, access: BusAccessInput = 'write'): void {
+    const normalized = this.address(address, access, 4);
+    this.write8(normalized, value >>> 24, access);
+    this.write8(normalized + 1, value >>> 16, access);
+    this.write8(normalized + 2, value >>> 8, access);
+    this.write8(normalized + 3, value, access);
+  }
+
+  load(address: number, bytes: Uint8Array): void {
+    bytes.forEach((byte, offset) => this.write8(address + offset, byte));
+  }
+
+  readRange(address: number, length: number): Uint8Array {
+    return Uint8Array.from({ length }, (_, offset) => this.read8(address + offset));
+  }
+
+  atomicCompareExchange(
+    address: number,
+    size: BusAccessSize,
+    expected: number,
+    replacement: number,
+    access: BusAccessInput = 'write'
+  ): { value: number; exchanged: boolean } {
+    const value = size === 1 ? this.read8(address, access) : size === 2 ? this.read16(address, access) : this.read32(address, access);
+    const mask = size === 1 ? 0xff : size === 2 ? 0xffff : 0xffff_ffff;
+    const exchanged = (value & mask) === (expected & mask);
+    if (exchanged) {
+      if (size === 1) this.write8(address, replacement, access);
+      else if (size === 2) this.write16(address, replacement, access);
+      else this.write32(address, replacement, access);
+    }
+    return { value: value >>> 0, exchanged };
+  }
+
+  beginInstructionTransaction(): number {
+    this.transactionBytes.clear();
+    this.activeTransaction = this.nextTransaction++;
+    return this.activeTransaction;
+  }
+
+  commitInstructionTransaction(transaction: unknown): void {
+    if (transaction !== this.activeTransaction) return;
+    this.activeTransaction = 0;
+    this.transactionBytes.clear();
+  }
+
+  rollbackInstructionTransaction(transaction: unknown): void {
+    if (transaction !== this.activeTransaction) return;
+    for (const [address, value] of this.transactionBytes) {
+      if (value === undefined) this.bytes.delete(address);
+      else this.bytes.set(address, value);
+    }
+    this.activeTransaction = 0;
+    this.transactionBytes.clear();
+  }
+}
+import { createAddressSpacePolicy, type AddressSpacePolicy } from './addressSpace';
+import type { CpuModel } from '../isa/types';

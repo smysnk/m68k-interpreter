@@ -85,6 +85,10 @@ export const initialRegisters: Registers = {
   vbr: 0,
   sfc: 0,
   dfc: 0,
+  isp: 0,
+  msp: 0,
+  cacr: 0,
+  caar: 0,
 };
 
 export const initialFlags: ConditionFlags = {
@@ -207,7 +211,14 @@ function registersEqual(left: Registers, right: Registers): boolean {
     left.ccr === right.ccr &&
     left.sr === right.sr &&
     left.usp === right.usp &&
-    left.ssp === right.ssp
+    left.ssp === right.ssp &&
+    left.vbr === right.vbr &&
+    left.sfc === right.sfc &&
+    left.dfc === right.dfc &&
+    left.isp === right.isp &&
+    left.msp === right.msp &&
+    left.cacr === right.cacr &&
+    left.caar === right.caar
   );
 }
 

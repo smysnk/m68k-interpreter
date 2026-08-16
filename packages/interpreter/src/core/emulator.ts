@@ -12,6 +12,7 @@ import {
 import type { TerminalDevice, TerminalMeta, TerminalSnapshot } from '../devices/terminal';
 import type { TerminalFrameBuffer } from '../devices/terminalBuffer';
 import { normalizeEmulationConfig, toLegacyCpuProfile } from '../isa/emulationConfig';
+import { getCpuCapabilities } from '../isa/cpuCapabilities';
 import type { CpuProfile, EmulationConfig, MachineProfile } from '../isa/types';
 import {
   createMachineAdapter,
@@ -93,6 +94,7 @@ export class Emulator {
       hardwareConfig: options.hardwareConfig,
       hardwareDevices: options.hardwareDevices,
       beforeRamWrite: (address) => this.captureUndoPageForAddress(address),
+      cpuModel: this.emulation.cpuModel,
     });
     this.terminal = this.machine.terminal;
     this.hardware = this.machine.hardware;
@@ -151,7 +153,13 @@ export class Emulator {
     const core = new StrictM68000Core({
       bus: this.machine.bus,
       cpuModel: this.emulation.cpuModel,
-      state: { sr: 0, usp: DEFAULT_STACK_POINTER, ssp: DEFAULT_STACK_POINTER },
+      state: {
+        sr: 0,
+        usp: DEFAULT_STACK_POINTER,
+        ssp: DEFAULT_STACK_POINTER,
+        isp: DEFAULT_STACK_POINTER,
+        msp: DEFAULT_STACK_POINTER,
+      },
     });
     core.loadProgram(image);
     this.machineTrapContext = {
@@ -173,7 +181,7 @@ export class Emulator {
   private captureUndoPageForAddress(address: number): void {
     const frame = this.undo.peek();
     if (frame === undefined) return;
-    const pageIndex = Math.floor((address & 0x00ff_ffff) / this.memory.getPageSize());
+    const pageIndex = Math.floor((address >>> 0) / this.memory.getPageSize());
     if (!frame.memoryPages.some((entry) => entry.pageIndex === pageIndex)) {
       frame.memoryPages.push(this.memory.captureUndoPage(pageIndex));
     }
@@ -235,9 +243,13 @@ export class Emulator {
         sr: core.state.sr,
         usp: this.getUSP(),
         ssp: this.getSSP(),
+        isp: this.getISP(),
+        msp: this.getMSP(),
         vbr: this.getVBR(),
         sfc: this.getSFC(),
         dfc: this.getDFC(),
+        cacr: this.getCACR(),
+        caar: this.getCAAR(),
         registers: this.getRegisterSnapshot(),
       },
       memoryPages: [],
@@ -308,7 +320,10 @@ export class Emulator {
       }
 
       this.maybeCaptureUndoSnapshot();
-      const interruptVectorBase = this.emulation.cpuModel === 'm68010' ? core.state.vbr : 0;
+      const interruptVectorBase = getCpuCapabilities(this.emulation.cpuModel)
+        .hasVectorBaseRegister
+        ? core.state.vbr
+        : 0;
       const missingLevel = [...this.pendingInterruptLevels]
         .sort((left, right) => right - left)
         .find(
@@ -431,27 +446,69 @@ export class Emulator {
   }
 
   getVBR(): number {
-    return this.emulation.cpuModel === 'm68010' ? (this.strictCore?.state.vbr ?? 0) : 0;
+    return getCpuCapabilities(this.emulation.cpuModel).hasVectorBaseRegister
+      ? (this.strictCore?.state.vbr ?? 0)
+      : 0;
   }
 
   getSFC(): number {
-    return this.emulation.cpuModel === 'm68010' ? (this.strictCore?.state.sfc ?? 0) : 0;
+    return getCpuCapabilities(this.emulation.cpuModel).hasVectorBaseRegister
+      ? (this.strictCore?.state.sfc ?? 0)
+      : 0;
   }
 
   getDFC(): number {
-    return this.emulation.cpuModel === 'm68010' ? (this.strictCore?.state.dfc ?? 0) : 0;
+    return getCpuCapabilities(this.emulation.cpuModel).hasVectorBaseRegister
+      ? (this.strictCore?.state.dfc ?? 0)
+      : 0;
   }
 
-  setControlRegisterValue(register: 'vbr' | 'sfc' | 'dfc', value: number): void {
-    if (this.emulation.cpuModel !== 'm68010') {
+  getISP(): number {
+    return this.strictCore?.state.isp ?? DEFAULT_STACK_POINTER;
+  }
+
+  getMSP(): number {
+    return this.emulation.cpuModel === 'm68020'
+      ? (this.strictCore?.state.msp ?? DEFAULT_STACK_POINTER)
+      : 0;
+  }
+
+  getCACR(): number {
+    return this.emulation.cpuModel === 'm68020' ? (this.strictCore?.state.cacr ?? 0) : 0;
+  }
+
+  getCAAR(): number {
+    return this.emulation.cpuModel === 'm68020' ? (this.strictCore?.state.caar ?? 0) : 0;
+  }
+
+  setControlRegisterValue(
+    register: 'vbr' | 'sfc' | 'dfc' | 'isp' | 'msp' | 'cacr' | 'caar',
+    value: number
+  ): void {
+    const capabilities = getCpuCapabilities(this.emulation.cpuModel);
+    if (!capabilities.hasVectorBaseRegister) {
       throw new Error(`${register.toUpperCase()} is unavailable on the MC68000 CPU model`);
+    }
+    if (
+      this.emulation.cpuModel !== 'm68020' &&
+      (register === 'isp' || register === 'msp' || register === 'cacr' || register === 'caar')
+    ) {
+      throw new Error(`${register.toUpperCase()} requires the MC68020 CPU model`);
     }
     const core = this.strictCore;
     if (core === undefined) throw new Error('No executable program image is loaded.');
     const before = this.runtimeState();
     if (register === 'vbr') core.state.vbr = value >>> 0;
     else if (register === 'sfc') core.state.sfc = value & 0x7;
-    else core.state.dfc = value & 0x7;
+    else if (register === 'dfc') core.state.dfc = value & 0x7;
+    else if (register === 'isp') core.state.isp = value >>> 0;
+    else if (register === 'msp') core.state.msp = value >>> 0;
+    else if (register === 'cacr') {
+      if ((value & 0x8) !== 0) core.invalidateInstructionCache();
+      if ((value & 0x4) !== 0) core.invalidateInstructionCache(core.state.caar);
+      core.state.cacr = value & 0x3;
+    }
+    else core.state.caar = value & 0xfc;
     this.reconcileRuntimeSyncVersions(before, true);
   }
 
@@ -548,14 +605,17 @@ export class Emulator {
 
   writeMemoryByte(address: number, value: number): void {
     this.machine.bus.write8(address, value);
+    this.strictCore?.invalidateInstructionCache(address);
   }
 
   writeMemoryWord(address: number, value: number): void {
     this.machine.bus.write16(address, value);
+    this.strictCore?.invalidateInstructionCache(address);
   }
 
   writeMemoryLong(address: number, value: number): void {
     this.machine.bus.write32(address, value);
+    this.strictCore?.invalidateInstructionCache(address);
   }
 
   private resolveExternalInterruptAddress(address: number): number | undefined {
@@ -715,10 +775,13 @@ export class Emulator {
     if (frame === undefined) return;
     core.state.sr = frame.cpu.sr;
     core.state.usp = frame.cpu.usp;
-    core.state.ssp = frame.cpu.ssp;
+    core.state.isp = frame.cpu.isp ?? frame.cpu.ssp;
+    core.state.msp = frame.cpu.msp ?? frame.cpu.ssp;
     core.state.vbr = frame.cpu.vbr ?? 0;
     core.state.sfc = frame.cpu.sfc ?? 0;
     core.state.dfc = frame.cpu.dfc ?? 0;
+    core.state.cacr = frame.cpu.cacr ?? 0;
+    core.state.caar = frame.cpu.caar ?? 0;
     core.state.a.set(frame.cpu.registers.slice(0, 8));
     core.state.d.set(frame.cpu.registers.slice(8, 16));
     core.state.pc = frame.cpu.pc;

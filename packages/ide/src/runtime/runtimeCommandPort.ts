@@ -394,7 +394,10 @@ export class RuntimeCommandPort {
     });
   }
 
-  setControlRegisterValue(register: 'vbr' | 'sfc' | 'dfc', value: number): Promise<void> {
+  setControlRegisterValue(
+    register: 'vbr' | 'sfc' | 'dfc' | 'isp' | 'msp' | 'cacr' | 'caar',
+    value: number
+  ): Promise<void> {
     return this.enqueue(async (runtime) => {
       if (runtime.controller) {
         await runtime.controller.requestSetControlRegisterValue(register, value);

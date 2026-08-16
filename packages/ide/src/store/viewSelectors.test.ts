@@ -71,5 +71,11 @@ describe('viewSelectors', () => {
     expect(mc68010Groups[2].descriptors.map((descriptor) => descriptor.key)).toEqual(
       expect.arrayContaining(['vbr', 'sfc', 'dfc'])
     );
+
+    store.dispatch(setCpuModel('m68020'));
+    const mc68020Groups = selectRegisterGroupsModel(store.getState());
+    expect(mc68020Groups[2].descriptors.map((descriptor) => descriptor.key)).toEqual(
+      expect.arrayContaining(['vbr', 'sfc', 'dfc', 'isp', 'msp', 'cacr', 'caar'])
+    );
   });
 });

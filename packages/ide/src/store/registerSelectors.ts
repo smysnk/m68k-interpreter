@@ -24,7 +24,10 @@ export const selectRegisterGroupsModel = createSelector(
   (registers, cpuModel) =>
     REGISTER_GROUPS.map((group) => {
       const descriptors = getRegisterDescriptorsByGroup(group.id).filter(
-        (descriptor) => descriptor.minimumCpuModel === undefined || cpuModel === 'm68010'
+        (descriptor) =>
+          descriptor.minimumCpuModel === undefined ||
+          descriptor.minimumCpuModel === cpuModel ||
+          (descriptor.minimumCpuModel === 'm68010' && cpuModel === 'm68020')
       );
 
       return {

@@ -10,6 +10,12 @@ function setup() {
   return { bus, state };
 }
 
+function setup68020() {
+  const bus = new RamBus({ size: 0x20_000, cpuModel: 'm68020' });
+  const state = new M68000State({ cpuModel: 'm68020', sr: 0x2000 });
+  return { bus, state };
+}
+
 describe('effective-address transactions', () => {
   it('preserves upper data-register bits for byte and word writes', () => {
     const { bus, state } = setup();
@@ -67,6 +73,16 @@ describe('effective-address transactions', () => {
     });
     expect(indexed.resolveAddress()).toBe(0x20a);
 
+    bus.write16(0x22, 0x3706);
+    const legacyReservedBits = resolveEffectiveAddress(6, 1, {
+      state,
+      bus,
+      stream: new InstructionStream(bus, 0x22),
+      size: 2,
+      access: 'address',
+    });
+    expect(legacyReservedBits.resolveAddress()).toBe(0x20a);
+
     bus.write16(0x30, 0x0010);
     const pcRelative = resolveEffectiveAddress(7, 2, {
       state,
@@ -110,5 +126,63 @@ describe('effective-address transactions', () => {
       resolveEffectiveAddress(7, 4, { state, bus, stream, size: 4, access: 'read' }).read()
     ).toBe(0x89ab_cdef);
     expect(stream.cursor).toBe(0x48);
+  });
+
+  it('resolves MC68020 full indexed and memory-indirect address forms', () => {
+    const { bus, state } = setup68020();
+    state.a[0] = 0x1000;
+    state.d[1] = 4;
+
+    bus.load(0x20, Uint8Array.of(0x1b, 0x20, 0x01, 0x00));
+    expect(
+      resolveEffectiveAddress(6, 0, {
+        state,
+        bus,
+        stream: new InstructionStream(bus, 0x20),
+        size: 4,
+        access: 'address',
+      }).resolveAddress()
+    ).toBe(0x1108);
+
+    bus.load(0x30, Uint8Array.of(0x1b, 0x22, 0x00, 0x10, 0x00, 0x20));
+    bus.write32(0x1018, 0x2000);
+    const preindexed = resolveEffectiveAddress(6, 0, {
+      state,
+      bus,
+      stream: new InstructionStream(bus, 0x30),
+      size: 4,
+      access: 'address',
+    });
+    expect(preindexed.class).toBe('memory-indirect-preindexed');
+    expect(preindexed.resolveAddress()).toBe(0x2020);
+
+    bus.load(0x40, Uint8Array.of(0x1b, 0x26, 0x00, 0x10, 0x00, 0x20));
+    bus.write32(0x1010, 0x2000);
+    const postindexed = resolveEffectiveAddress(6, 0, {
+      state,
+      bus,
+      stream: new InstructionStream(bus, 0x40),
+      size: 4,
+      access: 'address',
+    });
+    expect(postindexed.class).toBe('memory-indirect-postindexed');
+    expect(postindexed.resolveAddress()).toBe(0x2028);
+  });
+
+  it('uses the extension-word address as the MC68020 PC-indexed base', () => {
+    const { bus, state } = setup68020();
+    state.d[1] = 4;
+    bus.load(0x100, Uint8Array.of(0x1b, 0x20, 0x01, 0x00));
+
+    const operand = resolveEffectiveAddress(7, 3, {
+      state,
+      bus,
+      stream: new InstructionStream(bus, 0x100),
+      size: 4,
+      access: 'address',
+    });
+
+    expect(operand.class).toBe('pc-full-indexed');
+    expect(operand.resolveAddress()).toBe(0x208);
   });
 });

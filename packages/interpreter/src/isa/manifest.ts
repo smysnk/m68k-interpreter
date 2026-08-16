@@ -41,6 +41,18 @@ const DATA_SOURCE = [
 const DATA_ALTERABLE = ['data-register', ...MEMORY] as const;
 const MEMORY_ALTERABLE = [...MEMORY] as const;
 const ALL_SOURCE = ['data-register', 'address-register', ...MEMORY, 'immediate'] as const;
+const MC68020_MEMORY = [
+  ...MEMORY,
+  'full-indexed',
+  'memory-indirect-preindexed',
+  'memory-indirect-postindexed',
+] as const;
+const MC68020_CONTROL = [
+  ...CONTROL,
+  'pc-full-indexed',
+  'pc-memory-indirect-preindexed',
+  'pc-memory-indirect-postindexed',
+] as const;
 
 interface FormOptions {
   minimumCpuModel?: CpuModel;
@@ -616,6 +628,54 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     support: 'extension-only',
     encoding: { mask: 0xff00, value: 0x0e00, extensionWords: 'variable' },
   }),
+  ...['Bcc', 'BRA', 'BSR'].map((mnemonic) => form(mnemonic, 'long-displacement', {
+    minimumCpuModel: 'm68020',
+    sizes: ['long'],
+    source: ['condition-displacement'],
+    support: IMPLEMENTED,
+    encoding: {
+      mask: mnemonic === 'Bcc' ? 0xf0ff : 0xffff,
+      value: mnemonic === 'BRA' ? 0x60ff : mnemonic === 'BSR' ? 0x61ff : 0x60ff,
+      extensionWords: 2,
+    },
+  })),
+  form('CHK', 'long-bound', {
+    minimumCpuModel: 'm68020', sizes: ['long'], source: DATA_SOURCE,
+    destination: DATA_REGISTER, support: IMPLEMENTED, encoding: { mask: 0xf1c0, value: 0x4100 },
+  }),
+  form('LINK', 'long-displacement', {
+    minimumCpuModel: 'm68020', sizes: ['long'], source: ADDRESS_REGISTER,
+    destination: ['immediate'], support: IMPLEMENTED, encoding: { mask: 0xfff8, value: 0x4808, extensionWords: 2 },
+  }),
+  form('EXTB', 'byte-to-long', {
+    minimumCpuModel: 'm68020', sizes: ['long'], destination: DATA_REGISTER,
+    support: IMPLEMENTED, encoding: { mask: 0xfff8, value: 0x49c0 },
+  }),
+  form('MULS', 'long', { minimumCpuModel: 'm68020', sizes: ['long'], source: DATA_SOURCE, destination: DATA_REGISTER, support: IMPLEMENTED, encoding: { mask: 0xffc0, value: 0x4c00, extensionWords: 'variable' } }),
+  form('MULU', 'long', { minimumCpuModel: 'm68020', sizes: ['long'], source: DATA_SOURCE, destination: DATA_REGISTER, support: IMPLEMENTED, encoding: { mask: 0xffc0, value: 0x4c00, extensionWords: 'variable' } }),
+  form('DIVS', 'long', { minimumCpuModel: 'm68020', sizes: ['long'], source: DATA_SOURCE, destination: DATA_REGISTER, support: IMPLEMENTED, encoding: { mask: 0xffc0, value: 0x4c40, extensionWords: 'variable' } }),
+  form('DIVU', 'long', { minimumCpuModel: 'm68020', sizes: ['long'], source: DATA_SOURCE, destination: DATA_REGISTER, support: IMPLEMENTED, encoding: { mask: 0xffc0, value: 0x4c40, extensionWords: 'variable' } }),
+  form('CHK2', 'bounds', { minimumCpuModel: 'm68020', sizes: ['byte', 'word', 'long'], source: MC68020_CONTROL, destination: REGISTER_DIRECT, support: IMPLEMENTED, encoding: { mask: 0xf1c0, value: 0x00c0, extensionWords: 'variable' } }),
+  form('CMP2', 'bounds', { minimumCpuModel: 'm68020', sizes: ['byte', 'word', 'long'], source: MC68020_CONTROL, destination: REGISTER_DIRECT, support: IMPLEMENTED, encoding: { mask: 0xf1c0, value: 0x00c0, extensionWords: 'variable' } }),
+  form('TRAPcc', 'no-operand', { minimumCpuModel: 'm68020', support: IMPLEMENTED, encoding: { mask: 0xf0ff, value: 0x50fc } }),
+  form('TRAPcc', 'word-operand', { minimumCpuModel: 'm68020', sizes: ['word'], source: ['immediate'], support: IMPLEMENTED, encoding: { mask: 0xf0ff, value: 0x50fa, extensionWords: 1 } }),
+  form('TRAPcc', 'long-operand', { minimumCpuModel: 'm68020', sizes: ['long'], source: ['immediate'], support: IMPLEMENTED, encoding: { mask: 0xf0ff, value: 0x50fb, extensionWords: 2 } }),
+  ...['PACK', 'UNPK'].flatMap((mnemonic) => [
+    form(mnemonic, 'register', { minimumCpuModel: 'm68020', source: DATA_REGISTER, destination: DATA_REGISTER, support: IMPLEMENTED }),
+    form(mnemonic, 'predecrement-memory', { minimumCpuModel: 'm68020', source: ['predecrement'], destination: ['predecrement'], support: IMPLEMENTED }),
+  ]),
+  ...['BFCHG', 'BFCLR', 'BFEXTS', 'BFEXTU', 'BFFFO', 'BFINS', 'BFSET', 'BFTST'].map((mnemonic) =>
+    form(mnemonic, 'bitfield', { minimumCpuModel: 'm68020', source: ['data-register', ...MC68020_MEMORY, ...MC68020_CONTROL], destination: DATA_REGISTER, support: IMPLEMENTED, encoding: { mask: 0xf8c0, value: 0xe8c0, extensionWords: 'variable' } })
+  ),
+  form('CAS', 'atomic-memory', { minimumCpuModel: 'm68020', sizes: ['byte', 'word', 'long'], source: DATA_REGISTER, destination: MC68020_MEMORY, support: IMPLEMENTED, encoding: { mask: 0xf9c0, value: 0x08c0, extensionWords: 'variable' } }),
+  form('CAS2', 'dual-atomic-memory', { minimumCpuModel: 'm68020', sizes: ['word', 'long'], source: DATA_REGISTER, destination: MC68020_MEMORY, support: IMPLEMENTED, encoding: { mask: 0xfdff, value: 0x0cfc, extensionWords: 2 } }),
+  form('CALLM', 'module-call', { minimumCpuModel: 'm68020', source: ['immediate'], destination: MC68020_CONTROL, support: IMPLEMENTED, encoding: { mask: 0xffc0, value: 0x06c0, extensionWords: 'variable' } }),
+  form('RTM', 'module-return', { minimumCpuModel: 'm68020', source: REGISTER_DIRECT, support: IMPLEMENTED, encoding: { mask: 0xfff0, value: 0x06c0 } }),
+  ...['cpBcc', 'cpDBcc', 'cpGEN', 'cpRESTORE', 'cpSAVE', 'cpScc', 'cpTRAPcc'].map((mnemonic) =>
+    form(mnemonic, 'protocol', { minimumCpuModel: 'm68020', source: ['coprocessor-register'], destination: MC68020_MEMORY, support: IMPLEMENTED, encoding: { mask: 0xf000, value: 0xf000, extensionWords: 'variable' } })
+  ),
+  form('CMPI', 'pc-relative-expanded', { minimumCpuModel: 'm68020', sizes: ['byte', 'word', 'long'], source: ['immediate'], destination: ['pc-displacement', 'pc-indexed', 'pc-full-indexed'], support: IMPLEMENTED }),
+  form('TST', 'expanded-source', { minimumCpuModel: 'm68020', sizes: ['byte', 'word', 'long'], source: ['address-register', 'pc-displacement', 'pc-indexed', 'pc-full-indexed', 'immediate'], support: IMPLEMENTED }),
 ];
 
 export const MACHINE_COMPATIBILITY_EVIDENCE: readonly MachineCompatibilityEvidence[] = [
@@ -694,6 +754,7 @@ export function summarizeIsaCoverage(
   const byCpuModel: IsaCoverageSummary['byCpuModel'] = {
     m68000: 0,
     m68010: 0,
+    m68020: 0,
   };
   const machineCompatibility: IsaCoverageSummary['machineCompatibility'] = {
     bare: 0,

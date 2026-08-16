@@ -3,7 +3,7 @@ import { decodeBinaryInstruction, type DecodedBinaryInstruction } from './decode
 
 export type OpcodeClassification =
   | { status: 'legal'; instruction: DecodedBinaryInstruction }
-  | { status: 'profile-illegal'; instruction: DecodedBinaryInstruction; requiredProfile: 'm68010' }
+  | { status: 'profile-illegal'; instruction: DecodedBinaryInstruction; requiredProfile: 'm68010' | 'm68020' }
   | { status: 'illegal'; instruction: DecodedBinaryInstruction };
 
 export function classifyOpcodeWord(opcode: number, cpuModel: CpuModel): OpcodeClassification {
@@ -11,7 +11,9 @@ export function classifyOpcodeWord(opcode: number, cpuModel: CpuModel): OpcodeCl
     throw new RangeError(`Opcode must be an unsigned 16-bit integer: ${opcode}`);
   }
   const instruction = decodeBinaryInstruction(
-    Uint8Array.of((opcode >>> 8) & 0xff, opcode & 0xff, 0, 0)
+    Uint8Array.of((opcode >>> 8) & 0xff, opcode & 0xff, 0, 0, 0, 0),
+    0,
+    cpuModel
   );
   if (instruction.kind === 'unimplemented') return { status: 'illegal', instruction };
   if (
@@ -21,7 +23,7 @@ export function classifyOpcodeWord(opcode: number, cpuModel: CpuModel): OpcodeCl
     instruction.kind === 'movec' ||
     instruction.kind === 'moves'
   ) {
-    return cpuModel === 'm68010'
+    return cpuModel !== 'm68000'
       ? { status: 'legal', instruction }
       : { status: 'profile-illegal', instruction, requiredProfile: 'm68010' };
   }

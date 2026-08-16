@@ -4,6 +4,7 @@ import {
   resolveDecodedInstruction,
 } from '../instructionDecoder';
 import { CODE_BYTE, CODE_LONG, CODE_WORD } from '../core/operations';
+import { encodeIndexedExtension } from '../cpu/effectiveAddressCodec';
 
 const TOKEN_IMMEDIATE = 0;
 const TOKEN_OFFSET = 1;
@@ -59,6 +60,12 @@ function encodeEa(operand: DecodedOperand, size: number): EncodedEa {
     case TOKEN_REG_ADDR:
       return { bits: 0x08 | operand.value, extensions: [] };
     case TOKEN_OFFSET_ADDR: {
+      if (operand.fullIndex !== undefined) {
+        return {
+          bits: operand.pcRelative ? 0x3b : 0x30 | operand.value,
+          extensions: [...encodeIndexedExtension(operand.fullIndex)],
+        };
+      }
       if (operand.preDecrement) return { bits: 0x20 | operand.value, extensions: [] };
       if (operand.postIncrement) return { bits: 0x18 | operand.value, extensions: [] };
       if (operand.indexRegister !== undefined) {
@@ -68,11 +75,18 @@ function encodeEa(operand: DecodedOperand, size: number): EncodedEa {
           (addressIndex ? 0x8000 : 0) |
           (register << 12) |
           (operand.indexSize === CODE_LONG ? 0x0800 : 0) |
+          (Math.log2(operand.indexScale ?? 1) << 9) |
           ((operand.offset ?? 0) & 0xff);
-        return { bits: 0x30 | operand.value, extensions: [extension] };
+        return {
+          bits: operand.pcRelative ? 0x3b : 0x30 | operand.value,
+          extensions: [extension],
+        };
       }
       if ((operand.offset ?? 0) !== 0) {
-        return { bits: 0x28 | operand.value, extensions: [(operand.offset ?? 0) & 0xffff] };
+        return {
+          bits: operand.pcRelative ? 0x3a : 0x28 | operand.value,
+          extensions: [(operand.offset ?? 0) & 0xffff],
+        };
       }
       return { bits: 0x10 | operand.value, extensions: [] };
     }
@@ -115,6 +129,14 @@ function controlRegisterSelector(token: string): number {
       return 0x800;
     case 'vbr':
       return 0x801;
+    case 'cacr':
+      return 0x002;
+    case 'caar':
+      return 0x802;
+    case 'msp':
+      return 0x803;
+    case 'isp':
+      return 0x804;
     default:
       throw new Error(`Unknown MC68010 control register: ${token}`);
   }
@@ -164,6 +186,14 @@ export function encodeSourceInstruction(
   if (fixed[op] !== undefined) return wordsToBytes([fixed[op]]);
 
   if (op === 'stop' || op === 'rtd' || op === 'link') {
+    if (op === 'link' && size === CODE_LONG) {
+      const immediate = operands[1].value >>> 0;
+      return wordsToBytes([
+        0x4808 | addressRegister(operands[0]),
+        immediate >>> 16,
+        immediate,
+      ]);
+    }
     const opcode =
       op === 'stop' ? 0x4e72 : op === 'rtd' ? 0x4e74 : 0x4e50 | addressRegister(operands[0]);
     const immediate = operands[op === 'link' ? 1 : 0];
@@ -179,7 +209,7 @@ export function encodeSourceInstruction(
   }
   if (op === 'movec') {
     if (operands.length !== 2) throw new Error('MOVEC requires two operands');
-    const sourceControl = ['sfc', 'dfc', 'usp', 'vbr'].includes(
+    const sourceControl = ['sfc', 'dfc', 'usp', 'vbr', 'cacr', 'caar', 'msp', 'isp'].includes(
       instruction.operandTokens[0]?.trim().toLowerCase()
     );
     const controlToken = instruction.operandTokens[sourceControl ? 0 : 1];
@@ -207,6 +237,156 @@ export function encodeSourceInstruction(
   }
   if (op === 'moveq') {
     return wordsToBytes([0x7000 | (dataRegister(operands[1]) << 9) | (operands[0].value & 0xff)]);
+  }
+
+  if (op === 'extb') {
+    return wordsToBytes([0x49c0 | dataRegister(operands[0])]);
+  }
+
+  const trapCondition = op.startsWith('trap') ? CONDITION_CODE[`b${op.slice(4)}`] : undefined;
+  if (trapCondition !== undefined) {
+    const operandBytes = operands.length === 0 ? 0 : size === CODE_LONG ? 4 : 2;
+    const suffix = operandBytes === 0 ? 0xfc : operandBytes === 2 ? 0xfa : 0xfb;
+    return wordsToBytes([
+      0x5000 | (trapCondition << 8) | suffix,
+      ...(operandBytes === 0 ? [] : immediateWords(operands[0].value, operandBytes)),
+    ]);
+  }
+
+  if (op === 'pack' || op === 'unpk') {
+    const memory = operands[0].preDecrement === true && operands[1].preDecrement === true;
+    const source = memory ? operands[0].value : dataRegister(operands[0]);
+    const destination = memory ? operands[1].value : dataRegister(operands[1]);
+    return wordsToBytes([
+      (op === 'pack' ? 0x8140 : 0x8180) |
+        (destination << 9) |
+        (memory ? 0x0008 : 0) |
+        source,
+      operands[2].value,
+    ]);
+  }
+
+  if (op === 'callm') {
+    const ea = encodeEa(operands[1], CODE_LONG);
+    return wordsToBytes([0x06c0 | ea.bits, operands[0].value & 0xff, ...ea.extensions]);
+  }
+  if (op === 'rtm') return wordsToBytes([0x06c0 | generalRegister(operands[0])]);
+
+  if (op === 'cpgen') {
+    if (operands.length !== 2) throw new Error('cpGEN requires a coprocessor ID and command word');
+    return wordsToBytes([0xf000 | ((operands[0].value & 7) << 9), operands[1].value]);
+  }
+  if (op === 'cpbcc') {
+    if (operands.length !== 3) throw new Error('cpBcc requires an ID, condition, and target');
+    const displacement = (operands[2].value - (address + 2)) | 0;
+    const long = size === CODE_LONG || displacement < -0x8000 || displacement > 0x7fff;
+    return wordsToBytes([
+      0xf000 |
+        ((operands[0].value & 7) << 9) |
+        ((long ? 3 : 2) << 6) |
+        (operands[1].value & 0x3f),
+      ...(long
+        ? [(displacement >>> 16) & 0xffff, displacement & 0xffff]
+        : [displacement & 0xffff]),
+    ]);
+  }
+  if (op === 'cpdbcc') {
+    if (operands.length !== 4) {
+      throw new Error('cpDBcc requires an ID, condition, data register, and target');
+    }
+    const displacement = (operands[3].value - (address + 2)) | 0;
+    return wordsToBytes([
+      0xf048 | ((operands[0].value & 7) << 9) | dataRegister(operands[2]),
+      operands[1].value & 0x3f,
+      displacement & 0xffff,
+    ]);
+  }
+  if (op === 'cpscc') {
+    if (operands.length !== 3) throw new Error('cpScc requires an ID, condition, and destination');
+    const ea = encodeEa(operands[2], CODE_BYTE);
+    return wordsToBytes([
+      0xf040 | ((operands[0].value & 7) << 9) | ea.bits,
+      operands[1].value & 0x3f,
+      ...ea.extensions,
+    ]);
+  }
+  if (op === 'cptrapcc') {
+    if (operands.length < 2 || operands.length > 3) {
+      throw new Error('cpTRAPcc requires an ID, condition, and optional operand');
+    }
+    const operandBytes = operands.length === 2 ? 0 : size === CODE_LONG ? 4 : 2;
+    const register = operandBytes === 0 ? 4 : operandBytes === 2 ? 2 : 3;
+    return wordsToBytes([
+      0xf078 | ((operands[0].value & 7) << 9) | register,
+      operands[1].value & 0x3f,
+      ...(operandBytes === 0 ? [] : immediateWords(operands[2].value, operandBytes)),
+    ]);
+  }
+  if (op === 'cpsave' || op === 'cprestore') {
+    if (operands.length !== 2) throw new Error(`${op} requires an ID and effective address`);
+    const ea = encodeEa(operands[1], CODE_LONG);
+    return wordsToBytes([
+      (op === 'cpsave' ? 0xf100 : 0xf140) | ((operands[0].value & 7) << 9) | ea.bits,
+      ...ea.extensions,
+    ]);
+  }
+
+  const bitFieldOperation: Record<string, number> = {
+    bftst: 0, bfextu: 1, bfchg: 2, bfexts: 3,
+    bfclr: 4, bfffo: 5, bfset: 6, bfins: 7,
+  };
+  if (bitFieldOperation[op] !== undefined) {
+    const operandIndex = op === 'bfins' ? 1 : 0;
+    const destinationIndex = ['bfextu', 'bfexts', 'bfffo'].includes(op) ? 1 : op === 'bfins' ? 0 : -1;
+    const operand = operands[operandIndex];
+    if (operand.bitField === undefined) throw new Error(`${op.toUpperCase()} requires {offset:width}`);
+    const ea = encodeEa(operand, CODE_LONG);
+    const field = operand.bitField;
+    const destination = destinationIndex < 0 ? 0 : dataRegister(operands[destinationIndex]);
+    const extension =
+      (destination << 12) |
+      (field.offsetRegister !== undefined ? 0x0800 | (field.offsetRegister << 6) : (field.offset & 0x1f) << 6) |
+      (field.widthRegister !== undefined ? 0x0020 | field.widthRegister : field.width & 0x1f);
+    return wordsToBytes([
+      0xe8c0 | (bitFieldOperation[op] << 8) | ea.bits,
+      extension,
+      ...ea.extensions,
+    ]);
+  }
+
+  if (op === 'cas') {
+    const ea = encodeEa(operands[2], size);
+    const base = size === CODE_BYTE ? 0x0ac0 : size === CODE_WORD ? 0x0cc0 : 0x0ec0;
+    const extension = (dataRegister(operands[1]) << 6) | dataRegister(operands[0]);
+    return wordsToBytes([base | ea.bits, extension, ...ea.extensions]);
+  }
+
+  if (op === 'cas2') {
+    const compare = operands[0].registerPair;
+    const update = operands[1].registerPair;
+    const addresses = operands[2].registerPair;
+    if (compare === undefined || update === undefined || addresses === undefined) {
+      throw new Error('CAS2 requires three register pairs');
+    }
+    if ([...compare, ...update].some((register) => register < 8)) {
+      throw new Error('CAS2 compare and update operands must be data registers');
+    }
+    const extension1 =
+      (addresses[0] << 12) | ((update[0] - 8) << 6) | (compare[0] - 8);
+    const extension2 =
+      (addresses[1] << 12) | ((update[1] - 8) << 6) | (compare[1] - 8);
+    return wordsToBytes([
+      size === CODE_WORD ? 0x0cfc : 0x0efc,
+      extension1,
+      extension2,
+    ]);
+  }
+
+  if (op === 'chk2' || op === 'cmp2') {
+    const ea = encodeEa(operands[0], size);
+    const base = size === CODE_BYTE ? 0x00c0 : size === CODE_WORD ? 0x02c0 : 0x04c0;
+    const extension = (generalRegister(operands[1]) << 12) | (op === 'chk2' ? 0x0800 : 0);
+    return wordsToBytes([base | ea.bits, extension, ...ea.extensions]);
   }
 
   if (op === 'move') {
@@ -237,6 +417,13 @@ export function encodeSourceInstruction(
   if (CONDITION_CODE[op] !== undefined) {
     const target = operands[0].value >>> 0;
     const displacement = (target - (address + 2)) | 0;
+    if (size === CODE_LONG) {
+      return wordsToBytes([
+        0x60ff | (CONDITION_CODE[op] << 8),
+        displacement >>> 16,
+        displacement,
+      ]);
+    }
     return wordsToBytes([0x6000 | (CONDITION_CODE[op] << 8), displacement]);
   }
 
@@ -429,6 +616,16 @@ export function encodeSourceInstruction(
     muls: 0xc1c0,
   };
   if (multiplyDivideBase[op] !== undefined) {
+    if (size === CODE_LONG) {
+      const source = encodeEa(operands[0], CODE_LONG);
+      const destination = dataRegister(operands[1]);
+      const multiply = op === 'mulu' || op === 'muls';
+      return wordsToBytes([
+        (multiply ? 0x4c00 : 0x4c40) | source.bits,
+        (destination << 12) | (op === 'muls' || op === 'divs' ? 0x0800 : 0) | destination,
+        ...source.extensions,
+      ]);
+    }
     const source = encodeEa(operands[0], CODE_WORD);
     return wordsToBytes([
       multiplyDivideBase[op] | (dataRegister(operands[1]) << 9) | source.bits,
@@ -450,9 +647,9 @@ export function encodeSourceInstruction(
   }
 
   if (op === 'chk') {
-    const source = encodeEa(operands[0], CODE_WORD);
+    const source = encodeEa(operands[0], size);
     return wordsToBytes([
-      0x4180 | (dataRegister(operands[1]) << 9) | source.bits,
+      (size === CODE_LONG ? 0x4100 : 0x4180) | (dataRegister(operands[1]) << 9) | source.bits,
       ...source.extensions,
     ]);
   }
@@ -463,7 +660,10 @@ export function encodeSourceInstruction(
 
   if (op === 'swap') return wordsToBytes([0x4840 | dataRegister(operands[0])]);
   if (op === 'ext') {
-    return wordsToBytes([(size === CODE_LONG ? 0x48c0 : 0x4880) | dataRegister(operands[0])]);
+    return wordsToBytes([
+      (size === CODE_BYTE ? 0x49c0 : size === CODE_LONG ? 0x48c0 : 0x4880) |
+        dataRegister(operands[0]),
+    ]);
   }
   if (op === 'exg') {
     const left = operands[0];

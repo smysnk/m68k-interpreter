@@ -30,7 +30,7 @@ import {
 export type MemorySnapshot = MemoryBuffer;
 export type MemoryUndoPageEntry = MemoryBufferUndoPageEntry;
 
-const MAX_ADDRESS = 0x7fffffff;
+const MAX_ADDRESS = 0xffff_ffff;
 
 export class Memory {
   private readonly memoryBuffer: MemoryBuffer;

@@ -33,6 +33,10 @@ export interface Registers {
   vbr?: number; // MC68010 vector base register
   sfc?: number; // MC68010 source function code
   dfc?: number; // MC68010 destination function code
+  isp?: number; // MC68020 interrupt stack pointer
+  msp?: number; // MC68020 master stack pointer
+  cacr?: number; // MC68020 cache control register
+  caar?: number; // MC68020 cache address register
 }
 
 export interface ConditionFlags {
@@ -116,7 +120,14 @@ export interface Emulator {
   getVBR(): number;
   getSFC(): number;
   getDFC(): number;
-  setControlRegisterValue(register: 'vbr' | 'sfc' | 'dfc', value: number): void;
+  getISP(): number;
+  getMSP(): number;
+  getCACR(): number;
+  getCAAR(): number;
+  setControlRegisterValue(
+    register: 'vbr' | 'sfc' | 'dfc' | 'isp' | 'msp' | 'cacr' | 'caar',
+    value: number
+  ): void;
   getMemory(): MemoryCell;
   getMemoryMeta(): MemoryMeta;
   getRuntimeSyncVersions(): RuntimeSyncVersions;

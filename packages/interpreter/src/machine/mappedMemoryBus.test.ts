@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Memory } from '../core/memory';
+import { createAddressSpacePolicy } from '../cpu/addressSpace';
 import type { MemoryMappedDevice } from '../cpu/memoryBus';
 import { MappedMemoryBus } from './mappedMemoryBus';
 
@@ -35,5 +36,25 @@ describe('MappedMemoryBus', () => {
   it('enforces word alignment before routing', () => {
     const bus = new MappedMemoryBus(new Memory(), [device()]);
     expect(() => bus.read16(1)).toThrow(/Unaligned/);
+  });
+
+  it('performs atomic compare/exchange through the machine bus', () => {
+    const bus = new MappedMemoryBus(
+      new Memory(),
+      [],
+      undefined,
+      createAddressSpacePolicy('m68020')
+    );
+    bus.write32(0x1000, 0x1122_3344);
+
+    expect(bus.atomicCompareExchange(0x1000, 4, 0x1122_3344, 0xaabb_ccdd)).toEqual({
+      value: 0x1122_3344,
+      exchanged: true,
+    });
+    expect(bus.read32(0x1000)).toBe(0xaabb_ccdd);
+    expect(bus.atomicCompareExchange(0x1000, 4, 0, 1)).toEqual({
+      value: 0xaabb_ccdd,
+      exchanged: false,
+    });
   });
 });

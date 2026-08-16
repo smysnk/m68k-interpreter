@@ -1,5 +1,5 @@
 export const DEFAULT_MEMORY_BUFFER_PAGE_SIZE = 0x1000;
-export const MAX_MEMORY_BUFFER_ADDRESS = 0x7fffffff;
+export const MAX_MEMORY_BUFFER_ADDRESS = 0xffff_ffff;
 
 export interface MemoryBufferPage {
   pageIndex: number;

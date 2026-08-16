@@ -129,10 +129,13 @@ int main(int argc, char **argv) {
   load_hex(pc, argv[1]);
 
   m68k_init();
+  const char *cpu_model = getenv("M68K_CPU_MODEL");
   m68k_set_cpu_type(
-    getenv("M68K_CPU_MODEL") != NULL && strcmp(getenv("M68K_CPU_MODEL"), "m68010") == 0
-      ? M68K_CPU_TYPE_68010
-      : M68K_CPU_TYPE_68000);
+    cpu_model != NULL && strcmp(cpu_model, "m68020") == 0
+      ? M68K_CPU_TYPE_68020
+      : cpu_model != NULL && strcmp(cpu_model, "m68010") == 0
+        ? M68K_CPU_TYPE_68010
+        : M68K_CPU_TYPE_68000);
   m68k_pulse_reset();
   m68k_execute(0);
 

@@ -52,12 +52,15 @@ describe('MC68000 ISA manifest', () => {
     expect(summary.uniqueMnemonics).toBeGreaterThan(50);
     expect(summary.byCpuModel.m68000).toBe(116);
     expect(summary.byCpuModel.m68010).toBe(7);
+    expect(summary.byCpuModel.m68020).toBe(40);
     expect(summary.machineCompatibility.easy68k).toBe(1);
     expect(summary.bySupport['legacy-only']).toBe(0);
     expect(summary.bySupport['strict-core-partial']).toBe(0);
     expect(summary.bySupport['integrated-needs-audit']).toBe(0);
     expect(summary.bySupport.missing).toBe(0);
-    expect(summary.bySupport.conformant).toBe(summary.byCpuModel.m68000);
+    expect(summary.bySupport.conformant).toBe(
+      summary.byCpuModel.m68000 + summary.byCpuModel.m68020
+    );
     expect(Object.values(summary.bySupport).reduce((total, count) => total + count, 0)).toBe(
       summary.totalForms
     );

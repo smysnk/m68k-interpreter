@@ -51,28 +51,33 @@ const HelpPanel: React.FC = () => {
         </p>
         <p>
           The IDE composes a strict byte-addressed CPU model with an independent machine profile.
-          The Easy68K machine layers terminal, trap, and trainer-board services onto either CPU.
+          The Easy68K machine layers terminal, trap, and trainer-board services onto any supported
+          CPU profile.
         </p>
       </div>
 
       <div className="help-panel-section">
-        <h3>MC68000 And MC68010 Support</h3>
+        <h3>MC68000, MC68010, And MC68020 Support</h3>
         <ul className="help-panel-list">
           <li>
             Assembler compatibility for standalone labels, `END &lt;label&gt;`, `EQU`, `DC.B/W/L`,
             `DS.B/W/L`, and character immediates.
           </li>
           <li>
-            The strict core implements all 116 tracked MC68000 forms and all seven tracked
-            MC68010-specific forms. Select either CPU independently of the machine profile.
+            The strict core tracks 116 MC68000 forms, seven added MC68010 forms, and 40 added
+            MC68020 integer/protocol forms. Select the CPU independently of the machine profile.
           </li>
           <li>
             MC68010 mode exposes VBR, SFC, and DFC, VBR-relative vectors, format-aware exception
             frames, and restartable bus/address faults.
           </li>
           <li>
-            Easy68K trap tasks used by Nibbles: `TRAP #15` tasks `1`, `3`, and `4`, plus `TRAP #11`
-            task `0` for halt.
+            MC68020 mode adds a 32-bit logical address space, full indexed addressing, three stack
+            banks, cache controls, integer extensions, and generic coprocessor/module protocols.
+          </li>
+          <li>
+            Easy68K terminal compatibility includes `TRAP #15` tasks `1`, `3`, and `4`, plus
+            `TRAP #11` task `0` for halt.
           </li>
           <li>
             Terminal rendering for clear screen, cursor motion, carriage return, line feed, and ANSI
@@ -104,6 +109,10 @@ const HelpPanel: React.FC = () => {
           <li>
             Pin-level bus timing, arbitration, prefetch-stage attribution, and transparent loop-mode
             fetch suppression are outside the functionally complete CPU contract.
+          </li>
+          <li>
+            MC68881/MC68882 floating-point arithmetic and MC68851 page-table/MMU semantics are not
+            included; MC68020 provides tested attachment and translation boundaries for them.
           </li>
           <li>
             The IDE currently uses the internal fixed-grid terminal adapter surface; broader display

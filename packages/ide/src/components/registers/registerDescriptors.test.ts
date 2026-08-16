@@ -9,7 +9,7 @@ import {
 describe('registerDescriptors', () => {
   it('defines the expected register groups and visible register inventory', () => {
     expect(REGISTER_GROUPS.map((group) => group.id)).toEqual(['data', 'address', 'control']);
-    expect(getAllRegisterDescriptors()).toHaveLength(24);
+    expect(getAllRegisterDescriptors()).toHaveLength(28);
     expect(getRegisterDescriptorsByGroup('data').map((descriptor) => descriptor.key)).toEqual([
       'd0',
       'd1',
@@ -58,5 +58,9 @@ describe('registerDescriptors', () => {
       editable: true,
       minimumCpuModel: 'm68010',
     });
+    expect(getRegisterDescriptor('isp')).toMatchObject({ minimumCpuModel: 'm68020' });
+    expect(getRegisterDescriptor('msp')).toMatchObject({ minimumCpuModel: 'm68020' });
+    expect(getRegisterDescriptor('cacr')).toMatchObject({ minimumCpuModel: 'm68020' });
+    expect(getRegisterDescriptor('caar')).toMatchObject({ minimumCpuModel: 'm68020' });
   });
 });

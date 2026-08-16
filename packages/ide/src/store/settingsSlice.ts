@@ -43,7 +43,9 @@ const registerEditRadices: RegisterEditRadix[] = ['hex', 'dec', 'bin'];
 const terminalInputModes: TerminalInputModePreference[] = ['auto', 'text-input', 'touch-only'];
 /** @deprecated Persistence compatibility helper. */
 export function normalizeCpuProfile(value: unknown): CpuProfile {
-  return value === 'm68000' || value === 'm68010' || value === 'easy68k' ? value : 'easy68k';
+  return value === 'm68000' || value === 'm68010' || value === 'm68020' || value === 'easy68k'
+    ? value
+    : 'easy68k';
 }
 
 export function normalizeSettingsEmulation(

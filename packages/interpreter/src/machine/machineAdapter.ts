@@ -1,4 +1,5 @@
 import type { Memory } from '../core/memory';
+import { createAddressSpacePolicy, type AddressSpacePolicy } from '../cpu/addressSpace';
 import type { StepResult } from '../core/execution';
 import type { StrictM68000Core } from '../cpu/core';
 import type { MemoryBus, MemoryMappedDevice } from '../cpu/memoryBus';
@@ -10,7 +11,7 @@ import {
   type Easy68kHardwareOutputSnapshot,
 } from '../devices/easy68kHardware';
 import { TerminalDevice } from '../devices/terminal';
-import type { MachineProfile } from '../isa/types';
+import type { CpuModel, MachineProfile } from '../isa/types';
 import { MappedMemoryBus } from './mappedMemoryBus';
 
 export type MachineSnapshot = unknown;
@@ -43,6 +44,8 @@ export interface MachineAdapterOptions {
   hardwareDevices?: readonly Easy68kHardwareDeviceConfig[];
   mapHardware?: boolean;
   beforeRamWrite?: (address: number) => void;
+  cpuModel?: CpuModel;
+  addressSpace?: AddressSpacePolicy;
 }
 
 class Easy68kHardwareMappedDevice implements MemoryMappedDevice<Easy68kHardwareOutputSnapshot> {
@@ -82,7 +85,12 @@ abstract class BaseMachineAdapter implements MachineAdapter {
     this.terminal = new TerminalDevice({ columns: options.columns, rows: options.rows });
     this.hardware = new Easy68kHardware(options.hardwareDevices ?? options.hardwareConfig);
     const devices = options.mapHardware ? [new Easy68kHardwareMappedDevice(this.hardware)] : [];
-    this.bus = new MappedMemoryBus(memory, devices, options.beforeRamWrite);
+    this.bus = new MappedMemoryBus(
+      memory,
+      devices,
+      options.beforeRamWrite,
+      options.addressSpace ?? createAddressSpacePolicy(options.cpuModel ?? 'm68000')
+    );
   }
 
   handleTrap(_context: MachineTrapContext): StepResult | undefined {
@@ -130,7 +138,7 @@ export class Easy68kMachineAdapter extends BaseMachineAdapter {
     if ((opcode & 0xfff0) !== 0x4e40) return undefined;
     const vector = opcode & 0x0f;
     const task = this.bus.read16(pcBefore + 2, 'fetch');
-    const pcAfter = (pcBefore + 4) & 0x00ff_ffff;
+    const pcAfter = context.core.normalizeAddress(pcBefore + 4);
 
     if (vector === 11 && task === 0) {
       context.core.state.pc = pcAfter;
@@ -162,7 +170,7 @@ export class Easy68kMachineAdapter extends BaseMachineAdapter {
   }
 
   override validateInterruptVector(level: number, vectorBase = 0): string | undefined {
-    const vectorAddress = (vectorBase + getEasy68kInterruptVectorAddress(level)) & 0x00ff_ffff;
+    const vectorAddress = (vectorBase + getEasy68kInterruptVectorAddress(level)) >>> 0;
     return this.bus.read32(vectorAddress) === 0
       ? `Invalid or missing IRQ ${level} autovector at $${vectorAddress.toString(16).toUpperCase()}`
       : undefined;
