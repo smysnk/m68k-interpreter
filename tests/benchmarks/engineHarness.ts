@@ -107,6 +107,7 @@ export interface EngineProfileSummary {
 export interface ScenarioProfileReport {
   scenario: BenchmarkScenario;
   interpreter: EngineProfileSummary;
+  samples: EngineRunMetrics[];
 }
 
 export interface EngineBatteryProfileReport {
@@ -137,11 +138,11 @@ const REGISTER_INDEX_BY_NAME: Record<RegisterName, number> = {
 
 function createSession(
   program: string,
-  cpuProfile: BenchmarkScenario['cpuProfile']
+  emulation: BenchmarkScenario['emulation']
 ): BenchmarkSession {
   return new Emulator(program, {
     undoMode: 'off',
-    cpuProfile,
+    emulation,
   });
 }
 
@@ -301,7 +302,7 @@ export function runBenchmarkScenario(
   const beforeResources = process.resourceUsage();
   const startedAt = performance.now();
 
-  const session = createSession(scenario.program, scenario.cpuProfile);
+  const session = createSession(scenario.program, scenario.emulation);
   const { steps, stopped } = runScenarioUntilStop(session, scenario);
 
   const elapsedMs = performance.now() - startedAt;
@@ -412,6 +413,7 @@ export function profileScenario(
   return {
     scenario,
     interpreter: summarizeRuns(interpreterRuns),
+    samples: interpreterRuns.map((run) => ({ ...run.metrics })),
   };
 }
 

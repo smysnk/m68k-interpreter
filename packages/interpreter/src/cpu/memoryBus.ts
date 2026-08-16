@@ -39,6 +39,20 @@ export interface MemoryBus {
   write32(address: number, value: number): void;
 }
 
+export interface AddressRange {
+  start: number;
+  end: number;
+}
+
+export interface MemoryMappedDevice<Snapshot = unknown> {
+  readonly id: string;
+  addressRanges(): readonly AddressRange[];
+  read8(address: number): number | undefined;
+  write8(address: number, value: number): boolean;
+  snapshot(): Snapshot;
+  reset(): void;
+}
+
 const ADDRESS_MASK = 0x00ff_ffff;
 
 export class RamBus implements MemoryBus {

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
-import { RuntimeCommandPort, RuntimeUnavailableError } from '@/runtime/runtimeCommandPort';
+import {
+  RuntimeCommandPort,
+  RuntimeUnavailableError,
+  StaleRuntimeCommandError,
+} from '@/runtime/runtimeCommandPort';
 import { createRuntimeSessionStore } from '@/runtime/runtimeSessionStore';
 
 describe('RuntimeCommandPort', () => {
@@ -42,6 +46,29 @@ describe('RuntimeCommandPort', () => {
 
     await expect(port.queueInput('a')).rejects.toThrow('worker rejected command');
     await expect(port.queueInput('b')).resolves.toBeUndefined();
+  });
+
+  it('rejects a queued command when its runtime is replaced before execution', async () => {
+    const sessions = createRuntimeSessionStore();
+    let release!: () => void;
+    const blocker = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const oldController = {
+      requestQueueInput: vi.fn(async (input: string | number | number[]) => {
+        if (input === 'first') await blocker;
+      }),
+    };
+    sessions.replace({ controller: oldController } as unknown as IdeRuntimeSession);
+    const port = new RuntimeCommandPort(sessions);
+    const first = port.queueInput('first');
+    const stale = port.queueInput('stale');
+    await Promise.resolve();
+    sessions.replace({ controller: { requestQueueInput: vi.fn() } } as unknown as IdeRuntimeSession);
+    release();
+    await first;
+    await expect(stale).rejects.toBeInstanceOf(StaleRuntimeCommandError);
+    expect(oldController.requestQueueInput).toHaveBeenCalledTimes(1);
   });
 
   it('fails closed when no runtime is active', async () => {
@@ -86,9 +113,6 @@ describe('RuntimeCommandPort', () => {
         id: 'display-a',
         deviceType: 'display' as const,
         displayBase: 0xe00000,
-        ledAddress: 0,
-        switchAddress: 0,
-        buttonAddress: 0,
       },
     ];
 

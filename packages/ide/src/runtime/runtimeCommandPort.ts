@@ -10,10 +10,11 @@ import type {
   Easy68kHardwareDeviceConfig,
   Easy68kHardwareValidationResult,
   InterruptRequestResult,
-  CpuProfile,
   UndoCaptureMode,
 } from '@m68k/interpreter';
+import { validateEasy68kHardwareDevices } from '@m68k/interpreter';
 import type { WorkerExecutionConfig } from '@/runtime/worker/interpreterWorkerProtocol';
+import type { RuntimeLoadRequest } from '@/runtime/worker/interpreterWorkerProtocol';
 import { hardwareSurfaceStore } from '@/runtime/hardwareSurfaceStore';
 
 function publishInProcessHardware(runtime: IdeRuntimeSession): void {
@@ -29,6 +30,13 @@ export class RuntimeUnavailableError extends Error {
   }
 }
 
+export class StaleRuntimeCommandError extends Error {
+  constructor(readonly submittedEpoch: number, readonly currentEpoch: number) {
+    super(`Runtime command belongs to stale epoch ${submittedEpoch}; current epoch is ${currentEpoch}`);
+    this.name = 'StaleRuntimeCommandError';
+  }
+}
+
 export class RuntimeCommandPort {
   private tail: Promise<void> = Promise.resolve();
   private automaticInterruptTimer: ReturnType<typeof setTimeout> | null = null;
@@ -40,8 +48,13 @@ export class RuntimeCommandPort {
   constructor(private readonly sessions: RuntimeSessionStore) {}
 
   private enqueue<T>(operation: (runtime: IdeRuntimeSession) => Promise<T> | T): Promise<T> {
+    const submitted = this.sessions.getSnapshot();
     const result = this.tail.then(async () => {
-      const runtime = this.sessions.getSession();
+      const current = this.sessions.getSnapshot();
+      if (current.epoch !== submitted.epoch || current.session !== submitted.session) {
+        throw new StaleRuntimeCommandError(submitted.epoch, current.epoch);
+      }
+      const runtime = current.session;
       if (!runtime) {
         throw new RuntimeUnavailableError();
       }
@@ -70,15 +83,10 @@ export class RuntimeCommandPort {
     });
   }
 
-  loadProgram(
-    source: string,
-    columns: number,
-    rows: number,
-    cpuProfile: CpuProfile
-  ): Promise<void> {
+  loadProgram(request: RuntimeLoadRequest): Promise<void> {
     this.hardwareDeviceConfigurationKey = '';
     return this.enqueue(async (runtime) => {
-      await runtime.controller?.requestLoadProgram(source, columns, rows, cpuProfile);
+      await runtime.controller?.requestLoadProgram(request);
     });
   }
 
@@ -156,19 +164,17 @@ export class RuntimeCommandPort {
   ): Promise<Easy68kHardwareValidationResult> {
     const normalized = devices.map((device) => ({ ...device }));
     const signature = normalized
-      .map(
-        (device) =>
-          `${device.id}:${device.deviceType ?? 'board'}:${device.displayBase}:${device.ledAddress}:${device.switchAddress}:${device.buttonAddress}`
+      .map((device) =>
+        device.deviceType === 'display'
+          ? `${device.id}:display:${device.displayBase}`
+          : device.deviceType === 'digital-io'
+            ? `${device.id}:digital-io:${device.ledAddress}:${device.switchAddress}:${device.buttonAddress}`
+            : `${device.id}:board:${device.displayBase}:${device.ledAddress}:${device.switchAddress}:${device.buttonAddress}`
       )
       .join('|');
     const key = `${this.sessions.getSnapshot().epoch}:${signature}`;
     if (key === this.hardwareDeviceConfigurationKey) {
-      return Promise.resolve({
-        valid: true,
-        devices: normalized,
-        conflicts: [],
-        errors: [],
-      });
+      return Promise.resolve(validateEasy68kHardwareDevices(normalized));
     }
     this.hardwareDeviceConfigurationKey = key;
     const operation = this.enqueue(async (runtime) => {

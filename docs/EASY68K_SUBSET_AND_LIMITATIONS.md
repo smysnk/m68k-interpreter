@@ -7,9 +7,9 @@ coverage list; see the generated ISA report for that evidence.
 ## Runtime modes
 
 - The strict byte-addressed core is the only instruction execution authority.
-- The `Emulator` compatibility facade selects strict MC68000, MC68010
-  Extensions, or MC68000 plus the Easy68K machine adapter.
-- `nibbles.asm` runs through the worker-backed Easy68K profile.
+- The `Emulator` composes either supported CPU model with either the Bare or
+  Easy68K machine adapter.
+- `nibbles.asm` defaults to MC68000 plus the worker-backed Easy68K machine.
 
 ## Quick start
 

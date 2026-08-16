@@ -114,6 +114,8 @@ export interface Emulator {
   getMemoryMeta(): MemoryMeta;
   getRuntimeSyncVersions(): RuntimeSyncVersions;
   getCpuProfile(): import('../isa/types').CpuProfile;
+  getEmulationConfig(): Readonly<import('../isa/types').EmulationConfig>;
+  getMachineProfile(): import('../isa/types').MachineProfile;
   getDiagnostics(): import('../core/execution').CpuDiagnostic[];
   readMemoryRange(address: number, length: number): Uint8Array;
   getFlags(): ConditionFlags;

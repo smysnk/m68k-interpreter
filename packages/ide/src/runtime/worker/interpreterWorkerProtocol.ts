@@ -8,7 +8,7 @@ import type {
   Easy68kHardwareConfig,
   Easy68kHardwareDeviceConfig,
   Easy68kHardwareSnapshot,
-  CpuProfile,
+  EmulationConfig,
 } from '@m68k/interpreter';
 import type { RuntimeFrameSyncPayload } from '@/runtime/runtimeFramePayload';
 import type {
@@ -45,6 +45,15 @@ export interface WorkerExecutionConfig {
 export interface WorkerAutomaticInterruptConfig {
   levels: number[];
   intervalMs: number;
+}
+
+export interface RuntimeLoadRequest {
+  source: string;
+  emulation: EmulationConfig;
+  terminal: { columns: number; rows: number };
+  hardwareDevices: Easy68kHardwareDeviceConfig[];
+  execution: WorkerExecutionConfig;
+  undo: { mode: UndoCaptureMode; checkpointInterval?: number };
 }
 
 export interface WorkerStepResult {
@@ -85,10 +94,7 @@ export type InterpreterWorkerCommand =
   | {
       id: number;
       type: 'loadProgram';
-      source: string;
-      columns: number;
-      rows: number;
-      cpuProfile: CpuProfile;
+      request: RuntimeLoadRequest;
     }
   | { id: number; type: 'run'; config: WorkerExecutionConfig }
   | { id: number; type: 'resume'; config: WorkerExecutionConfig }

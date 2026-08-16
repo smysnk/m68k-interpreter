@@ -2,7 +2,6 @@ import {
   clearTerminalFrameBufferDirtyRows,
   Emulator,
   type RuntimeSyncVersions,
-  type CpuProfile,
 } from '@m68k/interpreter';
 import {
   cloneTerminalFrameBufferSnapshot,
@@ -14,6 +13,7 @@ import {
   type WorkerFrameKind,
   type WorkerRuntimeMetricsSnapshot,
   type WorkerRuntimeSnapshot,
+  type RuntimeLoadRequest,
 } from '@/runtime/worker/interpreterWorkerProtocol';
 import { buildRuntimeFrameSyncPayload } from '@/runtime/runtimeFramePayload';
 import {
@@ -101,8 +101,7 @@ function createReplyEvent<T>(
 
 export class InterpreterWorkerHost {
   private emulator: Emulator | null = null;
-  private lastLoadedSource = '';
-  private lastCpuProfile: CpuProfile = 'easy68k';
+  private lastLoadRequest: RuntimeLoadRequest | null = null;
   private geometry: RuntimeGeometry = { columns: 80, rows: 25 };
   private readySent = false;
   private executionState: WorkerExecutionState = {
@@ -141,7 +140,7 @@ export class InterpreterWorkerHost {
           this.stopExecutionLoop();
           this.cancelAutomaticInterrupts();
           this.emulator = null;
-          this.lastLoadedSource = '';
+          this.lastLoadRequest = null;
           this.resetPublishedSnapshotState();
           this.emitEvent(createReplyEvent(command.id, true));
           return;
@@ -149,16 +148,19 @@ export class InterpreterWorkerHost {
           this.stopExecutionLoop();
           this.cancelAutomaticInterrupts();
           this.resetPublishedSnapshotState();
-          this.lastLoadedSource = command.source;
-          this.lastCpuProfile = command.cpuProfile;
+          this.lastLoadRequest = structuredClone(command.request);
           this.geometry = {
-            columns: command.columns,
-            rows: command.rows,
+            columns: command.request.terminal.columns,
+            rows: command.request.terminal.rows,
           };
-          this.emulator = new Emulator(command.source, {
-            columns: command.columns,
-            rows: command.rows,
-            cpuProfile: command.cpuProfile,
+          this.configureExecution(command.request.execution);
+          this.emulator = new Emulator(command.request.source, {
+            columns: command.request.terminal.columns,
+            rows: command.request.terminal.rows,
+            emulation: command.request.emulation,
+            hardwareDevices: command.request.hardwareDevices,
+            undoMode: command.request.undo.mode,
+            undoCheckpointInterval: command.request.undo.checkpointInterval,
           });
           this.applyGeometryBridge();
           this.publishFrame({
@@ -207,11 +209,15 @@ export class InterpreterWorkerHost {
         case 'reset':
           this.stopExecutionLoop();
           this.cancelAutomaticInterrupts();
-          if (this.emulator === null && this.lastLoadedSource.trim().length > 0) {
-            this.emulator = new Emulator(this.lastLoadedSource, {
-              columns: this.geometry.columns,
-              rows: this.geometry.rows,
-              cpuProfile: this.lastCpuProfile,
+          if (this.emulator === null && this.lastLoadRequest !== null) {
+            const request = this.lastLoadRequest;
+            this.emulator = new Emulator(request.source, {
+              columns: request.terminal.columns,
+              rows: request.terminal.rows,
+              emulation: request.emulation,
+              hardwareDevices: request.hardwareDevices,
+              undoMode: request.undo.mode,
+              undoCheckpointInterval: request.undo.checkpointInterval,
             });
           } else {
             this.requireEmulator().reset();

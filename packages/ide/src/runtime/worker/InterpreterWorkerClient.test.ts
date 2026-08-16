@@ -68,7 +68,6 @@ describe('InterpreterWorkerClient', () => {
       {
         id: 'digital-a',
         deviceType: 'digital-io',
-        displayBase: 0,
         ledAddress: 0xe00040,
         switchAddress: 0xe00040,
         buttonAddress: 0xe00042,
@@ -81,7 +80,6 @@ describe('InterpreterWorkerClient', () => {
         {
           id: 'digital-a',
           deviceType: 'digital-io',
-          displayBase: 0,
           ledAddress: 0xe00040,
           switchAddress: 0xe00040,
           buttonAddress: 0xe00042,

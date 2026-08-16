@@ -621,6 +621,15 @@ pre {
   font-size: 9px;
 }
 
+.status-mode-menu-group-label {
+  padding: 8px 12px 4px;
+  color: var(--ide-text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .status-bar-link:hover,
 .status-bar-link:focus-visible {
   border-color: color-mix(in srgb, var(--ide-accent) 38%, var(--ide-border));
@@ -2764,6 +2773,18 @@ input.register-segment-input[type='text'] {
   min-height: 100%;
   padding: 12px;
   background: color-mix(in srgb, var(--ide-panel) 95%, transparent);
+}
+
+.hardware-disconnected-state {
+  display: grid;
+  min-height: 92px;
+  place-items: center;
+  padding: 16px;
+  border: 1px dashed var(--ide-border);
+  color: var(--ide-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
 }
 
 .hardware-digital-io-panel {

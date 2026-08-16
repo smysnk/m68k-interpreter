@@ -99,7 +99,7 @@ test.describe('explicit panel drag and dock', () => {
     await expect(floatingWindow).toHaveCount(0);
     await expect(page.locator('[data-panel-column-id="column-1"] [data-panel-instance-id="panel-terminal-1"]')).toBeVisible();
     await page.waitForFunction(() =>
-      window.localStorage.getItem('m68k.ide.preferences.v2')?.includes('"panel-terminal-1"'),
+      window.localStorage.getItem('m68k.ide.preferences.v3')?.includes('"panel-terminal-1"'),
     );
     await page.reload();
     await expect(page.locator('[data-panel-column-id="column-1"] [data-panel-instance-id="panel-terminal-1"]')).toBeVisible();

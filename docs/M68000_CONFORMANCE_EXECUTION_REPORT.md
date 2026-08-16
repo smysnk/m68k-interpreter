@@ -1,13 +1,13 @@
 # MC68000 Conformance Execution Report
 
-Executed: 2026-08-15
+Executed: 2026-08-16
 
 ## Outcome
 
 The strict binary CPU core is now the single execution authority used by the
 public `Emulator` facade, IDE, and worker. The normalized ISA inventory contains
-116 distinct strict MC68000 forms, 2 MC68010 extension forms, and 1 Easy68K
-compatibility form. All 116 strict forms are classified as conformant; missing,
+116 distinct strict MC68000 forms and 2 MC68010 extension forms. One Easy68K
+compatibility evidence entry is reported separately from the CPU manifest. All 116 strict forms are classified as conformant; missing,
 partial, and audit-required counts are zero.
 
 The original count of 117 strict forms included a duplicate `RTE` manifest row.
@@ -19,11 +19,12 @@ The generated evidence matrix is in
 
 - Source is assembled into an exact byte-addressed program image before it is
   executed by the strict core.
-- The Easy68K terminal, trap, interrupt, and trainer-board behavior is isolated
-  in the compatibility layer rather than the CPU instruction implementation.
-- MC68000, MC68010 Extensions, and Easy68K modes are visible and selectable in
-  the bottom status bar, persisted with IDE preferences, and sent explicitly to
-  the worker when a program is loaded.
+- The Easy68K terminal, trap, and trainer-board behavior is isolated in a
+  machine adapter rather than the CPU instruction implementation. Architectural
+  interrupts remain available with either machine.
+- CPU model and machine profile are independently selectable in the bottom
+  status bar, persisted with IDE preferences, and sent atomically to the worker
+  when a program is loaded.
 - A successfully accepted autovector is treated as a normal runtime transition
   by the facade, so the worker continues into the interrupt handler. The direct
   strict-core API retains its detailed exception-entry result for conformance
@@ -76,16 +77,44 @@ scenarios cover MC68000 and MC68010 initialization and execution separately.
 Test Station now publishes elapsed-time p95 and MAD alongside its existing
 median, throughput, memory, CPU, and step metrics.
 
+### CPU and machine separation cutover
+
+The CPU/machine split was measured against an immutable pre-change baseline at
+commit `69da448598a6da45eb000823b9bbeef395067207` on Node 22.17.0, macOS arm64,
+using 10 warmups and 50 measured samples. The final report retains every raw
+sample and applies the widest of the 15% p95 gate, two baseline MADs, or a
+0.1 ms measurement floor for sub-millisecond workloads.
+
+| Scenario                        | Baseline median | Final median | Change |
+| ------------------------------- | --------------: | -----------: | -----: |
+| Cold source load                |        0.627 ms |     0.607 ms |  -3.1% |
+| Shared arithmetic loop          |        0.539 ms |     0.495 ms |  -8.2% |
+| MC68000 arithmetic loop         |        0.442 ms |     0.316 ms | -28.6% |
+| MC68010 arithmetic loop         |        0.324 ms |     0.303 ms |  -6.6% |
+| Branch pressure                 |        0.566 ms |     0.561 ms |  -1.0% |
+| Unrolled memory roundtrip       |        0.556 ms |     0.517 ms |  -7.1% |
+
+All elapsed-median, variance-aware p95, and retained-heap gates pass. Browser
+product timings also pass: Nibbles intro/gameplay changes range from -2.9% to
+3.0%, hardware scenario timings remain within 6.1%, and average hardware
+command acknowledgement improves by 43.0% on desktop and 48.3% in the compact
+layout. Baselines, failed intermediate checkpoints, final comparisons, CPU
+profiles, heap profiles, and Test Station reports are retained under
+`.test-results/cpu-machine-profile-separation/`.
+
 ## Release Validation
 
-- Test Station without coverage: 405/405 tests passed across 9 suites.
-- Test Station with coverage: 405/405 passed; 69.62% lines, 62.04% branches,
-  71.98% functions, and 69.01% statements.
-- Interpreter package: 169/169 passed.
-- IDE package: 222/222 passed.
+- Test Station with coverage: 438/438 passed across 9 suites; 77.37% lines,
+  69.46% branches, 74.96% functions, and 76.55% statements.
+- Recursive Test Station benchmark: 7/7 passed with 10 warmups and 50 measured
+  samples; every statistic carries CPU model, machine profile, transport,
+  phase, commit, and baseline metadata.
+- Interpreter package: 193/193 passed.
+- IDE package: 231/231 passed.
 - Workspace integration: 3/3 passed.
-- Browser E2E: 28/28 passed, including Nibbles, mode persistence, panel docking,
-  and independently addressed hardware panels with live interrupts.
+- Browser E2E: 29/29 passed, including Nibbles, all four CPU/machine
+  combinations, mode persistence, panel docking, Bare disconnection, and
+  independently addressed hardware panels with live interrupts.
 - Musashi/Moira oracle suites: 9/9 passed.
 - Type-check, build, generated-report consistency, and lint complete; lint has
   no errors and retains 18 pre-existing warnings.
@@ -98,6 +127,9 @@ yarn test:oracles
 yarn test:oracles:mame
 yarn profile:m68000:final
 yarn profile:m68000:compare
+PROFILE_WARMUPS=10 PROFILE_RUNS=50 yarn profile:cpu-machine final
+yarn profile:cpu-machine:compare
+yarn profile:ide-runtime:compare
 PLAYWRIGHT_PORT=4273 yarn test:station:coverage
 ```
 

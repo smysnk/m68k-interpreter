@@ -1,8 +1,13 @@
 import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import type { CpuProfile } from '@m68k/interpreter';
+import {
+  CPU_MODEL_REGISTRY,
+  MACHINE_PROFILE_REGISTRY,
+  type CpuModel,
+  type MachineProfile,
+} from '@m68k/interpreter';
 import { selectStatusBarModel } from '@/store/statusBarSelectors';
-import { setCpuProfile, type AppDispatch, type RootState } from '@/store';
+import { setCpuModel, setMachineProfile, type AppDispatch, type RootState } from '@/store';
 import { useCompactShell } from '@/hooks/useCompactShell';
 import ContextMenu from '@/components/menus/ContextMenu';
 import MenuItem from '@/components/menus/MenuItem';
@@ -10,35 +15,13 @@ import MenuItem from '@/components/menus/MenuItem';
 const PERSONAL_WEBSITE_URL = 'https://smysnk.com';
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/josh1g';
 
-const CPU_PROFILE_OPTIONS: ReadonlyArray<{
-  id: CpuProfile;
-  label: string;
-  subtitle: string;
-}> = [
-  {
-    id: 'm68000',
-    label: 'MC68000',
-    subtitle: 'Strict Motorola 68000 behavior',
-  },
-  {
-    id: 'm68010',
-    label: 'MC68010 Extensions',
-    subtitle: 'MC68000 with supported 68010 additions',
-  },
-  {
-    id: 'easy68k',
-    label: 'Easy68K',
-    subtitle: 'Terminal, trainer-board, and trap compatibility',
-  },
-];
-
-function getCpuProfileLabel(profile: CpuProfile): string {
-  return CPU_PROFILE_OPTIONS.find((option) => option.id === profile)?.label ?? 'Easy68K';
-}
+const CPU_MODEL_OPTIONS = Object.values(CPU_MODEL_REGISTRY);
+const MACHINE_PROFILE_OPTIONS = Object.values(MACHINE_PROFILE_REGISTRY);
 
 const StatusBar: React.FC = () => {
   const model = useSelector((state: RootState) => selectStatusBarModel(state));
-  const cpuProfile = useSelector((state: RootState) => state.settings.cpuProfile);
+  const cpuModel = useSelector((state: RootState) => state.settings.cpuModel);
+  const machineProfile = useSelector((state: RootState) => state.settings.machineProfile);
   const dispatch = useDispatch<AppDispatch>();
   const isCompactShell = useCompactShell();
   const [modeMenuOpen, setModeMenuOpen] = React.useState(false);
@@ -47,9 +30,9 @@ const StatusBar: React.FC = () => {
 
   const closeModeMenu = React.useCallback(() => setModeMenuOpen(false), []);
 
-  const selectCpuProfile = React.useCallback(
-    (nextProfile: CpuProfile): void => {
-      if (nextProfile === cpuProfile) {
+  const confirmAndSelect = React.useCallback(
+    (axis: 'cpu' | 'machine', value: CpuModel | MachineProfile): void => {
+      if ((axis === 'cpu' ? cpuModel : machineProfile) === value) {
         closeModeMenu();
         modeButtonRef.current?.focus();
         return;
@@ -64,12 +47,15 @@ const StatusBar: React.FC = () => {
         return;
       }
 
-      dispatch(setCpuProfile(nextProfile));
+      if (axis === 'cpu') dispatch(setCpuModel(value as CpuModel));
+      else dispatch(setMachineProfile(value as MachineProfile));
       closeModeMenu();
       modeButtonRef.current?.focus();
     },
-    [closeModeMenu, cpuProfile, dispatch, model.runtime.label]
+    [closeModeMenu, cpuModel, dispatch, machineProfile, model.runtime.label]
   );
+
+  const modeLabel = `${CPU_MODEL_REGISTRY[cpuModel].label} · ${MACHINE_PROFILE_REGISTRY[machineProfile].label}`;
 
   const modeControl = (
     <>
@@ -77,14 +63,14 @@ const StatusBar: React.FC = () => {
         aria-controls="status-bar-mode-menu"
         aria-expanded={modeMenuOpen}
         aria-haspopup="menu"
-        aria-label={`Emulation mode: ${getCpuProfileLabel(cpuProfile)}`}
+        aria-label={`Emulation mode: ${modeLabel}`}
         className="status-mode-control"
         onClick={() => setModeMenuOpen((open) => !open)}
         ref={modeButtonRef}
         type="button"
       >
         <span className="status-mode-label">Mode</span>
-        <span>{getCpuProfileLabel(cpuProfile)}</span>
+        <span>{modeLabel}</span>
         <span aria-hidden="true" className="status-mode-chevron">
           {modeMenuOpen ? '\u25b4' : '\u25be'}
         </span>
@@ -103,16 +89,30 @@ const StatusBar: React.FC = () => {
         testId="status-bar-mode-menu"
         width={290}
       >
-        {CPU_PROFILE_OPTIONS.map((option) => (
+        <div className="status-mode-menu-group-label" role="presentation">CPU</div>
+        {CPU_MODEL_OPTIONS.map((option) => (
           <MenuItem
-            aria-checked={cpuProfile === option.id}
+            aria-checked={cpuModel === option.id}
             aria-label={option.label}
             key={option.id}
             label={option.label}
-            meta={cpuProfile === option.id ? '\u2713' : undefined}
-            onClick={() => selectCpuProfile(option.id)}
+            meta={cpuModel === option.id ? '\u2713' : undefined}
+            onClick={() => confirmAndSelect('cpu', option.id)}
             role="menuitemradio"
-            subtitle={option.subtitle}
+            subtitle={option.description}
+          />
+        ))}
+        <div className="status-mode-menu-group-label" role="presentation">Machine</div>
+        {MACHINE_PROFILE_OPTIONS.map((option) => (
+          <MenuItem
+            aria-checked={machineProfile === option.id}
+            aria-label={option.label}
+            key={option.id}
+            label={option.label}
+            meta={machineProfile === option.id ? '\u2713' : undefined}
+            onClick={() => confirmAndSelect('machine', option.id)}
+            role="menuitemradio"
+            subtitle={option.description}
           />
         ))}
       </ContextMenu>

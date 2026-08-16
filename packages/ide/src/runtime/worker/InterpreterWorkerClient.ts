@@ -340,12 +340,9 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
   }
 
   requestLoadProgram(
-    source: string,
-    columns: number,
-    rows: number,
-    cpuProfile: import('@m68k/interpreter').CpuProfile
+    request: import('./interpreterWorkerProtocol').RuntimeLoadRequest
   ): Promise<void> {
-    return this.postCommand<void>({ type: 'loadProgram', source, columns, rows, cpuProfile });
+    return this.postCommand<void>({ type: 'loadProgram', request });
   }
 
   requestRun(config?: WorkerExecutionConfig): Promise<void> {

@@ -21,9 +21,33 @@ export interface Easy68kHardwareConfig {
 
 export type Easy68kHardwareDeviceType = 'board' | 'display' | 'digital-io';
 
-export interface Easy68kHardwareDeviceConfig extends Easy68kHardwareConfig {
+export interface Easy68kBoardDeviceConfig extends Easy68kHardwareConfig {
   id: string;
-  deviceType?: Easy68kHardwareDeviceType;
+  deviceType?: 'board';
+}
+
+export interface Easy68kDisplayDeviceConfig {
+  id: string;
+  deviceType: 'display';
+  displayBase: number;
+}
+
+export interface Easy68kDigitalIoDeviceConfig {
+  id: string;
+  deviceType: 'digital-io';
+  ledAddress: number;
+  switchAddress: number;
+  buttonAddress: number;
+}
+
+export type Easy68kHardwareDeviceConfig =
+  | Easy68kBoardDeviceConfig
+  | Easy68kDisplayDeviceConfig
+  | Easy68kDigitalIoDeviceConfig;
+
+export interface NormalizedEasy68kHardwareDeviceConfig extends Easy68kHardwareConfig {
+  id: string;
+  deviceType: Easy68kHardwareDeviceType;
 }
 
 export interface Easy68kHardwareDeviceOutputSnapshot {
@@ -60,7 +84,7 @@ export interface Easy68kHardwareSnapshot extends Easy68kHardwareOutputSnapshot {
 export interface Easy68kHardwareValidationResult {
   valid: boolean;
   config?: Easy68kHardwareConfig;
-  devices?: readonly Easy68kHardwareDeviceConfig[];
+  devices?: readonly NormalizedEasy68kHardwareDeviceConfig[];
   conflicts: readonly DeviceAddressConflict[];
   errors: readonly string[];
 }
@@ -72,7 +96,7 @@ export const DEFAULT_EASY68K_HARDWARE_CONFIG: Readonly<Easy68kHardwareConfig> = 
   buttonAddress: 0xe00012,
 };
 
-export const DEFAULT_EASY68K_HARDWARE_DEVICE_CONFIG: Readonly<Easy68kHardwareDeviceConfig> = {
+export const DEFAULT_EASY68K_HARDWARE_DEVICE_CONFIG: Readonly<Easy68kBoardDeviceConfig> = {
   id: DEFAULT_EASY68K_HARDWARE_DEVICE_ID,
   deviceType: 'board',
   ...DEFAULT_EASY68K_HARDWARE_CONFIG,
@@ -118,11 +142,17 @@ export function normalizeEasy68kHardwareConfig(
 
 export function normalizeEasy68kHardwareDeviceConfig(
   config: Easy68kHardwareDeviceConfig
-): Easy68kHardwareDeviceConfig {
+): NormalizedEasy68kHardwareDeviceConfig {
+  const defaults = DEFAULT_EASY68K_HARDWARE_CONFIG;
   return {
     id: config.id.trim(),
     deviceType: config.deviceType ?? 'board',
-    ...normalizeEasy68kHardwareConfig(config),
+    ...normalizeEasy68kHardwareConfig({
+      displayBase: 'displayBase' in config ? config.displayBase : defaults.displayBase,
+      ledAddress: 'ledAddress' in config ? config.ledAddress : defaults.ledAddress,
+      switchAddress: 'switchAddress' in config ? config.switchAddress : defaults.switchAddress,
+      buttonAddress: 'buttonAddress' in config ? config.buttonAddress : defaults.buttonAddress,
+    }),
   };
 }
 
@@ -179,7 +209,7 @@ export function validateEasy68kHardwareConfig(
 export function validateEasy68kHardwareDevices(
   devices: readonly Easy68kHardwareDeviceConfig[]
 ): Easy68kHardwareValidationResult {
-  const normalized: Easy68kHardwareDeviceConfig[] = [];
+  const normalized: NormalizedEasy68kHardwareDeviceConfig[] = [];
   const errors: string[] = [];
   const ids = new Set<string>();
 
@@ -267,7 +297,7 @@ function clampByte(value: number): number {
   return value & 0xff;
 }
 
-function createDeviceState(config: Easy68kHardwareDeviceConfig): Easy68kHardwareDeviceState {
+function createDeviceState(config: NormalizedEasy68kHardwareDeviceConfig): Easy68kHardwareDeviceState {
   return {
     id: config.id,
     deviceType: config.deviceType ?? 'board',
@@ -290,6 +320,7 @@ export class Easy68kHardware {
   private version = 1;
   private outputVersion = 1;
   private topologyVersion = 1;
+  private mappedAddressRanges: ReadonlyArray<{ start: number; end: number }> = [];
 
   constructor(
     config:
@@ -310,6 +341,7 @@ export class Easy68kHardware {
     for (const device of validation.devices) {
       this.devices.set(device.id, createDeviceState(device));
     }
+    this.rebuildMappedAddressRanges();
   }
 
   readByte(address: number): number | undefined {
@@ -401,6 +433,7 @@ export class Easy68kHardware {
       topologyChanged = true;
     }
     this.devices = next;
+    this.rebuildMappedAddressRanges();
     if (topologyChanged) {
       this.topologyVersion += 1;
     }
@@ -464,7 +497,9 @@ export class Easy68kHardware {
     const devices = [...this.devices.values()].map((device) => this.snapshotDevice(device));
     const primary = devices.find((device) => device.id === DEFAULT_EASY68K_HARDWARE_DEVICE_ID) ??
       devices[0] ??
-      this.snapshotDevice(createDeviceState(DEFAULT_EASY68K_HARDWARE_DEVICE_CONFIG));
+      this.snapshotDevice(
+        createDeviceState(normalizeEasy68kHardwareDeviceConfig(DEFAULT_EASY68K_HARDWARE_DEVICE_CONFIG))
+      );
     return {
       config: { ...primary.config },
       display: [...primary.display],
@@ -483,7 +518,7 @@ export class Easy68kHardware {
     return device ? this.snapshotDevice(device) : undefined;
   }
 
-  getDeviceConfigs(): Easy68kHardwareDeviceConfig[] {
+  getDeviceConfigs(): NormalizedEasy68kHardwareDeviceConfig[] {
     return [...this.devices.values()].map((device) => ({
       id: device.id,
       deviceType: device.deviceType,
@@ -492,14 +527,25 @@ export class Easy68kHardware {
   }
 
   getAddressRange(): { minAddress: number; maxAddress: number } | undefined {
-    const addresses = this.getDeviceConfigs().flatMap((device) =>
-      getEasy68kHardwareAddressDescriptors(device, device.id, device.deviceType).flatMap((descriptor) =>
-        descriptor.addresses.map(normalizeDeviceAddress)
-      )
-    );
+    const addresses = this.mappedAddressRanges.map((range) => range.start);
     return addresses.length > 0
       ? { minAddress: Math.min(...addresses), maxAddress: Math.max(...addresses) }
       : undefined;
+  }
+
+  getMappedAddressRanges(): ReadonlyArray<{ start: number; end: number }> {
+    return this.mappedAddressRanges;
+  }
+
+  private rebuildMappedAddressRanges(): void {
+    const addresses = this.getDeviceConfigs().flatMap((device) =>
+      getEasy68kHardwareAddressDescriptors(device, device.id, device.deviceType).flatMap(
+        (descriptor) => descriptor.addresses.map(normalizeDeviceAddress)
+      )
+    );
+    this.mappedAddressRanges = [...new Set(addresses)]
+      .sort((left, right) => left - right)
+      .map((address) => ({ start: address, end: address }));
   }
 
   getOutputSnapshot(): Easy68kHardwareOutputSnapshot {

@@ -112,6 +112,12 @@ export {
 export { InstructionStream, signExtend8, signExtend16 } from './cpu/instructionStream';
 export { StrictM68000Core } from './cpu/core';
 export { BusFault, RamBus } from './cpu/memoryBus';
+export { MappedMemoryBus } from './machine/mappedMemoryBus';
+export {
+  BareMachineAdapter,
+  Easy68kMachineAdapter,
+  createMachineAdapter,
+} from './machine/machineAdapter';
 export { M68000State } from './cpu/state';
 export type {
   ProgramImage,
@@ -122,11 +128,44 @@ export type { BranchCondition } from './assembler/encoder';
 export type { DecodedBinaryInstruction } from './cpu/decoder';
 export type { OpcodeClassification } from './cpu/opcodeClassifier';
 export type { StrictM68000CoreOptions } from './cpu/core';
-export type { BusAccess, BusAccessSize, BusAccessType, MemoryBus } from './cpu/memoryBus';
-export type { M68000StateOptions } from './cpu/state';
-export { M68000_ISA_MANIFEST, summarizeIsaCoverage, validateIsaManifest } from './isa/manifest';
 export type {
+  AddressRange,
+  BusAccess,
+  BusAccessSize,
+  BusAccessType,
+  MemoryBus,
+  MemoryMappedDevice,
+} from './cpu/memoryBus';
+export type {
+  MachineAdapter,
+  MachineSnapshot,
+  MachineTrapContext,
+} from './machine/machineAdapter';
+export type { M68000StateOptions } from './cpu/state';
+export {
+  M68000_ISA_MANIFEST,
+  MACHINE_COMPATIBILITY_EVIDENCE,
+  summarizeIsaCoverage,
+  validateIsaManifest,
+} from './isa/manifest';
+export {
+  CPU_MODEL_REGISTRY,
+  DEFAULT_EMULATION_CONFIG,
+  LEGACY_CPU_PROFILE_CONFIG,
+  MACHINE_PROFILE_REGISTRY,
+  isCpuModel,
+  isMachineProfile,
+  normalizeEmulationConfig,
+  toLegacyCpuProfile,
+} from './isa/emulationConfig';
+export type {
+  CpuModelDefinition,
+  MachineProfileDefinition,
+} from './isa/emulationConfig';
+export type {
+  CpuModel,
   CpuProfile,
+  EmulationConfig,
   EffectiveAddressClass,
   FlagEffect,
   InstructionEncoding,
@@ -135,6 +174,8 @@ export type {
   InstructionSupport,
   IsaCoverageSummary,
   IsaManifestValidationIssue,
+  MachineCompatibilityEvidence,
+  MachineProfile,
   StatusFlag,
 } from './isa/types';
 export * from './devices/deviceAddressMap';

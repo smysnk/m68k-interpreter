@@ -281,7 +281,36 @@ test.describe('live EASy68K hardware panels', () => {
           .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('data-address')))
       )
       .toContain('00E00050');
+
+    await page
+      .getByRole('button', { name: 'Emulation mode: MC68000 · Easy68K' })
+      .click();
+    await page.getByRole('menuitemradio', { name: 'MC68010 Extensions' }).click();
+    await expect(
+      page.getByRole('button', { name: 'Emulation mode: MC68010 Extensions · Easy68K' })
+    ).toBeVisible();
+    await loadAndRun(page, MULTI_DEVICE_SOURCE);
+    await expect(
+      page
+        .locator('[data-panel-kind="hardware-display"]')
+        .nth(0)
+        .getByRole('img', { name: 'Display digit 1, pattern 0x3F' })
+    ).toBeVisible();
     expect(browserErrors).toEqual([]);
+  });
+
+  test('disconnects mapped devices in Bare while keeping IRQ controls available', async ({ page }) => {
+    await openHardwareLab(page);
+    await page
+      .getByRole('button', { name: 'Emulation mode: MC68000 · Easy68K' })
+      .click();
+    await page.getByRole('menuitemradio', { name: 'Bare' }).click();
+    await expect(page.locator('.hardware-disconnected-state').first()).toContainText(
+      'Connect the Easy68K machine'
+    );
+    await expect(
+      page.getByRole('button', { name: 'Request interrupt level 7' })
+    ).toBeEnabled();
   });
 
   test('keeps the digital matrix usable in the compact Hardware Lab', async ({

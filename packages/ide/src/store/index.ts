@@ -18,7 +18,10 @@ import {
   writePersistedIdeState,
   type PersistedIdeState,
 } from '@/store/persistence';
-import settingsReducer, { initialSettingsState, normalizeCpuProfile } from '@/store/settingsSlice';
+import settingsReducer, {
+  initialSettingsState,
+  normalizeSettingsEmulation,
+} from '@/store/settingsSlice';
 import uiShellReducer, { initialUiShellState } from '@/store/uiShellSlice';
 import hardwareReducer from '@/store/hardwareSlice';
 import panelLayoutReducer, { initialPanelLayoutState } from '@/store/panelLayoutSlice';
@@ -204,7 +207,10 @@ export function createIdeStore() {
     ? {
         ...initialSettingsState,
         ...persisted.settings,
-        cpuProfile: normalizeCpuProfile(persisted.settings.cpuProfile),
+        ...normalizeSettingsEmulation(
+          persisted.settings,
+          (persisted.settings as { cpuProfile?: unknown }).cpuProfile
+        ),
       }
     : initialState.settings;
   const hydratedHardware = normalizePersistedHardwarePreferences(persisted?.hardware);
@@ -262,7 +268,7 @@ export function createIdeStore() {
     pendingLayoutWrite = null;
     const state = store.getState();
     const persistableState: PersistedIdeState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       files: state.files,
       settings: {
         editorTheme: state.settings.editorTheme,
@@ -270,7 +276,8 @@ export function createIdeStore() {
         lineNumbers: state.settings.lineNumbers,
         registerEditRadix: state.settings.registerEditRadix,
         terminalInputMode: state.settings.terminalInputMode,
-        cpuProfile: state.settings.cpuProfile,
+        cpuModel: state.settings.cpuModel,
+        machineProfile: state.settings.machineProfile,
       },
       uiShell: {
         workspaceTab: state.uiShell.workspaceTab,

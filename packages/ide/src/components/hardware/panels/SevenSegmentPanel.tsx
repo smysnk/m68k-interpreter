@@ -1,10 +1,12 @@
 import {
   EASY68K_DISPLAY_DIGITS,
+  MACHINE_PROFILE_REGISTRY,
   type Easy68kHardwareDeviceSnapshot,
 } from '@m68k/interpreter';
+import { useSelector } from 'react-redux';
 import { SevenSegmentBank } from '@/components/hardware/SevenSegmentBank';
 import { useHardwareDeviceSurface } from '@/runtime/useHardwareSurface';
-import type { PanelInstance } from '@/store';
+import type { PanelInstance, RootState } from '@/store';
 
 function emptyDisplaySnapshot(
   deviceId: string,
@@ -29,6 +31,7 @@ function emptyDisplaySnapshot(
 }
 
 export default function SevenSegmentPanel({ instance }: { instance: PanelInstance }) {
+  const machineProfile = useSelector((state: RootState) => state.settings.machineProfile);
   const config = instance.config as Extract<
     PanelInstance['config'],
     { kind: 'hardware-display' }
@@ -45,7 +48,13 @@ export default function SevenSegmentPanel({ instance }: { instance: PanelInstanc
       data-hardware-device-id={config.deviceId}
       data-testid={`hardware-display-${config.deviceId}`}
     >
-      <SevenSegmentBank values={snapshot.display} />
+      {machineProfile === 'bare' ? (
+        <div className="hardware-disconnected-state" role="status">
+          {MACHINE_PROFILE_REGISTRY.bare.disconnectedMessage}
+        </div>
+      ) : (
+        <SevenSegmentBank values={snapshot.display} />
+      )}
     </section>
   );
 }

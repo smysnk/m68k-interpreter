@@ -1,7 +1,4 @@
-import type {
-  Easy68kHardwareValidationResult,
-  UndoCaptureMode,
-} from '@m68k/interpreter';
+import type { UndoCaptureMode } from '@m68k/interpreter';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import { InterpreterWorkerClient, type InterpreterWorkerLike } from '@/runtime/worker/InterpreterWorkerClient';
 
@@ -16,6 +13,13 @@ export function supportsInterpreterWorkerRuntime(): boolean {
   return typeof Worker === 'function';
 }
 
+export class AsyncRuntimeMutationRequiredError extends Error {
+  constructor(operation: string) {
+    super(`${operation} must be awaited through the runtime command port`);
+    this.name = 'AsyncRuntimeMutationRequiredError';
+  }
+}
+
 export function createWorkerIdeRuntimeSession(
   workerLike: InterpreterWorkerLike = createBrowserWorker()
 ): IdeRuntimeSession {
@@ -24,71 +28,70 @@ export function createWorkerIdeRuntimeSession(
 
   const session: IdeRuntimeSession = {
     clearInputQueue: () => {
-      void client.requestClearInputQueue();
+      throw new AsyncRuntimeMutationRequiredError('clearInputQueue');
     },
-    configureHardware: (config) => {
-      void client.requestConfigureHardware(config);
-      const optimisticResult: Easy68kHardwareValidationResult = {
-        valid: true,
-        conflicts: [],
-        errors: [],
-      };
-      return optimisticResult;
+    configureHardware: () => {
+      throw new AsyncRuntimeMutationRequiredError('configureHardware');
     },
-    configureHardwareDevices: (devices) => {
-      void client.requestConfigureHardwareDevices(devices);
-      const optimisticResult: Easy68kHardwareValidationResult = {
-        valid: true,
-        devices: devices.map((device) => ({ ...device })),
-        conflicts: [],
-        errors: [],
-      };
-      return optimisticResult;
+    configureHardwareDevices: () => {
+      throw new AsyncRuntimeMutationRequiredError('configureHardwareDevices');
     },
     setHardwareToggle: (bit, enabled, deviceId) => {
-      void client.requestSetHardwareToggle(bit, enabled, deviceId);
+      void bit; void enabled; void deviceId;
+      throw new AsyncRuntimeMutationRequiredError('setHardwareToggle');
     },
     setHardwareButton: (bit, pressed, deviceId) => {
-      void client.requestSetHardwareButton(bit, pressed, deviceId);
+      void bit; void pressed; void deviceId;
+      throw new AsyncRuntimeMutationRequiredError('setHardwareButton');
     },
-    requestInterruptLevel: () => 'accepted',
+    requestInterruptLevel: () => {
+      throw new AsyncRuntimeMutationRequiredError('requestInterruptLevel');
+    },
     emulationStep: () => {
       throw new Error('Worker-backed runtime does not support synchronous emulationStep()');
     },
     queueInput: (input) => {
-      void client.requestQueueInput(input);
+      void input;
+      throw new AsyncRuntimeMutationRequiredError('queueInput');
     },
     raiseExternalInterrupt: (handlerAddress) => {
-      void client.requestRaiseExternalInterrupt(handlerAddress);
-      return true;
+      void handlerAddress;
+      throw new AsyncRuntimeMutationRequiredError('raiseExternalInterrupt');
     },
     reset: () => {
-      void client.requestReset();
+      throw new AsyncRuntimeMutationRequiredError('reset');
     },
     undoFromStack: () => {
-      void client.requestUndo();
+      throw new AsyncRuntimeMutationRequiredError('undoFromStack');
     },
     writeMemoryByte: (address, value) => {
-      void client.requestWriteMemoryByte(address, value);
+      void address; void value;
+      throw new AsyncRuntimeMutationRequiredError('writeMemoryByte');
     },
     writeMemoryLong: (address, value) => {
-      void client.requestWriteMemoryLong(address, value);
+      void address; void value;
+      throw new AsyncRuntimeMutationRequiredError('writeMemoryLong');
     },
     writeMemoryWord: (address, value) => {
-      void client.requestWriteMemoryWord(address, value);
+      void address; void value;
+      throw new AsyncRuntimeMutationRequiredError('writeMemoryWord');
     },
     setRegisterValue: (register, value) => {
-      void client.requestSetRegisterValue(register, value);
+      void register; void value;
+      throw new AsyncRuntimeMutationRequiredError('setRegisterValue');
     },
     resizeTerminal: (columns, rows) => {
-      void client.requestResizeTerminal(columns, rows);
+      void columns; void rows;
+      throw new AsyncRuntimeMutationRequiredError('resizeTerminal');
     },
     setUndoCaptureMode: (mode, checkpointInterval) => {
-      undoCaptureMode = mode;
-      void client.requestSetUndoCaptureMode(mode, checkpointInterval);
+      void mode; void checkpointInterval;
+      throw new AsyncRuntimeMutationRequiredError('setUndoCaptureMode');
     },
     getUndoCaptureMode: () => undoCaptureMode,
-    forceUndoCheckpoint: () => undefined,
+    forceUndoCheckpoint: () => {
+      throw new AsyncRuntimeMutationRequiredError('forceUndoCheckpoint');
+    },
     controller: client,
     getRuntimeTransport: () => 'worker',
     getCFlag: client.getCFlag.bind(client),

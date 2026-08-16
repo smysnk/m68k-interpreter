@@ -6,7 +6,8 @@ import {
   setEditorCode,
   setEditorTheme,
   setRegisterEditRadix,
-  setCpuProfile,
+  setCpuModel,
+  setMachineProfile,
   setRootHorizontalWithContextLayout,
   setWorkspaceTab,
   toggleContextView,
@@ -29,7 +30,8 @@ describe('store persistence', () => {
 
     store.dispatch(setEditorTheme(EditorThemeEnum.M68K_DARK));
     store.dispatch(setRegisterEditRadix('bin'));
-    store.dispatch(setCpuProfile('m68000'));
+    store.dispatch(setCpuModel('m68010'));
+    store.dispatch(setMachineProfile('bare'));
     store.dispatch(setActiveFile('workspace:scratch.asm'));
     store.dispatch(setEditorCode('MOVE.L #3,D0'));
     store.dispatch(setWorkspaceTab('code'));
@@ -40,7 +42,7 @@ describe('store persistence', () => {
 
     expect(persisted?.settings?.editorTheme).toBe(EditorThemeEnum.M68K_DARK);
     expect(persisted?.settings?.registerEditRadix).toBe('bin');
-    expect(persisted?.settings?.cpuProfile).toBe('m68000');
+    expect(persisted?.settings).toMatchObject({ cpuModel: 'm68010', machineProfile: 'bare' });
     expect(persisted?.files?.activeFileId).toBe('workspace:scratch.asm');
     expect(
       persisted?.files?.items.find((item) => item.id === 'workspace:scratch.asm')?.content
@@ -91,7 +93,10 @@ describe('store persistence', () => {
 
     expect(store.getState().settings.editorTheme).toBe(EditorThemeEnum.M68K_DARK);
     expect(store.getState().settings.registerEditRadix).toBe('dec');
-    expect(store.getState().settings.cpuProfile).toBe('m68010');
+    expect(store.getState().settings).toMatchObject({
+      cpuModel: 'm68010',
+      machineProfile: 'bare',
+    });
     expect(store.getState().uiShell.workspaceTab).toBe('code');
     expect(store.getState().uiShell.contextOpen).toBe(true);
     expect(store.getState().uiShell.layout.rootHorizontalWithContext).toEqual([48, 32, 20]);
@@ -115,7 +120,41 @@ describe('store persistence', () => {
       })
     );
 
-    expect(createIdeStore().getState().settings.cpuProfile).toBe('easy68k');
+    expect(createIdeStore().getState().settings).toMatchObject({
+      cpuModel: 'm68000',
+      machineProfile: 'easy68k',
+    });
+  });
+
+  it.each([
+    ['m68000', 'bare'],
+    ['m68010', 'bare'],
+    ['m68000', 'easy68k'],
+    ['m68010', 'easy68k'],
+  ] as const)('round trips %s with %s', (cpuModel, machineProfile) => {
+    const store = createIdeStore();
+    store.dispatch(setCpuModel(cpuModel));
+    store.dispatch(setMachineProfile(machineProfile));
+    expect(createIdeStore().getState().settings).toMatchObject({ cpuModel, machineProfile });
+  });
+
+  it('defaults malformed axes without discarding other settings', () => {
+    window.localStorage.setItem(
+      IDE_PERSISTENCE_KEY,
+      JSON.stringify({
+        schemaVersion: 3,
+        settings: {
+          editorTheme: EditorThemeEnum.M68K_DARK,
+          cpuModel: 'not-a-cpu',
+          machineProfile: 'not-a-machine',
+        },
+      })
+    );
+    expect(createIdeStore().getState().settings).toMatchObject({
+      editorTheme: EditorThemeEnum.M68K_DARK,
+      cpuModel: 'm68000',
+      machineProfile: 'easy68k',
+    });
   });
 
   it('debounces panel-only writes and restores the versioned active workspace', async () => {
@@ -125,7 +164,7 @@ describe('store persistence', () => {
     await new Promise((resolve) => window.setTimeout(resolve, 280));
 
     const persisted = readPersistedIdeState();
-    expect(persisted?.schemaVersion).toBe(2);
+    expect(persisted?.schemaVersion).toBe(3);
     expect(
       Object.values(persisted?.panelLayout?.activeLayout.instances ?? {}).some(
         (panel) => panel.kind === 'hardware-display'

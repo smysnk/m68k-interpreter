@@ -4,10 +4,6 @@
 
 [![M68K Interpreter demo video](assets/m68k-interpreter-demo.webp)](https://github.com/user-attachments/assets/ec1eefff-b997-4261-bd53-46690e0b6075)
 
-**[▶ Watch the HD demo](https://github.com/user-attachments/assets/ec1eefff-b997-4261-bd53-46690e0b6075)** · **[Play Nibbles](https://smysnk.com/nibbles)**
-
-This demo is running my old [m68k-nibbles](https://github.com/smysnk/m68k-nibbles) game, which I originally wrote for a college assembly class back in 2007. I always wished someone would eventually build a 68000 browser emulator so I could bring it back to life, so I was excited when I found [gianlucarea's m68k-interpreter project](https://github.com/gianlucarea/m68k-interpreter). I took a little liberty with this fork to adapt the interface, auto-load the game, and add a screen terminal emulator so the project could feel closer to the original experience. If you enjoy this version, please consider showing some support to the upstream project too.
-
 A Motorola 68000 assembly emulator that runs entirely in the browser.  
 Write, step through, and debug m68k assembly — no installation needed.
 
@@ -26,17 +22,28 @@ Write, step through, and debug m68k assembly — no installation needed.
 - Detailed error reporting with line context
 - Preloaded examples covering common patterns
 - Export register and memory state to file
-- Terminal-mode execution path for `nibbles.asm`
 - Runtime batching and keyboard capture for browser-playable terminal programs
 - Independently addressable EASy68K panels for seven-segment displays, aligned switches/LEDs/active-low buttons, and CPU interrupt requests
 - Level 1–7 autovector interrupts, SR masking, automatic IRQ scheduling, and `RTE`
+
+## Compatibility and instruction coverage
+
+The CPU can be selected from the bottom status bar.
+
+| CPU selection | MC68000 forms | MC68010 additions |
+| ------------- | ------------: | ----------------: |
+| **MC68000**   |       116/116 |                 0 |
+| **MC68010**   |       116/116 |                 2 |
+
+MC68010 currently adds `RTD` and `MOVE from CCR`. See the generated
+[ISA coverage matrix](docs/generated/M68000_ISA_COVERAGE.md) for per-opcode details.
 
 ## Runtime shape
 
 - the strict byte-addressed core is the single instruction execution authority
 - the public `Emulator` API is a compatibility facade over that core
-- browser execution and `nibbles.asm` run through the same worker-backed strict runtime
-- MC68000, MC68010 Extensions, and Easy68K modes are selected from the bottom status bar
+- browser execution uses the worker-backed strict runtime
+- CPU model and machine profile are selected independently from the bottom status bar
 
 ## IDE architecture
 
@@ -45,8 +52,6 @@ Write, step through, and debug m68k assembly — no installation needed.
 - Selectors own derived UI models
 - Controller hooks own browser/runtime side effects
 - Terminal, memory, and live hardware snapshots stay outside Redux in external surface stores
-
-See [docs/VIEW_CONTROLLER_REDUX_CONVENTIONS.md](docs/VIEW_CONTROLLER_REDUX_CONVENTIONS.md) for the current architecture rules.
 
 ---
 
@@ -93,7 +98,7 @@ yarn type-check      # workspace type-check
 
 Boot-time IDE env vars:
 
-- `VITE_IDE_PRELOAD_FILE=nibbles.asm` selects which known file should be loaded on startup. You can use the file id, name, or path, for example `example:nibbles.asm`, `nibbles.asm`, or `fixtures/nibbles.asm`.
+- `VITE_IDE_PRELOAD_FILE=hello-terminal.asm` selects which known file should be loaded on startup. You can use the file id, name, or path, for example `example:hello-terminal.asm`, `hello-terminal.asm`, or `fixtures/hello-terminal.asm`.
 - `VITE_IDE_AUTOPLAY=true` runs the loaded program automatically on boot.
 
 ---

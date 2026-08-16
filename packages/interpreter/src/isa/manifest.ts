@@ -1,11 +1,12 @@
 import type {
-  CpuProfile,
+  CpuModel,
   EffectiveAddressClass,
   InstructionForm,
   InstructionSize,
   InstructionSupport,
   IsaCoverageSummary,
   IsaManifestValidationIssue,
+  MachineCompatibilityEvidence,
 } from './types';
 
 const NONE = ['none'] as const;
@@ -42,7 +43,7 @@ const MEMORY_ALTERABLE = [...MEMORY] as const;
 const ALL_SOURCE = ['data-register', 'address-register', ...MEMORY, 'immediate'] as const;
 
 interface FormOptions {
-  minimumProfile?: CpuProfile;
+  minimumCpuModel?: CpuModel;
   sizes?: readonly InstructionSize[];
   source?: readonly EffectiveAddressClass[];
   destination?: readonly EffectiveAddressClass[];
@@ -56,7 +57,7 @@ function form(mnemonic: string, name: string, options: FormOptions = {}): Instru
     id: `${mnemonic.toLowerCase()}.${name}`,
     mnemonic: mnemonic.toUpperCase(),
     form: name,
-    minimumProfile: options.minimumProfile ?? 'm68000',
+    minimumCpuModel: options.minimumCpuModel ?? 'm68000',
     sizes: options.sizes ?? ['unsized'],
     source: options.source ?? NONE,
     destination: options.destination ?? NONE,
@@ -560,21 +561,27 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     support: STRICT_CORE_PARTIAL,
   }),
   form('MOVE', 'from-ccr', {
-    minimumProfile: 'm68010',
+    minimumCpuModel: 'm68010',
     sizes: ['word'],
     destination: DATA_ALTERABLE,
     support: 'extension-only',
   }),
   form('RTD', 'displacement', {
-    minimumProfile: 'm68010',
+    minimumCpuModel: 'm68010',
     sizes: ['word'],
     source: ['immediate'],
     support: 'extension-only',
   }),
-  form('MODE', 'easy68k-pseudo', {
-    minimumProfile: 'easy68k',
+];
+
+export const MACHINE_COMPATIBILITY_EVIDENCE: readonly MachineCompatibilityEvidence[] = [
+  {
+    id: 'easy68k.mode-directive',
+    machineProfile: 'easy68k',
+    capability: 'MODE source directive compatibility',
     support: 'compatibility-only',
-  }),
+    notes: 'Assembler evidence kept separate from CPU instruction coverage.',
+  },
 ];
 
 export function validateIsaManifest(
@@ -640,9 +647,12 @@ export function validateIsaManifest(
 export function summarizeIsaCoverage(
   manifest: readonly InstructionForm[] = M68000_ISA_MANIFEST
 ): IsaCoverageSummary {
-  const byProfile: IsaCoverageSummary['byProfile'] = {
+  const byCpuModel: IsaCoverageSummary['byCpuModel'] = {
     m68000: 0,
     m68010: 0,
+  };
+  const machineCompatibility: IsaCoverageSummary['machineCompatibility'] = {
+    bare: 0,
     easy68k: 0,
   };
   const bySupport: IsaCoverageSummary['bySupport'] = {
@@ -657,14 +667,19 @@ export function summarizeIsaCoverage(
   const mnemonics = new Set<string>();
 
   for (const instruction of manifest) {
-    byProfile[instruction.minimumProfile] += 1;
+    byCpuModel[instruction.minimumCpuModel] += 1;
     bySupport[instruction.support] += 1;
     mnemonics.add(instruction.mnemonic);
   }
 
+  for (const evidence of MACHINE_COMPATIBILITY_EVIDENCE) {
+    machineCompatibility[evidence.machineProfile] += 1;
+  }
+
   return {
     totalForms: manifest.length,
-    byProfile,
+    byCpuModel,
+    machineCompatibility,
     bySupport,
     uniqueMnemonics: mnemonics.size,
   };

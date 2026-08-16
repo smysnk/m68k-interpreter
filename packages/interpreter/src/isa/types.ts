@@ -1,4 +1,13 @@
-export type CpuProfile = 'm68000' | 'm68010' | 'easy68k';
+export type CpuModel = 'm68000' | 'm68010';
+export type MachineProfile = 'bare' | 'easy68k';
+
+export interface EmulationConfig {
+  cpuModel: CpuModel;
+  machineProfile: MachineProfile;
+}
+
+/** @deprecated Use CpuModel and MachineProfile through EmulationConfig. */
+export type CpuProfile = CpuModel | 'easy68k';
 
 export type InstructionSize = 'byte' | 'word' | 'long' | 'unsized';
 
@@ -44,7 +53,7 @@ export interface InstructionForm {
   id: string;
   mnemonic: string;
   form: string;
-  minimumProfile: CpuProfile;
+  minimumCpuModel: CpuModel;
   sizes: readonly InstructionSize[];
   source: readonly EffectiveAddressClass[];
   destination: readonly EffectiveAddressClass[];
@@ -69,7 +78,16 @@ export interface IsaManifestValidationIssue {
 
 export interface IsaCoverageSummary {
   totalForms: number;
-  byProfile: Record<CpuProfile, number>;
+  byCpuModel: Record<CpuModel, number>;
+  machineCompatibility: Record<MachineProfile, number>;
   bySupport: Record<InstructionSupport, number>;
   uniqueMnemonics: number;
+}
+
+export interface MachineCompatibilityEvidence {
+  id: string;
+  machineProfile: MachineProfile;
+  capability: string;
+  support: 'compatibility-only';
+  notes?: string;
 }

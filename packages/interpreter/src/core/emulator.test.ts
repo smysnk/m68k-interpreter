@@ -352,7 +352,7 @@ START
 `);
     const valueAddress = emulator.getSymbolAddress('VALUE');
     expect(valueAddress).toBeDefined();
-    emulator.getRegisters()[0] = (valueAddress ?? 0) + 2;
+    emulator.setRegisterValue(0, (valueAddress ?? 0) + 2);
 
     runProgram(emulator);
 
@@ -369,7 +369,7 @@ START
 `);
     const valueAddress = emulator.getSymbolAddress('VALUE');
     expect(valueAddress).toBeDefined();
-    emulator.getRegisters()[7] = valueAddress ?? 0;
+    emulator.setRegisterValue(7, valueAddress ?? 0);
 
     runProgram(emulator);
 
@@ -470,18 +470,18 @@ START
     expect(emulator.getRegisters()[8]).toBe(1);
   });
 
-  it('adapts legacy exceptions and diagnostics into machine-readable results', () => {
+  it('reports a strict load failure rather than entering a legacy executor', () => {
     const emulator = new Emulator('START\n  MOVE.L #1,D0');
 
     expect(emulator.stepInstruction()).toMatchObject({
       kind: 'exception',
       fault: {
-        code: 'legacy-execution-exception',
+        code: 'assembly-load-failure',
       },
     });
     expect(emulator.getDiagnostics()).toEqual([
       expect.objectContaining({
-        code: 'legacy-execution-exception',
+        code: 'assembly-load-failure',
         severity: 'error',
       }),
     ]);

@@ -25,17 +25,11 @@ describe('hardwareSurfaceStore', () => {
         id: 'display-a',
         deviceType: 'display',
         displayBase: 0xe00000,
-        ledAddress: 0,
-        switchAddress: 0,
-        buttonAddress: 0,
       },
       {
         id: 'display-b',
         deviceType: 'display',
         displayBase: 0xe00020,
-        ledAddress: 0,
-        switchAddress: 0,
-        buttonAddress: 0,
       },
     ]);
     store.publish(hardware.getSnapshot());

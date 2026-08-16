@@ -1,5 +1,5 @@
 import type { MemoryUndoPageEntry } from './memory';
-import type { Easy68kHardwareOutputSnapshot } from '../devices/easy68kHardware';
+import type { MachineSnapshot } from '../machine/machineAdapter';
 
 /**
  * Undo system for M68K emulator
@@ -26,7 +26,7 @@ export interface ExecutionUndoSnapshot {
 export interface UndoFrame {
   cpu: CpuUndoSnapshot;
   memoryPages: MemoryUndoPageEntry[];
-  deviceOutputs: Easy68kHardwareOutputSnapshot;
+  machine: MachineSnapshot;
   diagnostics: DiagnosticsUndoSnapshot;
   execution: ExecutionUndoSnapshot;
 }
@@ -42,11 +42,7 @@ export class Undo {
         registers: new Int32Array(frame.cpu.registers),
       },
       memoryPages: [...frame.memoryPages],
-      deviceOutputs: {
-        display: [...frame.deviceOutputs.display],
-        leds: frame.deviceOutputs.leds,
-        outputVersion: frame.deviceOutputs.outputVersion,
-      },
+      machine: frame.machine,
       diagnostics: {
         errors: [...frame.diagnostics.errors],
       },

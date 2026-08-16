@@ -3,23 +3,29 @@ import type { SettingsState } from '@/store/settingsSlice';
 import type { UiShellState } from '@/store/uiShellSlice';
 import type { HardwarePreferencesState } from '@/store/hardwareSlice';
 import type { PanelLayoutState } from '@/store/panelLayoutTypes';
-import { DEFAULT_EASY68K_HARDWARE_CONFIG, validateEasy68kHardwareConfig } from '@m68k/interpreter';
+import {
+  DEFAULT_EASY68K_HARDWARE_CONFIG,
+  validateEasy68kHardwareConfig,
+  type CpuProfile,
+} from '@m68k/interpreter';
 
-export const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v2';
+export const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v3';
+export const PREVIOUS_IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v2';
 export const LEGACY_IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v1';
 
 export interface PersistedIdeState {
-  schemaVersion?: 2;
+  schemaVersion?: 1 | 2 | 3;
   files?: FilesState;
-  settings?: Pick<
+  settings?: Partial<Pick<
     SettingsState,
     | 'editorTheme'
     | 'followSystemTheme'
     | 'lineNumbers'
     | 'registerEditRadix'
     | 'terminalInputMode'
-    | 'cpuProfile'
-  >;
+    | 'cpuModel'
+    | 'machineProfile'
+  >> & { cpuProfile?: CpuProfile };
   uiShell?: Pick<
     UiShellState,
     'workspaceTab' | 'inspectorView' | 'contextView' | 'contextOpen' | 'layout'
@@ -100,7 +106,9 @@ export function readPersistedIdeState(): PersistedIdeState | undefined {
   }
 
   const rawValue =
-    storage.getItem(IDE_PERSISTENCE_KEY) ?? storage.getItem(LEGACY_IDE_PERSISTENCE_KEY);
+    storage.getItem(IDE_PERSISTENCE_KEY) ??
+    storage.getItem(PREVIOUS_IDE_PERSISTENCE_KEY) ??
+    storage.getItem(LEGACY_IDE_PERSISTENCE_KEY);
   if (!rawValue) {
     return undefined;
   }
@@ -119,7 +127,7 @@ export function writePersistedIdeState(value: PersistedIdeState): void {
   }
 
   try {
-    storage.setItem(IDE_PERSISTENCE_KEY, JSON.stringify({ ...value, schemaVersion: 2 }));
+    storage.setItem(IDE_PERSISTENCE_KEY, JSON.stringify({ ...value, schemaVersion: 3 }));
   } catch {
     // Storage can be unavailable or over quota. The active in-memory workspace remains usable.
   }
@@ -132,5 +140,6 @@ export function clearPersistedIdeState(): void {
   }
 
   storage.removeItem(IDE_PERSISTENCE_KEY);
+  storage.removeItem(PREVIOUS_IDE_PERSISTENCE_KEY);
   storage.removeItem(LEGACY_IDE_PERSISTENCE_KEY);
 }

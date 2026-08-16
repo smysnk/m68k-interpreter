@@ -1,5 +1,12 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import type { CpuProfile } from '@m68k/interpreter';
+import {
+  DEFAULT_EMULATION_CONFIG,
+  normalizeEmulationConfig,
+  type CpuModel,
+  type CpuProfile,
+  type EmulationConfig,
+  type MachineProfile,
+} from '@m68k/interpreter';
 import {
   defaultEditorTheme,
   defaultEditorThemes,
@@ -18,7 +25,8 @@ export interface SettingsState {
   lineNumbers: boolean;
   registerEditRadix: RegisterEditRadix;
   terminalInputMode: TerminalInputModePreference;
-  cpuProfile: CpuProfile;
+  cpuModel: CpuModel;
+  machineProfile: MachineProfile;
 }
 
 export const initialSettingsState: SettingsState = {
@@ -28,15 +36,23 @@ export const initialSettingsState: SettingsState = {
   lineNumbers: true,
   registerEditRadix: 'hex',
   terminalInputMode: 'auto',
-  cpuProfile: 'easy68k',
+  ...DEFAULT_EMULATION_CONFIG,
 };
 
 const registerEditRadices: RegisterEditRadix[] = ['hex', 'dec', 'bin'];
 const terminalInputModes: TerminalInputModePreference[] = ['auto', 'text-input', 'touch-only'];
-const cpuProfiles: CpuProfile[] = ['m68000', 'm68010', 'easy68k'];
-
+/** @deprecated Persistence compatibility helper. */
 export function normalizeCpuProfile(value: unknown): CpuProfile {
-  return cpuProfiles.includes(value as CpuProfile) ? (value as CpuProfile) : 'easy68k';
+  return value === 'm68000' || value === 'm68010' || value === 'easy68k' ? value : 'easy68k';
+}
+
+export function normalizeSettingsEmulation(
+  value: unknown,
+  legacyCpuProfile?: unknown
+): EmulationConfig {
+  const candidate =
+    typeof value === 'object' && value !== null ? (value as Partial<EmulationConfig>) : undefined;
+  return normalizeEmulationConfig(candidate, normalizeCpuProfile(legacyCpuProfile));
 }
 
 function getOppositeTheme(currentTheme: EditorThemeId): EditorThemeId {
@@ -84,8 +100,17 @@ const settingsSlice = createSlice({
       }
       state.terminalInputMode = action.payload;
     },
-    setCpuProfile(state, action: PayloadAction<CpuProfile>) {
-      state.cpuProfile = normalizeCpuProfile(action.payload);
+    setCpuModel(state, action: PayloadAction<CpuModel>) {
+      state.cpuModel = normalizeEmulationConfig({ cpuModel: action.payload }).cpuModel;
+    },
+    setMachineProfile(state, action: PayloadAction<MachineProfile>) {
+      state.machineProfile = normalizeEmulationConfig({ machineProfile: action.payload })
+        .machineProfile;
+    },
+    setEmulationConfig(state, action: PayloadAction<EmulationConfig>) {
+      const normalized = normalizeEmulationConfig(action.payload);
+      state.cpuModel = normalized.cpuModel;
+      state.machineProfile = normalized.machineProfile;
     },
     resetSettingsState() {
       return { ...initialSettingsState };
@@ -101,7 +126,9 @@ export const {
   setLineNumbers,
   setRegisterEditRadix,
   setTerminalInputMode,
-  setCpuProfile,
+  setCpuModel,
+  setMachineProfile,
+  setEmulationConfig,
   resetSettingsState,
 } = settingsSlice.actions;
 

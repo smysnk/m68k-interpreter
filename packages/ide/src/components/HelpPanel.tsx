@@ -50,8 +50,8 @@ const HelpPanel: React.FC = () => {
           launched again from a clean state.
         </p>
         <p>
-          The IDE uses one strict byte-addressed CPU core in every mode; Easy68K mode layers
-          terminal and trainer-board services onto it.
+          The IDE composes a strict byte-addressed CPU model with an independent machine profile.
+          The Easy68K machine layers terminal, trap, and trainer-board services onto either CPU.
         </p>
       </div>
 
@@ -64,7 +64,7 @@ const HelpPanel: React.FC = () => {
           </li>
           <li>
             The strict core implements every MC68000 instruction form in the generated ISA manifest.
-            MC68010 additions remain profile-gated.
+            MC68010 additions depend only on the selected CPU model.
           </li>
           <li>
             Easy68K trap tasks used by Nibbles: `TRAP #15` tasks `1`, `3`, and `4`, plus `TRAP #11`

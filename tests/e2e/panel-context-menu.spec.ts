@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v2';
+const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v3';
 
 const PANEL_CATALOGUE = [
   { kind: 'terminal', title: 'Screen' },

@@ -47,7 +47,7 @@ function main(): void {
     return {
       id: scenario.id,
       title: scenario.title,
-      cpuProfile: scenario.cpuProfile ?? 'easy68k',
+      emulation: scenario.emulation ?? { cpuModel: 'm68000', machineProfile: 'easy68k' },
       steps: samples[0]?.steps ?? 0,
       summary: summarizeSamples(samples),
       samples,

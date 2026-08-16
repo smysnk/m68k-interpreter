@@ -1,15 +1,7 @@
-/**
- * M68K Emulator - Main execution engine
- * Handles instruction parsing, execution, registers, memory, and condition codes
- */
-
-import { loadProgramSource, type ProgramSource } from '../programLoader';
-import {
-  resolveDecodedInstruction,
-  type DecodedInstruction,
-  type DecodedOperand,
-} from '../instructionDecoder';
-import { TerminalDevice, type TerminalMeta, type TerminalSnapshot } from '../devices/terminal';
+import { assembleLoadedProgram } from '../assembler/sourceAssembler';
+import type { ProgramImage, ProgramSourceMapEntry } from '../assembler/programImage';
+import { StrictM68000Core } from '../cpu/core';
+import type { CpuDiagnostic, CpuFault, StepResult } from './execution';
 import {
   Easy68kHardware,
   type Easy68kHardwareConfig,
@@ -17,63 +9,24 @@ import {
   type Easy68kHardwareSnapshot,
   type Easy68kHardwareValidationResult,
 } from '../devices/easy68kHardware';
+import type { TerminalDevice, TerminalMeta, TerminalSnapshot } from '../devices/terminal';
 import type { TerminalFrameBuffer } from '../devices/terminalBuffer';
+import { normalizeEmulationConfig, toLegacyCpuProfile } from '../isa/emulationConfig';
+import type { CpuProfile, EmulationConfig, MachineProfile } from '../isa/types';
+import {
+  createMachineAdapter,
+  type MachineAdapter,
+  type MachineTrapContext,
+} from '../machine/machineAdapter';
+import { loadProgramSource, type ProgramSource } from '../programLoader';
+import type { RuntimeSyncVersions } from '../types/emulator';
+import { isInterruptLevelEligible } from './statusRegister';
 import { Memory } from './memory';
 import { Undo } from './undo';
 import { Strings } from './strings';
-import {
-  CODE_LONG,
-  CODE_WORD,
-  CODE_BYTE,
-  BYTE_MASK,
-  WORD_MASK,
-  addOP,
-  moveOP,
-  clrOP,
-  cmpOP,
-  tstOP,
-  swapOP,
-  exgOP,
-  extOP,
-  andOP,
-  orOP,
-  eorOP,
-  notOP,
-  negOP,
-  muluOP,
-  mulsOP,
-  divuOP,
-  divsOP,
-  aslOP,
-  asrOP,
-  lslOP,
-  lsrOP,
-  rolOP,
-  rorOP,
-} from './operations';
-import type { RuntimeSyncVersions } from '../types/emulator';
-import { enterInterruptStatus, isInterruptLevelEligible, isSupervisorMode } from './statusRegister';
-import { getEasy68kInterruptVectorAddress } from '../devices/easy68kHardware';
-import type { CpuDiagnostic, CpuFault, StepResult } from './execution';
-import type { CpuProfile } from '../isa/types';
-import { assembleLoadedProgram } from '../assembler/sourceAssembler';
-import type { ProgramImage, ProgramSourceMapEntry } from '../assembler/programImage';
-import { StrictM68000Core } from '../cpu/core';
-import { BusFault, type MemoryBus } from '../cpu/memoryBus';
 
-// Token type constants
-const TOKEN_IMMEDIATE = 0;
-const TOKEN_OFFSET = 1;
-const TOKEN_REG_ADDR = 2;
-const TOKEN_REG_DATA = 3;
-const TOKEN_OFFSET_ADDR = 4;
-const TOKEN_REGISTER_LIST = 6;
-
-const STACK_POINTER_REGISTER = 7;
 const DEFAULT_STACK_POINTER = 0x00100000;
 const DEFAULT_UNDO_CHECKPOINT_INTERVAL = 64;
-
-type Operand = DecodedOperand;
 
 export type UndoCaptureMode = 'full' | 'off' | 'checkpointed';
 export type InterruptRequestResult = 'accepted' | 'masked' | 'rejected';
@@ -81,7 +34,9 @@ export type InterruptRequestResult = 'accepted' | 'masked' | 'rejected';
 export interface EmulatorOptions {
   columns?: number;
   rows?: number;
+  /** @deprecated Use emulation. */
   cpuProfile?: CpuProfile;
+  emulation?: Partial<EmulationConfig>;
   undoMode?: UndoCaptureMode;
   undoCheckpointInterval?: number;
   hardwareConfig?: Easy68kHardwareConfig;
@@ -89,385 +44,206 @@ export interface EmulatorOptions {
 }
 
 function normalizeUndoCheckpointInterval(value: number | undefined): number {
-  if (!Number.isFinite(value)) {
-    return DEFAULT_UNDO_CHECKPOINT_INTERVAL;
-  }
-
+  if (!Number.isFinite(value)) return DEFAULT_UNDO_CHECKPOINT_INTERVAL;
   return Math.max(1, Math.floor(value ?? DEFAULT_UNDO_CHECKPOINT_INTERVAL));
 }
 
 export class Emulator {
-  // Registers: A0-A7 (indices 0-7), D0-D7 (indices 8-15)
-  private registers: Int32Array = new Int32Array(16);
-
-  private pc: number = 0x0; // Program counter
-  private statusRegister = 0x0000;
-  private userStackPointer = DEFAULT_STACK_POINTER;
-  private supervisorStackPointer = DEFAULT_STACK_POINTER;
-  private memory: Memory;
-  private undo: Undo;
-  private terminal: TerminalDevice;
-  private hardware: Easy68kHardware;
-  private hardwareAddressMin = 0;
-  private hardwareAddressMax = 0;
-
-  // Parsed instructions
-  private instructions: Array<[string, number, boolean]> = []; // [instruction, line, isDirective]
-  private decodedInstructions: DecodedInstruction[] = [];
-  private resolvedInstructions: Array<DecodedInstruction | undefined> = [];
-  private clonedInstructions: string[] = []; // Original instructions for display
-
-  // State
-  private codeLabelLookup: Record<string, number> = {};
-  private symbols: Record<string, number> = {};
-  private symbolLookup: Record<string, number> = {};
-  private endPointer: [number, number] | undefined;
-  private lastInstruction: string = Strings.LAST_INSTRUCTION_DEFAULT_TEXT;
+  private readonly memory = new Memory();
+  private readonly undo = new Undo();
+  private readonly emulation: EmulationConfig;
+  private readonly machine: MachineAdapter;
+  private readonly terminal: TerminalDevice;
+  private readonly hardware: Easy68kHardware;
+  private strictCore: StrictM68000Core | undefined;
+  private machineTrapContext: MachineTrapContext | undefined;
+  private readonly strictProgramImage: ProgramImage | undefined;
+  private readonly strictSourceByAddress = new Map<number, ProgramSourceMapEntry>();
+  private readonly symbols: Record<string, number>;
+  private readonly symbolLookup: Record<string, number>;
+  private readonly sourceLines: string[];
+  private readonly initialMemory: Record<number, number>;
+  private readonly initialErrors: string[];
+  private readonly initialFault: CpuFault | undefined;
+  private lastStrictFault: CpuFault | undefined;
+  private lastInstruction = Strings.LAST_INSTRUCTION_DEFAULT_TEXT;
+  private line = 0;
+  private errors: string[];
   private exception: string | undefined;
-  private errors: string[] = [];
-  private line: number = 0;
-  private initialMemory: Record<number, number> = {};
   private inputQueue: number[] = [];
   private waitingForInput = false;
   private halted = false;
-  private pendingInputTask: number | undefined;
   private pendingExternalInterruptAddress: number | undefined;
-  private pendingInterruptLevels = new Set<number>();
-  private readonly cpuProfile: CpuProfile;
-  private strictCore: StrictM68000Core | undefined;
-  private strictProgramImage: ProgramImage | undefined;
-  private readonly strictSourceByAddress = new Map<number, ProgramSourceMapEntry>();
-  private readonly easy68kTrapByAddress = new Map<number, { vector: number; task: number }>();
-  private facadeRegistersExposed = false;
-  private lastStrictFault: CpuFault | undefined;
+  private readonly pendingInterruptLevels = new Set<number>();
   private undoCaptureMode: UndoCaptureMode;
   private undoCheckpointInterval: number;
   private instructionsSinceUndoSnapshot = 0;
   private registerSyncVersion = 1;
   private executionSyncVersion = 1;
   private diagnosticsSyncVersion = 1;
+  private loadFailureReported = false;
 
   constructor(program: ProgramSource = '', options: EmulatorOptions = {}) {
-    this.memory = new Memory();
-    this.undo = new Undo();
-    this.terminal = new TerminalDevice({
-      columns: options.columns,
-      rows: options.rows,
-    });
-    this.hardware = new Easy68kHardware(options.hardwareDevices ?? options.hardwareConfig);
-    this.cpuProfile = options.cpuProfile ?? 'easy68k';
-    this.updateHardwareAddressWindow();
+    this.emulation = normalizeEmulationConfig(options.emulation, options.cpuProfile);
     this.undoCaptureMode = options.undoMode ?? 'full';
     this.undoCheckpointInterval = normalizeUndoCheckpointInterval(options.undoCheckpointInterval);
+    this.machine = createMachineAdapter(this.emulation.machineProfile, this.memory, {
+      columns: options.columns,
+      rows: options.rows,
+      hardwareConfig: options.hardwareConfig,
+      hardwareDevices: options.hardwareDevices,
+      beforeRamWrite: (address) => this.captureUndoPageForAddress(address),
+    });
+    this.terminal = this.machine.terminal;
+    this.hardware = this.machine.hardware;
 
     const loadedProgram = loadProgramSource(program);
-    this.instructions = loadedProgram.instructions;
-    this.decodedInstructions = loadedProgram.decodedInstructions;
-    this.resolvedInstructions = Array.from(
-      { length: loadedProgram.decodedInstructions.length },
-      () => undefined
+    this.sourceLines = loadedProgram.sourceLines;
+    const assembled =
+      loadedProgram.exception === undefined && loadedProgram.endPointer !== undefined
+        ? assembleLoadedProgram(loadedProgram)
+        : undefined;
+    this.errors = [
+      ...loadedProgram.errors,
+      ...(assembled?.diagnostics.map((diagnostic) => diagnostic.message) ?? []),
+    ];
+    this.symbolLookup = assembled?.symbols ?? loadedProgram.symbolLookup;
+    this.symbols = Object.fromEntries(
+      Object.keys(loadedProgram.symbols).map((name) => [
+        name,
+        this.symbolLookup[name.toLowerCase()] ?? loadedProgram.symbols[name],
+      ])
     );
-    this.clonedInstructions = loadedProgram.sourceLines;
-    this.codeLabelLookup = loadedProgram.codeLabelLookup;
-    this.symbols = loadedProgram.symbols;
-    this.symbolLookup = loadedProgram.symbolLookup;
-    this.endPointer = loadedProgram.endPointer;
-    this.errors = [...loadedProgram.errors];
-    this.initialMemory = { ...loadedProgram.memoryImage };
-    this.memory.setMemory(this.initialMemory);
-    this.registers[STACK_POINTER_REGISTER] = DEFAULT_STACK_POINTER;
 
-    if (loadedProgram.exception === undefined && loadedProgram.endPointer !== undefined) {
-      const assembled = assembleLoadedProgram(loadedProgram);
-      if (assembled.image === undefined) {
-        this.errors.push(...assembled.diagnostics.map((diagnostic) => diagnostic.message));
-      } else {
-        this.strictProgramImage = assembled.image;
-        for (const entry of assembled.image.sourceMap) {
-          this.strictSourceByAddress.set(entry.address, entry);
-        }
-        if (this.cpuProfile === 'easy68k') {
-          for (const entry of assembled.image.sourceMap) {
-            const offset = entry.address - assembled.image.loadAddress;
-            const opcode =
-              ((assembled.image.bytes[offset] ?? 0) << 8) |
-              (assembled.image.bytes[offset + 1] ?? 0);
-            if ((opcode & 0xfff0) !== 0x4e40) continue;
-            this.easy68kTrapByAddress.set(entry.address, {
-              vector: opcode & 0x0f,
-              task:
-                ((assembled.image.bytes[offset + 2] ?? 0) << 8) |
-                (assembled.image.bytes[offset + 3] ?? 0),
-            });
-          }
-        }
-        this.symbols = Object.fromEntries(
-          Object.keys(loadedProgram.symbols).map((name) => [
-            name,
-            assembled.symbols[name.toLowerCase()] ?? loadedProgram.symbols[name],
-          ])
-        );
-        this.symbolLookup = { ...assembled.symbols };
-        this.strictCore = new StrictM68000Core({
-          bus: this.createStrictMemoryBus(),
-          profile: this.cpuProfile,
-          state: {
-            sr: 0,
-            usp: DEFAULT_STACK_POINTER,
-            ssp: DEFAULT_STACK_POINTER,
-          },
-        });
-        this.strictCore.loadProgram(assembled.image);
-        this.initialMemory = this.memory.getMemory();
-        this.syncStrictStateToFacade();
+    if (assembled?.image !== undefined) {
+      this.strictProgramImage = assembled.image;
+      for (const entry of assembled.image.sourceMap) {
+        this.strictSourceByAddress.set(entry.address, entry);
       }
+      this.strictCore = this.createCore(assembled.image);
+      this.updateExecutionMetadata();
+    } else {
+      const message =
+        loadedProgram.exception ??
+        (loadedProgram.endPointer === undefined ? Strings.END_MISSING : undefined) ??
+        this.errors[0] ??
+        'No executable program image is available.';
+      this.exception = message;
+      this.lastStrictFault = {
+        code: 'assembly-load-failure',
+        message,
+        source: this.line > 0 ? { line: this.line } : undefined,
+      };
     }
 
-    if (loadedProgram.exception) {
-      this.exception = loadedProgram.exception;
-      return;
-    }
-
-    if (!this.endPointer) {
-      this.exception = Strings.END_MISSING;
-      return;
-    }
-
-    this.lastInstruction = this.instructions.length > 0 ? this.instructions[0][0] : '';
+    this.initialMemory = this.memory.getMemory();
+    this.initialErrors = [...this.errors];
+    this.initialFault = this.lastStrictFault === undefined ? undefined : { ...this.lastStrictFault };
+    this.lastInstruction =
+      this.strictProgramImage === undefined
+        ? Strings.LAST_INSTRUCTION_DEFAULT_TEXT
+        : this.lastInstruction;
     this.resetUndoHistory();
   }
 
-  private createStrictMemoryBus(): MemoryBus {
-    const ensureAligned = (
-      address: number,
-      size: 1 | 2 | 4,
-      access: 'read' | 'write' | 'fetch'
-    ) => {
-      const normalized = address & 0x00ff_ffff;
-      if (size > 1 && (normalized & 1) !== 0) {
-        throw new BusFault(
-          'address-error',
-          normalized,
-          access,
-          size,
-          `Unaligned ${size * 8}-bit bus access at ${normalized.toString(16)}`
-        );
-      }
-      return normalized;
+  private createCore(image: ProgramImage): StrictM68000Core {
+    const core = new StrictM68000Core({
+      bus: this.machine.bus,
+      cpuModel: this.emulation.cpuModel,
+      state: { sr: 0, usp: DEFAULT_STACK_POINTER, ssp: DEFAULT_STACK_POINTER },
+    });
+    core.loadProgram(image);
+    this.machineTrapContext = {
+      core,
+      inputQueue: this.inputQueue,
+      setWaiting: () => {
+        this.waitingForInput = true;
+      },
+      clearWaiting: () => {
+        this.waitingForInput = false;
+      },
+      halt: () => {
+        this.halted = true;
+      },
     };
-    const compatibilityBus = this.cpuProfile === 'easy68k';
+    return core;
+  }
+
+  private captureUndoPageForAddress(address: number): void {
+    const frame = this.undo.peek();
+    if (frame === undefined) return;
+    const pageIndex = Math.floor((address & 0x00ff_ffff) / this.memory.getPageSize());
+    if (!frame.memoryPages.some((entry) => entry.pageIndex === pageIndex)) {
+      frame.memoryPages.push(this.memory.captureUndoPage(pageIndex));
+    }
+  }
+
+  private updateExecutionMetadata(address = this.strictCore?.state.pc): void {
+    const source = address === undefined ? undefined : this.strictSourceByAddress.get(address);
+    if (source === undefined) return;
+    this.line = source.line;
+    this.lastInstruction = this.sourceLines[source.line - 1]?.trim() ?? this.lastInstruction;
+  }
+
+  private runtimeState() {
     return {
-      read8: (address) =>
-        compatibilityBus
-          ? this.readBusByte(ensureAligned(address, 1, 'read'))
-          : this.memory.getByte(ensureAligned(address, 1, 'read')),
-      read16: (address) =>
-        compatibilityBus
-          ? this.readBusWord(ensureAligned(address, 2, 'read'))
-          : this.memory.getWord(ensureAligned(address, 2, 'read')),
-      read32: (address) =>
-        compatibilityBus
-          ? this.readBusLong(ensureAligned(address, 4, 'read'))
-          : this.memory.getLong(ensureAligned(address, 4, 'read')),
-      write8: (address, value) =>
-        compatibilityBus
-          ? this.writeBusByte(ensureAligned(address, 1, 'write'), value)
-          : this.memory.setByte(ensureAligned(address, 1, 'write'), value),
-      write16: (address, value) =>
-        compatibilityBus
-          ? this.writeBusWord(ensureAligned(address, 2, 'write'), value)
-          : this.memory.setWord(ensureAligned(address, 2, 'write'), value),
-      write32: (address, value) =>
-        compatibilityBus
-          ? this.writeBusLong(ensureAligned(address, 4, 'write'), value)
-          : this.memory.setLong(ensureAligned(address, 4, 'write'), value),
-    };
-  }
-
-  private syncStrictStateToFacade(
-    lastInstructionAddress = this.strictCore?.state.pc,
-    includeRegisters = true
-  ): void {
-    if (this.strictCore === undefined) return;
-    if (includeRegisters) {
-      for (let register = 0; register < 8; register += 1) {
-        this.registers[register] = this.strictCore.state.a[register];
-        this.registers[register + 8] = this.strictCore.state.d[register];
-      }
-    }
-    this.pc = this.strictCore.state.pc;
-    this.statusRegister = this.strictCore.state.sr;
-    this.userStackPointer = this.strictCore.state.isSupervisor()
-      ? this.strictCore.state.usp
-      : this.strictCore.state.a[7] >>> 0;
-    this.supervisorStackPointer = this.strictCore.state.isSupervisor()
-      ? this.strictCore.state.a[7] >>> 0
-      : this.strictCore.state.ssp;
-    const source =
-      lastInstructionAddress === undefined
-        ? undefined
-        : this.strictSourceByAddress.get(lastInstructionAddress);
-    if (source !== undefined) {
-      this.line = source.line;
-      this.lastInstruction =
-        this.clonedInstructions[source.line - 1]?.trim() ?? this.lastInstruction;
-    }
-  }
-
-  private syncFacadeStateToStrict(): void {
-    if (this.strictCore === undefined) return;
-    this.strictCore.state.sr = this.statusRegister;
-    this.strictCore.state.usp = this.userStackPointer;
-    this.strictCore.state.ssp = this.supervisorStackPointer;
-    for (let register = 0; register < 8; register += 1) {
-      this.strictCore.state.a[register] = this.registers[register];
-      this.strictCore.state.d[register] = this.registers[register + 8];
-    }
-    this.strictCore.state.pc = this.pc;
-  }
-
-  private get ccr(): number {
-    return this.statusRegister & 0x1f;
-  }
-
-  private set ccr(value: number) {
-    this.statusRegister = (this.statusRegister & 0xffe0) | (value & 0x1f);
-  }
-
-  /**
-   * Check if PC is valid (aligned and >= 0)
-   */
-  private checkPC(pc: number): boolean {
-    return 0 <= pc / 4 && pc % 4 === 0;
-  }
-
-  private snapshotRuntimeSyncState(): {
-    registers: Int32Array;
-    pc: number;
-    ccr: number;
-    sr: number;
-    lastInstruction: string;
-    line: number;
-    halted: boolean;
-    waitingForInput: boolean;
-    exception: string | undefined;
-    errorsLength: number;
-    lastError: string | undefined;
-  } {
-    return {
-      registers: Int32Array.from(this.registers),
-      pc: this.pc,
-      ccr: this.ccr,
-      sr: this.statusRegister,
+      pc: this.getPC(),
+      sr: this.getSR(),
       lastInstruction: this.lastInstruction,
       line: this.line,
       halted: this.halted,
-      waitingForInput: this.waitingForInput,
+      waiting: this.waitingForInput,
       exception: this.exception,
       errorsLength: this.errors.length,
       lastError: this.errors.at(-1),
     };
   }
 
-  private static registersMatch(left: Int32Array, right: Int32Array): boolean {
-    if (left.length !== right.length) {
-      return false;
-    }
-
-    for (let index = 0; index < left.length; index += 1) {
-      if (left[index] !== right[index]) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
   private reconcileRuntimeSyncVersions(
-    before: ReturnType<Emulator['snapshotRuntimeSyncState']>
+    before: ReturnType<Emulator['runtimeState']>,
+    registersMayHaveChanged = false
   ): void {
+    const after = this.runtimeState();
     if (
-      before.pc !== this.pc ||
-      before.ccr !== this.ccr ||
-      before.sr !== this.statusRegister ||
-      !Emulator.registersMatch(before.registers, this.registers)
+      registersMayHaveChanged ||
+      before.pc !== after.pc ||
+      before.sr !== after.sr
     ) {
       this.registerSyncVersion += 1;
     }
-
     if (
-      before.lastInstruction !== this.lastInstruction ||
-      before.pc !== this.pc ||
-      before.line !== this.line ||
-      before.halted !== this.halted ||
-      before.waitingForInput !== this.waitingForInput
+      before.pc !== after.pc ||
+      before.lastInstruction !== after.lastInstruction ||
+      before.line !== after.line ||
+      before.halted !== after.halted ||
+      before.waiting !== after.waiting
     ) {
       this.executionSyncVersion += 1;
     }
-
     if (
-      before.exception !== this.exception ||
-      before.errorsLength !== this.errors.length ||
-      before.lastError !== this.errors.at(-1)
+      before.exception !== after.exception ||
+      before.errorsLength !== after.errorsLength ||
+      before.lastError !== after.lastError
     ) {
       this.diagnosticsSyncVersion += 1;
     }
   }
 
-  private isValidHandlerAddress(address: number): boolean {
-    return address % 4 === 0 && address / 4 < this.instructions.length;
-  }
-
-  private resolveSymbolAddress(symbol: string): number | undefined {
-    return this.symbolLookup[symbol.trim().toLowerCase()];
-  }
-
-  private resolveExternalInterruptAddress(address: number): number | undefined {
-    const normalizedAddress = address >>> 0;
-
-    if (
-      this.strictProgramImage?.sourceMap.some((entry) => entry.address === normalizedAddress) ===
-      true
-    ) {
-      return normalizedAddress;
-    }
-
-    if (this.isValidHandlerAddress(normalizedAddress)) {
-      return normalizedAddress;
-    }
-
-    for (const [symbolName, symbolAddress] of Object.entries(this.symbolLookup)) {
-      if (symbolAddress >>> 0 !== normalizedAddress) {
-        continue;
-      }
-
-      const instructionIndex = this.codeLabelLookup[symbolName];
-      if (instructionIndex !== undefined) {
-        return (instructionIndex * 4) >>> 0;
-      }
-    }
-
-    return undefined;
-  }
-
   private pushUndoSnapshot(lastInstruction = this.lastInstruction, line = this.line): void {
+    const core = this.strictCore;
+    if (core === undefined) return;
     this.undo.push({
       cpu: {
-        pc: this.pc,
-        sr: this.statusRegister,
+        pc: core.state.pc,
+        sr: core.state.sr,
         usp: this.getUSP(),
         ssp: this.getSSP(),
-        registers: this.registers,
+        registers: this.getRegisterSnapshot(),
       },
       memoryPages: [],
-      deviceOutputs: this.hardware.getOutputSnapshot(),
-      diagnostics: {
-        errors: this.errors,
-      },
-      execution: {
-        lastInstruction,
-        line,
-      },
+      machine: this.machine.snapshot(),
+      diagnostics: { errors: this.errors },
+      execution: { lastInstruction, line },
     });
     this.instructionsSinceUndoSnapshot = 0;
   }
@@ -475,23 +251,13 @@ export class Emulator {
   private resetUndoHistory(): void {
     this.undo.clear();
     this.instructionsSinceUndoSnapshot = 0;
-
-    if (this.undoCaptureMode === 'off') {
-      return;
+    if (this.undoCaptureMode !== 'off') {
+      this.pushUndoSnapshot(Strings.LAST_INSTRUCTION_DEFAULT_TEXT, 0);
     }
-
-    this.pushUndoSnapshot(Strings.LAST_INSTRUCTION_DEFAULT_TEXT, 0);
   }
 
   private maybeCaptureUndoSnapshot(force = false): void {
-    if (this.undoCaptureMode === 'off') {
-      return;
-    }
-
-    if (!force && this.pc === 0) {
-      return;
-    }
-
+    if (this.undoCaptureMode === 'off' || this.strictCore === undefined) return;
     if (
       !force &&
       this.undoCaptureMode === 'checkpointed' &&
@@ -499,2046 +265,189 @@ export class Emulator {
     ) {
       return;
     }
-
     this.pushUndoSnapshot();
   }
 
   private markUndoProgress(): void {
-    if (this.undoCaptureMode !== 'checkpointed') {
-      return;
-    }
-
-    this.instructionsSinceUndoSnapshot += 1;
-  }
-
-  private parseNumericValue(token: string): number | undefined {
-    if (token.startsWith('$')) {
-      return parseInt(token.substring(1), 16) >>> 0;
-    }
-
-    if (token.startsWith('%')) {
-      return parseInt(token.substring(1), 2) >>> 0;
-    }
-
-    if (/^[+-]?\d+$/.test(token)) {
-      return parseInt(token, 10) >>> 0;
-    }
-
-    return undefined;
-  }
-
-  private splitOperands(operandStr: string): string[] {
-    const operands: string[] = [];
-    let current = '';
-    let parenDepth = 0;
-
-    for (const char of operandStr) {
-      if (char === '(') {
-        parenDepth += 1;
-        current += char;
-        continue;
-      }
-
-      if (char === ')') {
-        parenDepth = Math.max(0, parenDepth - 1);
-        current += char;
-        continue;
-      }
-
-      if (char === ',' && parenDepth === 0) {
-        operands.push(current.trim());
-        current = '';
-        continue;
-      }
-
-      current += char;
-    }
-
-    if (current.trim() !== '') {
-      operands.push(current.trim());
-    }
-
-    return operands;
-  }
-
-  private getTransferSize(size: number, registerIndex?: number): number {
-    if (size === CODE_BYTE) {
-      return registerIndex === STACK_POINTER_REGISTER ? 2 : 1;
-    }
-
-    if (size === CODE_WORD) {
-      return 2;
-    }
-
-    return 4;
-  }
-
-  private signExtendWord(value: number): number {
-    const signed = new Int16Array(1);
-    signed[0] = value & WORD_MASK;
-    return signed[0];
-  }
-
-  private getIndexedOffset(operand: Operand): number {
-    if (operand.indexRegister === undefined) {
-      return 0;
-    }
-
-    const registerValue = this.registers[operand.indexRegister];
-    if (operand.indexSize === CODE_LONG) {
-      return registerValue;
-    }
-
-    return this.signExtendWord(registerValue);
-  }
-
-  private resolveOperandAddress(operand: Operand): number | undefined {
-    if (operand.type === TOKEN_OFFSET) {
-      return operand.value >>> 0;
-    }
-
-    if (operand.type !== TOKEN_OFFSET_ADDR) {
-      this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
-      return undefined;
-    }
-
-    const baseRegister = operand.value;
-    return (
-      (this.registers[baseRegister] + (operand.offset ?? 0) + this.getIndexedOffset(operand)) >>> 0
-    );
-  }
-
-  private readMemoryValue(address: number, size: number): number {
-    if (size === CODE_BYTE) {
-      return this.readBusByte(address);
-    }
-
-    if (size === CODE_WORD) {
-      return this.readBusWord(address);
-    }
-
-    return this.readBusLong(address);
-  }
-
-  private writeMemoryValue(address: number, size: number, value: number): void {
-    if (size === CODE_BYTE) {
-      this.writeBusByte(address, value & BYTE_MASK);
-      return;
-    }
-
-    if (size === CODE_WORD) {
-      this.writeBusWord(address, value & WORD_MASK);
-      return;
-    }
-
-    this.writeBusLong(address, value >>> 0);
-  }
-
-  private readBusByte(address: number): number {
-    const normalized = address & 0x00ff_ffff;
-    if (normalized < this.hardwareAddressMin || normalized > this.hardwareAddressMax) {
-      return this.memory.getByte(normalized);
-    }
-    return this.hardware.readByte(normalized) ?? this.memory.getByte(normalized);
-  }
-
-  private readBusWord(address: number): number {
-    return ((this.readBusByte(address) << 8) | this.readBusByte(address + 1)) >>> 0;
-  }
-
-  private readBusLong(address: number): number {
-    return (
-      ((this.readBusByte(address) << 24) |
-        (this.readBusByte(address + 1) << 16) |
-        (this.readBusByte(address + 2) << 8) |
-        this.readBusByte(address + 3)) >>>
-      0
-    );
-  }
-
-  private writeBusByte(address: number, value: number): void {
-    const normalized = address & 0x00ff_ffff;
-    if (
-      normalized < this.hardwareAddressMin ||
-      normalized > this.hardwareAddressMax ||
-      !this.hardware.writeByte(normalized, value)
-    ) {
-      const undoFrame = this.undo.peek();
-      if (undoFrame !== undefined) {
-        const pageIndex = Math.floor(normalized / this.memory.getPageSize());
-        const pageAlreadyCaptured = undoFrame.memoryPages.some(
-          (entry) => entry.pageIndex === pageIndex
-        );
-        if (!pageAlreadyCaptured) {
-          undoFrame.memoryPages.push(this.memory.captureUndoPage(pageIndex));
-        }
-      }
-      this.memory.setByte(normalized, value & BYTE_MASK);
-    }
-  }
-
-  private updateHardwareAddressWindow(): void {
-    const range = this.hardware.getAddressRange();
-    this.hardwareAddressMin = range?.minAddress ?? 1;
-    this.hardwareAddressMax = range?.maxAddress ?? 0;
-  }
-
-  private writeBusWord(address: number, value: number): void {
-    this.writeBusByte(address, value >>> 8);
-    this.writeBusByte(address + 1, value);
-  }
-
-  private writeBusLong(address: number, value: number): void {
-    this.writeBusByte(address, value >>> 24);
-    this.writeBusByte(address + 1, value >>> 16);
-    this.writeBusByte(address + 2, value >>> 8);
-    this.writeBusByte(address + 3, value);
-  }
-
-  private readOperandValue(op: Operand, size: number): number | undefined {
-    if (op.type === TOKEN_IMMEDIATE) {
-      return op.value;
-    }
-
-    if (op.type === TOKEN_REG_DATA || op.type === TOKEN_REG_ADDR) {
-      return this.registers[op.value];
-    }
-
-    if (op.type === TOKEN_OFFSET) {
-      return this.readMemoryValue(op.value, size);
-    }
-
-    if (op.type === TOKEN_OFFSET_ADDR) {
-      const baseRegister = op.value;
-      const step = this.getTransferSize(size, baseRegister);
-
-      if (op.preDecrement) {
-        this.registers[baseRegister] -= step;
-      }
-
-      const address = this.resolveOperandAddress(op);
-      if (address === undefined) {
-        return undefined;
-      }
-
-      const value = this.readMemoryValue(address, size);
-
-      if (op.postIncrement) {
-        this.registers[baseRegister] += step;
-      }
-
-      return value;
-    }
-
-    this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
-    return undefined;
-  }
-
-  private writeOperandValue(op: Operand, size: number, value: number): void {
-    if (op.type === TOKEN_REG_DATA || op.type === TOKEN_REG_ADDR) {
-      this.registers[op.value] = value;
-      return;
-    }
-
-    if (op.type === TOKEN_OFFSET) {
-      this.writeMemoryValue(op.value, size, value);
-      return;
-    }
-
-    if (op.type === TOKEN_OFFSET_ADDR) {
-      const baseRegister = op.value;
-      const step = this.getTransferSize(size, baseRegister);
-
-      if (op.preDecrement) {
-        this.registers[baseRegister] -= step;
-      }
-
-      const address = this.resolveOperandAddress(op);
-      if (address === undefined) {
-        return;
-      }
-
-      this.writeMemoryValue(address, size, value);
-
-      if (op.postIncrement) {
-        this.registers[baseRegister] += step;
-      }
-
-      return;
-    }
-
-    this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
-  }
-
-  private prepareReadModifyWriteAddress(op: Operand, size: number): number | null | undefined {
-    if (op.type === TOKEN_OFFSET) {
-      return op.value;
-    }
-
-    if (op.type !== TOKEN_OFFSET_ADDR) {
-      return undefined;
-    }
-
-    if (op.preDecrement) {
-      this.registers[op.value] -= this.getTransferSize(size, op.value);
-    }
-
-    const address = this.resolveOperandAddress(op);
-    return address === undefined ? null : address;
-  }
-
-  private readReadModifyWriteOperand(
-    op: Operand,
-    size: number,
-    address: number | undefined
-  ): number | undefined {
-    let value: number | undefined;
-
-    if (op.type === TOKEN_REG_DATA || op.type === TOKEN_REG_ADDR) {
-      value = this.registers[op.value];
-    } else if (op.type === TOKEN_OFFSET || op.type === TOKEN_OFFSET_ADDR) {
-      value = address === undefined ? undefined : this.readMemoryValue(address, size);
-    } else {
-      this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
-      return undefined;
-    }
-
-    if (op.type === TOKEN_OFFSET_ADDR && op.postIncrement) {
-      this.registers[op.value] += this.getTransferSize(size, op.value);
-    }
-
-    return value;
-  }
-
-  private writeReadModifyWriteOperand(
-    op: Operand,
-    size: number,
-    address: number | undefined,
-    value: number
-  ): void {
-    if (op.type === TOKEN_REG_DATA || op.type === TOKEN_REG_ADDR) {
-      this.registers[op.value] = value;
-      return;
-    }
-
-    if ((op.type === TOKEN_OFFSET || op.type === TOKEN_OFFSET_ADDR) && address !== undefined) {
-      this.writeMemoryValue(address, size, value);
-      return;
-    }
-
-    this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
-  }
-
-  private pushLongToStack(value: number): void {
-    this.registers[STACK_POINTER_REGISTER] -= 4;
-    this.writeBusLong(this.registers[STACK_POINTER_REGISTER], value >>> 0);
-  }
-
-  private pushWordToStack(value: number): void {
-    this.registers[STACK_POINTER_REGISTER] -= 2;
-    this.writeBusWord(this.registers[STACK_POINTER_REGISTER], value & WORD_MASK);
-  }
-
-  private popWordFromStack(): number {
-    const value = this.readBusWord(this.registers[STACK_POINTER_REGISTER]);
-    this.registers[STACK_POINTER_REGISTER] += 2;
-    return value & WORD_MASK;
-  }
-
-  private applyStatusRegister(value: number): void {
-    const wasSupervisor = isSupervisorMode(this.statusRegister);
-    const willBeSupervisor = isSupervisorMode(value);
-    if (wasSupervisor !== willBeSupervisor) {
-      if (wasSupervisor) {
-        this.supervisorStackPointer = this.registers[STACK_POINTER_REGISTER] >>> 0;
-        this.registers[STACK_POINTER_REGISTER] = this.userStackPointer;
-      } else {
-        this.userStackPointer = this.registers[STACK_POINTER_REGISTER] >>> 0;
-        this.registers[STACK_POINTER_REGISTER] = this.supervisorStackPointer;
-      }
-    }
-    this.statusRegister = value & WORD_MASK;
-  }
-
-  private popLongFromStack(): number {
-    const value = this.readBusLong(this.registers[STACK_POINTER_REGISTER]);
-    this.registers[STACK_POINTER_REGISTER] += 4;
-    return value >>> 0;
-  }
-
-  private branchToLabel(label: string): boolean {
-    const normalizedLabel = label.trim().toLowerCase();
-    const instructionIndex = this.codeLabelLookup[normalizedLabel];
-
-    if (instructionIndex === undefined) {
-      this.errors.push(Strings.UNKNOWN_LABEL + normalizedLabel + Strings.AT_LINE + this.line);
-      return false;
-    }
-
-    this.pc = instructionIndex * 4;
-    return true;
-  }
-
-  private updateBtstFlags(bitSet: boolean): void {
-    if (bitSet) {
-      this.ccr = (this.ccr & 0xfb) >>> 0;
-      return;
-    }
-
-    this.ccr = (this.ccr | 0x04) >>> 0;
-  }
-
-  private parseDirectiveOperandValue(instruction: string): number | undefined {
-    const match = /^dc\.[bwl]\s+(.+)$/i.exec(instruction.trim());
-    if (!match) {
-      return undefined;
-    }
-
-    const operandText = this.splitOperands(match[1])[0]?.trim();
-    if (!operandText) {
-      return undefined;
-    }
-
-    return this.parseNumericValue(operandText) ?? this.resolveSymbolAddress(operandText);
-  }
-
-  private readTrapTaskWord(): number | undefined {
-    const taskInstructionIndex = Math.floor(this.pc / 4);
-    const taskInstruction = this.instructions[taskInstructionIndex];
-
-    if (!taskInstruction) {
-      return undefined;
-    }
-
-    const taskValue = this.parseDirectiveOperandValue(taskInstruction[0]);
-    if (taskValue === undefined) {
-      return undefined;
-    }
-
-    this.pc += 4;
-    return taskValue;
-  }
-
-  private deliverInputByte(byte: number): void {
-    this.registers[8] = moveOP(byte & BYTE_MASK, this.registers[8], this.ccr, CODE_BYTE)[0];
-  }
-
-  private servicePendingInputTrap(): boolean {
-    if (!this.waitingForInput) {
-      return false;
-    }
-
-    if (this.pendingInputTask !== 3) {
-      this.waitingForInput = false;
-      this.pendingInputTask = undefined;
-      return false;
-    }
-
-    if (this.inputQueue.length === 0) {
-      return false;
-    }
-
-    const inputByte = this.inputQueue.shift() ?? 0;
-    this.deliverInputByte(inputByte);
-    this.waitingForInput = false;
-    this.pendingInputTask = undefined;
-    return true;
-  }
-
-  private servicePendingExternalInterrupt(): boolean {
-    if (this.pendingExternalInterruptAddress === undefined) {
-      return false;
-    }
-
-    const handlerAddress = this.pendingExternalInterruptAddress >>> 0;
-    this.pendingExternalInterruptAddress = undefined;
-
-    if (!this.isValidHandlerAddress(handlerAddress)) {
-      this.exception = Strings.INVALID_PC_EXCEPTION;
-      return true;
-    }
-
-    this.maybeCaptureUndoSnapshot(true);
-
-    const nextStackPointer = ((this.registers[STACK_POINTER_REGISTER] >>> 0) - 4) >>> 0;
-    this.registers[STACK_POINTER_REGISTER] = nextStackPointer;
-    this.writeBusLong(nextStackPointer, this.pc >>> 0);
-    this.waitingForInput = false;
-    this.pendingInputTask = undefined;
-    this.pc = handlerAddress;
-
-    return true;
-  }
-
-  private servicePendingInterruptLevel(): boolean {
-    if (this.pendingInterruptLevels.size === 0) {
-      return false;
-    }
-    const level = [...this.pendingInterruptLevels]
-      .sort((left, right) => right - left)
-      .find((candidate) => isInterruptLevelEligible(this.statusRegister, candidate));
-    if (level === undefined) {
-      return false;
-    }
-
-    this.pendingInterruptLevels.delete(level);
-    const vectorAddress = getEasy68kInterruptVectorAddress(level);
-    const vectorTarget = this.readBusLong(vectorAddress);
-    const handlerAddress = this.resolveExternalInterruptAddress(vectorTarget);
-    if (vectorTarget === 0 || handlerAddress === undefined) {
-      this.exception = `Invalid or missing IRQ ${level} autovector at $${vectorAddress
-        .toString(16)
-        .toUpperCase()}`;
-      return true;
-    }
-
-    this.maybeCaptureUndoSnapshot(true);
-    const previousStatus = this.statusRegister;
-    const previousPc = this.pc;
-    this.applyStatusRegister(enterInterruptStatus(previousStatus, level));
-    this.pushLongToStack(previousPc);
-    this.pushWordToStack(previousStatus);
-    this.waitingForInput = false;
-    this.pendingInputTask = undefined;
-    this.pc = handlerAddress;
-    return true;
-  }
-
-  private haltExecution(): void {
-    this.halted = true;
-  }
-
-  private trap(op: Operand): void {
-    const vector = this.readOperandValue(op, CODE_LONG);
-    if (vector === undefined) {
-      return;
-    }
-
-    const task = this.readTrapTaskWord();
-    if (task === undefined) {
-      this.exception = Strings.MISSING_TRAP_TASK + Strings.AT_LINE + this.line;
-      return;
-    }
-
-    switch (vector & BYTE_MASK) {
-      case 0x0b:
-        if (task === 0) {
-          this.haltExecution();
-          return;
-        }
-        break;
-      case 0x0f:
-        if (task === 1) {
-          this.terminal.writeByte(this.registers[8] & BYTE_MASK);
-          return;
-        }
-
-        if (task === 3) {
-          if (this.inputQueue.length === 0) {
-            this.waitingForInput = true;
-            this.pendingInputTask = task;
-            return;
-          }
-
-          this.deliverInputByte(this.inputQueue.shift() ?? 0);
-          return;
-        }
-
-        if (task === 4) {
-          this.updateBtstFlags(this.inputQueue.length > 0);
-          return;
-        }
-        break;
-      default:
-        break;
-    }
-
-    this.exception =
-      Strings.UNSUPPORTED_TRAP_VECTOR +
-      `${vector & BYTE_MASK}:${task}` +
-      Strings.AT_LINE +
-      this.line;
-  }
-
-  /**
-   * Execute a single emulation step
-   * Returns true if execution should stop
-   */
-  emulationStep(): boolean {
-    if (this.strictCore !== undefined) {
-      const result = this.stepStrictCore();
-      return result.kind === 'halted' || result.kind === 'completed' || result.kind === 'exception';
-    }
-    const runtimeSyncSnapshot = this.snapshotRuntimeSyncState();
-
-    try {
-      // Check for previous exceptions
-      if (this.exception) return true;
-      if (this.halted) return true;
-
-      if (this.servicePendingInterruptLevel()) {
-        return this.halted || this.exception !== undefined;
-      }
-
-      if (this.servicePendingExternalInterrupt()) {
-        return this.halted || this.exception !== undefined;
-      }
-
-      if (this.waitingForInput) {
-        this.servicePendingInputTrap();
-        return false;
-      }
-
-      // Check if we've reached end of program
-      if (this.pc / 4 >= this.instructions.length) {
-        this.lastInstruction =
-          this.instructions.length > 0 ? this.instructions[this.instructions.length - 1][0] : '';
-        return true;
-      }
-
-      // Check PC validity
-      if (!this.checkPC(this.pc)) {
-        this.exception = Strings.INVALID_PC_EXCEPTION;
-        return true;
-      }
-
-      this.maybeCaptureUndoSnapshot();
-
-      // Get current instruction
-      const instrIdx = Math.floor(this.pc / 4);
-      const decodedInstruction =
-        this.resolvedInstructions[instrIdx] ??
-        (this.resolvedInstructions[instrIdx] = resolveDecodedInstruction(
-          this.decodedInstructions[instrIdx],
-          this.symbolLookup
-        ));
-      const instr = this.instructions[instrIdx][0];
-      const flag = this.instructions[instrIdx][2];
-      this.line = this.instructions[instrIdx][1];
-      this.lastInstruction = this.clonedInstructions[this.line - 1] || instr;
-      this.pc += 4;
-
-      // Skip directives and labels
-      if (flag === true) {
-        this.markUndoProgress();
-        return false;
-      }
-
-      // Parse and execute instruction
-      this.executeInstruction(decodedInstruction);
-      this.markUndoProgress();
-      return this.halted || this.exception !== undefined;
-    } finally {
-      this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
-    }
+    if (this.undoCaptureMode === 'checkpointed') this.instructionsSinceUndoSnapshot += 1;
   }
 
   private stepStrictCore(): StepResult {
-    if (this.strictCore === undefined) {
-      throw new TypeError('Strict core is not active');
-    }
-    const runtimeSyncSnapshot = this.snapshotRuntimeSyncState();
-    if (this.facadeRegistersExposed) this.syncFacadeStateToStrict();
-    const pcBefore = this.strictCore.state.pc;
-    if (this.halted) return { kind: 'halted', pc: this.strictCore.state.pc };
-    if (this.strictCore.isProgramComplete()) return this.strictCore.step();
-    if (this.cpuProfile === 'easy68k' && this.pendingExternalInterruptAddress !== undefined) {
-      const handlerAddress = this.pendingExternalInterruptAddress;
-      this.pendingExternalInterruptAddress = undefined;
-      this.strictCore.state.a[7] = (this.strictCore.state.a[7] - 4) | 0;
-      this.memory.setLong(this.strictCore.state.a[7] >>> 0, pcBefore);
-      this.strictCore.state.pc = handlerAddress;
-      this.waitingForInput = false;
-      this.pendingInputTask = undefined;
-      this.syncStrictStateToFacade(pcBefore);
-      this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
-      return { kind: 'executed', pcBefore, pcAfter: handlerAddress, cycles: 44 };
-    }
-    if (this.cpuProfile === 'easy68k' && this.waitingForInput) {
-      if (this.inputQueue.length === 0) return { kind: 'waiting', pc: this.strictCore.state.pc };
-      const byte = this.inputQueue.shift() ?? 0;
-      this.strictCore.state.d[0] = (this.strictCore.state.d[0] & 0xffff_ff00) | (byte & 0xff);
-      this.waitingForInput = false;
-      this.pendingInputTask = undefined;
-      this.syncStrictStateToFacade(pcBefore);
-      this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
-      return {
-        kind: 'executed',
-        pcBefore: this.strictCore.state.pc,
-        pcAfter: this.strictCore.state.pc,
-      };
-    }
-    this.maybeCaptureUndoSnapshot();
-    if (this.cpuProfile === 'easy68k' && this.pendingInterruptLevels.size > 0) {
+    const core = this.strictCore;
+    if (core === undefined) return this.unavailableStepResult();
+    const beforePc = this.getPC();
+    const beforeLastInstruction = this.lastInstruction;
+    const beforeLine = this.line;
+    const beforeHalted = this.halted;
+    const beforeWaiting = this.waitingForInput;
+    const beforeException = this.exception;
+    const beforeErrorsLength = this.errors.length;
+    const beforeLastError = this.errors.at(-1);
+    const pcBefore = core.state.pc;
+    try {
+      if (this.halted) return { kind: 'halted', pc: core.state.pc };
+      if (core.isProgramComplete()) return core.step();
+
+      if (
+        this.machine.id === 'easy68k' &&
+        this.pendingExternalInterruptAddress !== undefined
+      ) {
+        const handlerAddress = this.pendingExternalInterruptAddress;
+        this.pendingExternalInterruptAddress = undefined;
+        core.state.a[7] = (core.state.a[7] - 4) | 0;
+        this.machine.bus.write32(core.state.a[7] >>> 0, pcBefore);
+        core.state.pc = handlerAddress;
+        this.waitingForInput = false;
+        this.updateExecutionMetadata(pcBefore);
+        return { kind: 'executed', pcBefore, pcAfter: handlerAddress, cycles: 44 };
+      }
+
+      if (this.machine.id === 'easy68k' && this.waitingForInput) {
+        if (this.inputQueue.length === 0) return { kind: 'waiting', pc: core.state.pc };
+        const byte = this.inputQueue.shift() ?? 0;
+        core.state.d[0] = (core.state.d[0] & 0xffff_ff00) | (byte & 0xff);
+        this.waitingForInput = false;
+        return { kind: 'executed', pcBefore, pcAfter: core.state.pc };
+      }
+
+      this.maybeCaptureUndoSnapshot();
       const missingLevel = [...this.pendingInterruptLevels]
         .sort((left, right) => right - left)
-        .find((level) => this.memory.getLong(getEasy68kInterruptVectorAddress(level)) === 0);
+        .find((level) => this.machine.validateInterruptVector(level) !== undefined);
       if (missingLevel !== undefined) {
         this.pendingInterruptLevels.delete(missingLevel);
-        this.exception = `Invalid or missing IRQ ${missingLevel} autovector at $${getEasy68kInterruptVectorAddress(
-          missingLevel
-        )
-          .toString(16)
-          .toUpperCase()}`;
-        const result: StepResult = {
-          kind: 'exception',
-          pc: pcBefore,
-          fault: { code: 'missing-autovector', message: this.exception },
-        };
-        this.lastStrictFault = result.fault;
-        this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
-        return result;
+        const message =
+          this.machine.validateInterruptVector(missingLevel) ??
+          `Invalid or missing IRQ ${missingLevel} autovector`;
+        const fault: CpuFault = { code: 'missing-autovector', message };
+        this.exception = message;
+        this.lastStrictFault = fault;
+        return { kind: 'exception', pc: pcBefore, fault };
+      }
+      for (const level of this.pendingInterruptLevels) core.requestInterrupt(level);
+      this.pendingInterruptLevels.clear();
+
+      const rawResult =
+        (this.machineTrapContext === undefined
+          ? undefined
+          : this.machine.handleTrap(this.machineTrapContext)) ?? core.step();
+      const result: StepResult =
+        rawResult.kind === 'exception' && rawResult.fault.code === 'interrupt'
+          ? { kind: 'executed', pcBefore, pcAfter: rawResult.pc, cycles: 44 }
+          : rawResult;
+      this.lastStrictFault = result.kind === 'exception' ? result.fault : undefined;
+      this.exception = result.kind === 'exception' ? result.fault.message : undefined;
+      this.halted = result.kind === 'halted';
+      this.updateExecutionMetadata(pcBefore);
+      this.markUndoProgress();
+      return result;
+    } finally {
+      this.registerSyncVersion += 1;
+      if (
+        beforePc !== this.getPC() ||
+        beforeLastInstruction !== this.lastInstruction ||
+        beforeLine !== this.line ||
+        beforeHalted !== this.halted ||
+        beforeWaiting !== this.waitingForInput
+      ) {
+        this.executionSyncVersion += 1;
+      }
+      if (
+        beforeException !== this.exception ||
+        beforeErrorsLength !== this.errors.length ||
+        beforeLastError !== this.errors.at(-1)
+      ) {
+        this.diagnosticsSyncVersion += 1;
       }
     }
-    for (const level of this.pendingInterruptLevels) this.strictCore.requestInterrupt(level);
-    this.pendingInterruptLevels.clear();
-    const strictResult = this.handleStrictEasy68kTrap() ?? this.strictCore.step();
-    const result: StepResult =
-      strictResult.kind === 'exception' && strictResult.fault.code === 'interrupt'
-        ? {
-            kind: 'executed',
-            pcBefore,
-            pcAfter: strictResult.pc,
-            cycles: 44,
-          }
-        : strictResult;
-    this.lastStrictFault = result.kind === 'exception' ? result.fault : undefined;
-    this.halted = result.kind === 'halted';
-    this.syncStrictStateToFacade(
-      pcBefore,
-      this.undoCaptureMode !== 'off' || this.facadeRegistersExposed
-    );
-    this.markUndoProgress();
-    this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
-    return result;
   }
 
-  private handleStrictEasy68kTrap(): StepResult | undefined {
-    if (this.strictCore === undefined || this.cpuProfile !== 'easy68k') return undefined;
-    const pcBefore = this.strictCore.state.pc >>> 0;
-    const trap = this.easy68kTrapByAddress.get(pcBefore);
-    if (trap === undefined) return undefined;
-    const { vector, task } = trap;
-    const pcAfter = (pcBefore + 4) & 0x00ff_ffff;
+  private unavailableStepResult(): StepResult {
+    const fault = this.lastStrictFault ?? {
+      code: 'program-image-unavailable',
+      message: this.exception ?? 'No executable program image is loaded.',
+    };
+    this.lastStrictFault = fault;
+    this.exception = fault.message;
+    if (!this.loadFailureReported) {
+      this.loadFailureReported = true;
+      this.diagnosticsSyncVersion += 1;
+    }
+    return { kind: 'exception', pc: 0, fault };
+  }
 
-    if (vector === 11 && task === 0) {
-      this.strictCore.state.pc = pcAfter;
-      this.halted = true;
-      return { kind: 'halted', pc: pcAfter };
-    }
-    if (vector !== 15) return undefined;
-    if (task === 1) {
-      this.terminal.writeByte(this.strictCore.state.d[0] & 0xff);
-    } else if (task === 3) {
-      this.strictCore.state.pc = pcAfter;
-      if (this.inputQueue.length === 0) {
-        this.waitingForInput = true;
-        this.pendingInputTask = task;
-        return { kind: 'waiting', pc: pcAfter };
-      }
-      const byte = this.inputQueue.shift() ?? 0;
-      this.strictCore.state.d[0] = (this.strictCore.state.d[0] & 0xffff_ff00) | (byte & 0xff);
-    } else if (task === 4) {
-      this.strictCore.state.ccr =
-        this.inputQueue.length > 0
-          ? this.strictCore.state.ccr & ~0x04
-          : this.strictCore.state.ccr | 0x04;
-    } else {
-      return undefined;
-    }
-    this.strictCore.state.pc = pcAfter;
-    return { kind: 'executed', pcBefore, pcAfter, cycles: 4 };
+  emulationStep(): boolean {
+    const result = this.stepInstruction();
+    return result.kind === 'halted' || result.kind === 'completed' || result.kind === 'exception';
   }
 
   stepInstruction(): StepResult {
-    if (this.strictCore !== undefined) return this.stepStrictCore();
-    const pcBefore = this.pc;
-    const shouldStop = this.emulationStep();
-
-    if (this.exception !== undefined) {
-      return {
-        kind: 'exception',
-        pc: this.pc,
-        fault: {
-          code: 'legacy-execution-exception',
-          message: this.exception,
-          source: this.line > 0 ? { line: this.line } : undefined,
-        },
-      };
-    }
-
-    if (this.waitingForInput) {
-      return {
-        kind: 'waiting',
-        pc: this.pc,
-      };
-    }
-
-    if (this.halted) {
-      return {
-        kind: 'halted',
-        pc: this.pc,
-      };
-    }
-
-    if (shouldStop) {
-      return {
-        kind: 'completed',
-        pc: this.pc,
-      };
-    }
-
-    return {
-      kind: 'executed',
-      pcBefore,
-      pcAfter: this.pc,
-    };
+    return this.strictCore === undefined ? this.unavailableStepResult() : this.stepStrictCore();
   }
-
-  /**
-   * Execute a single instruction
-   */
-  private executeInstruction(instr: DecodedInstruction): boolean {
-    for (const error of instr.decodeErrors) {
-      this.errors.push(error + Strings.AT_LINE + this.line);
-    }
-
-    if (!instr.hasOperandSection && instr.bareToken.length > 0) {
-      // Single-operand or no-operand instruction
-      switch (instr.bareToken) {
-        case 'rts':
-          this.rts();
-          break;
-        case 'rte':
-          this.rte();
-          break;
-        default:
-          this.errors.push(Strings.UNRECOGNISED_INSTRUCTION + Strings.AT_LINE + this.line);
-          return false;
-      }
-    } else {
-      const operation = instr.operation;
-      const operandTokens = instr.operandTokens;
-      const operands = instr.operands;
-      const size = instr.size;
-
-      // Execute instruction
-      switch (operation) {
-        case 'add':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.add(size, operands[0], operands[1], false);
-          break;
-        case 'adda':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.adda(size, operands[0], operands[1]);
-          break;
-        case 'addi':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.addi(size, operands[0], operands[1]);
-          break;
-        case 'addq':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.addq(size, operands[0], operands[1]);
-          break;
-        case 'sub':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.add(size, operands[0], operands[1], true);
-          break;
-        case 'suba':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.suba(size, operands[0], operands[1]);
-          break;
-        case 'subi':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.subi(size, operands[0], operands[1]);
-          break;
-        case 'subq':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.subq(size, operands[0], operands[1]);
-          break;
-        case 'muls':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.muls(size, operands[0], operands[1]);
-          break;
-        case 'mulu':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.mulu(size, operands[0], operands[1]);
-          break;
-        case 'divs':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.divs(size, operands[0], operands[1]);
-          break;
-        case 'divu':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.divu(size, operands[0], operands[1]);
-          break;
-        case 'move':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.move(size, operands[0], operands[1]);
-          break;
-        case 'clr':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.clr(size, operands[0]);
-          break;
-        case 'cmp':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.cmp(size, operands[0], operands[1]);
-          break;
-        case 'cmpa':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.cmpa(operands[0], operands[1]);
-          break;
-        case 'cmpi':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.cmpi(size, operands[0], operands[1]);
-          break;
-        case 'tst':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.tst(size, operands[0]);
-          break;
-        case 'and':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.and(size, operands[0], operands[1]);
-          break;
-        case 'andi':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.andi(size, operands[0], operands[1]);
-          break;
-        case 'or':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.or(size, operands[0], operands[1]);
-          break;
-        case 'ori':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.ori(size, operands[0], operands[1]);
-          break;
-        case 'eor':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.eor(size, operands[0], operands[1]);
-          break;
-        case 'eori':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.eori(size, operands[0], operands[1]);
-          break;
-        case 'not':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.not(size, operands[0]);
-          break;
-        case 'neg':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.neg(size, operands[0]);
-          break;
-        case 'jmp':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.jmp(operandTokens[0]);
-          break;
-        case 'jsr':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.jsr(operandTokens[0]);
-          break;
-        case 'trap':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.trap(operands[0]);
-          break;
-        case 'bsr':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.bsr(operandTokens[0]);
-          break;
-        case 'mode':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.mode(operands[0], operands[1]);
-          break;
-        case 'movea':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.movea(size, operands[0], operands[1]);
-          break;
-        case 'exg':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.exg(operands[0], operands[1]);
-          break;
-        case 'swap':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.swap(operands[0]);
-          break;
-        case 'ext':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.ext(size, operands[0]);
-          break;
-        case 'lea':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.lea(operands[0], operands[1]);
-          break;
-        case 'movem':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.movem(size, operands[0], operands[1]);
-          break;
-        case 'btst':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.btst(operands[0], operands[1]);
-          break;
-        case 'bra':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.bra(operandTokens[0]);
-          break;
-        case 'beq':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.beq(operandTokens[0]);
-          break;
-        case 'bne':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.bne(operandTokens[0]);
-          break;
-        case 'bge':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.bge(operandTokens[0]);
-          break;
-        case 'bgt':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.bgt(operandTokens[0]);
-          break;
-        case 'ble':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.ble(operandTokens[0]);
-          break;
-        case 'blt':
-          if (operands.length !== 1) {
-            this.errors.push(Strings.ONE_PARAMETER_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.blt(operandTokens[0]);
-          break;
-        case 'asl':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.asl(size, operands[0], operands[1]);
-          break;
-        case 'asr':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.asr(size, operands[0], operands[1]);
-          break;
-        case 'lsl':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.lsl(size, operands[0], operands[1]);
-          break;
-        case 'lsr':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.lsr(size, operands[0], operands[1]);
-          break;
-        case 'rol':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.rol(size, operands[0], operands[1]);
-          break;
-        case 'ror':
-          if (operands.length !== 2) {
-            this.errors.push(Strings.TWO_PARAMETERS_EXPECTED + Strings.AT_LINE + this.line);
-            break;
-          }
-          this.ror(size, operands[0], operands[1]);
-          break;
-        default:
-          this.errors.push(Strings.UNRECOGNISED_INSTRUCTION + Strings.AT_LINE + this.line);
-          return false;
-      }
-    }
-
-    return false;
-  }
-
-  // ============== Instruction Implementations ==============
-
-  private add(size: number, op1: Operand, op2: Operand, isSub: boolean): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, size);
-    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
-    if (destAddress === null) return;
-    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
-
-    if (src === undefined || dest === undefined) {
-      return;
-    }
-
-    const [result, newCCR] = addOP(src, dest, this.ccr, size, isSub);
-    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
-    this.ccr = newCCR;
-  }
-
-  private adda(_size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, CODE_LONG);
-    if (src === undefined) {
-      return;
-    }
-
-    if (op2.type === TOKEN_REG_ADDR) {
-      this.registers[op2.value] += src;
-    }
-  }
-
-  private addi(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    // ADDI: Add immediate value
-    // op1 must be immediate, op2 is destination
-    if (op1.type !== TOKEN_IMMEDIATE) {
-      this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
-      return;
-    }
-
-    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
-    if (destAddress === null) return;
-    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
-    if (dest === undefined) {
-      return;
-    }
-
-    const [result, newCCR] = addOP(op1.value, dest, this.ccr, size, false);
-    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
-    this.ccr = newCCR;
-  }
-
-  private addq(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    // ADDQ: Add quick (immediate 1-8)
-    if (op1.type !== TOKEN_IMMEDIATE) {
-      this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
-      return;
-    }
-
-    if (op2.type === TOKEN_REG_ADDR) {
-      this.registers[op2.value] += op1.value;
-      return;
-    }
-
-    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
-    if (destAddress === null) return;
-    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
-    if (dest === undefined) {
-      return;
-    }
-
-    const [result, newCCR] = addOP(op1.value, dest, this.ccr, size, false);
-    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
-    this.ccr = newCCR;
-  }
-
-  private suba(_size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, CODE_LONG);
-    if (src === undefined) {
-      return;
-    }
-
-    if (op2.type === TOKEN_REG_ADDR) {
-      this.registers[op2.value] -= src;
-    }
-  }
-
-  private subi(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    // SUBI: Subtract immediate value
-    if (op1.type !== TOKEN_IMMEDIATE) {
-      this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
-      return;
-    }
-
-    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
-    if (destAddress === null) return;
-    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
-    if (dest === undefined) {
-      return;
-    }
-
-    const [result, newCCR] = addOP(op1.value, dest, this.ccr, size, true);
-    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
-    this.ccr = newCCR;
-  }
-
-  private subq(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    // SUBQ: Subtract quick (immediate 1-8)
-    if (op1.type !== TOKEN_IMMEDIATE) {
-      this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
-      return;
-    }
-
-    if (op2.type === TOKEN_REG_ADDR) {
-      this.registers[op2.value] -= op1.value;
-      return;
-    }
-
-    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
-    if (destAddress === null) return;
-    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
-    if (dest === undefined) {
-      return;
-    }
-
-    const [result, newCCR] = addOP(op1.value, dest, this.ccr, size, true);
-    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
-    this.ccr = newCCR;
-  }
-
-  private mulu(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, CODE_WORD);
-    if (src === undefined || op2.type !== TOKEN_REG_DATA) {
-      return;
-    }
-
-    const [result, newCCR] = muluOP(size, src, this.registers[op2.value], this.ccr);
-    this.registers[op2.value] = result;
-    this.ccr = newCCR;
-  }
-
-  private muls(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, CODE_WORD);
-    if (src === undefined || op2.type !== TOKEN_REG_DATA) {
-      return;
-    }
-
-    const [result, newCCR] = mulsOP(size, src, this.registers[op2.value], this.ccr);
-    this.registers[op2.value] = result;
-    this.ccr = newCCR;
-  }
-
-  private divu(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, CODE_WORD);
-    if (src === undefined) {
-      return;
-    }
-
-    if ((src & WORD_MASK) === 0x0) {
-      this.exception = Strings.DIVISION_BY_ZERO + Strings.AT_LINE + this.line;
-      return;
-    }
-
-    if (op2.type !== TOKEN_REG_DATA) {
-      return;
-    }
-
-    const [result, newCCR] = divuOP(size, src, this.registers[op2.value], this.ccr);
-    this.registers[op2.value] = result;
-    this.ccr = newCCR;
-  }
-
-  private divs(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, CODE_WORD);
-    if (src === undefined) {
-      return;
-    }
-
-    if ((src & WORD_MASK) === 0x0) {
-      this.exception = Strings.DIVISION_BY_ZERO + Strings.AT_LINE + this.line;
-      return;
-    }
-
-    if (op2.type !== TOKEN_REG_DATA) {
-      return;
-    }
-
-    const [result, newCCR] = divsOP(size, src, this.registers[op2.value], this.ccr);
-    this.registers[op2.value] = result;
-    this.ccr = newCCR;
-  }
-
-  private move(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const srcValue = this.readOperandValue(op1, size);
-    if (srcValue === undefined) {
-      return;
-    }
-
-    const destValue =
-      op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR ? this.registers[op2.value] : 0;
-    const [result, newCCR] = moveOP(srcValue, destValue, this.ccr, size);
-    this.writeOperandValue(op2, size, result);
-    this.ccr = newCCR;
-  }
-
-  private clr(size: number, op: Operand): void {
-    const address = this.prepareReadModifyWriteAddress(op, size);
-    if (address === null) return;
-    const currentValue = this.readReadModifyWriteOperand(op, size, address);
-    if (currentValue === undefined) {
-      return;
-    }
-
-    const [result, newCCR] = clrOP(size, currentValue, this.ccr);
-    this.writeReadModifyWriteOperand(op, size, address, result);
-    this.ccr = newCCR;
-  }
-
-  private cmp(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, size);
-    const dest = this.readOperandValue(op2, size);
-    if (src === undefined || dest === undefined) {
-      return;
-    }
-
-    this.ccr = cmpOP(src, dest, this.ccr, size);
-  }
-
-  private cmpa(op1: Operand, op2: Operand): void {
-    // CMPA: Compare with address register (always long size)
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, CODE_LONG);
-    if (src === undefined || op2.type !== TOKEN_REG_ADDR) {
-      return;
-    }
-
-    this.ccr = cmpOP(src, this.registers[op2.value], this.ccr, CODE_LONG);
-  }
-
-  private cmpi(size: number, op1: Operand, op2: Operand): void {
-    // CMPI: Compare immediate (first operand must be immediate)
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, size);
-    const dest = this.readOperandValue(op2, size);
-    if (src === undefined || dest === undefined) {
-      return;
-    }
-
-    this.ccr = cmpOP(src, dest, this.ccr, size);
-  }
-
-  private tst(size: number, op: Operand): void {
-    if (op === undefined) return;
-
-    const value = this.readOperandValue(op, size);
-    if (value === undefined) {
-      return;
-    }
-
-    this.ccr = tstOP(value, this.ccr, size);
-  }
-
-  private and(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, size);
-    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
-    if (destAddress === null) return;
-    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
-    if (src === undefined || dest === undefined) {
-      return;
-    }
-
-    const [result, newCCR] = andOP(size, src, dest, this.ccr);
-    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
-    this.ccr = newCCR;
-  }
-
-  private andi(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, size);
-    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
-    if (destAddress === null) return;
-    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
-    if (src === undefined || dest === undefined) {
-      return;
-    }
-
-    const [result, newCCR] = andOP(size, src, dest, this.ccr);
-    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
-    this.ccr = newCCR;
-  }
-
-  private or(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, size);
-    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
-    if (destAddress === null) return;
-    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
-    if (src === undefined || dest === undefined) {
-      return;
-    }
-
-    const [result, newCCR] = orOP(size, src, dest, this.ccr);
-    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
-    this.ccr = newCCR;
-  }
-
-  private ori(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, size);
-    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
-    if (destAddress === null) return;
-    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
-    if (src === undefined || dest === undefined) {
-      return;
-    }
-
-    const [result, newCCR] = orOP(size, src, dest, this.ccr);
-    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
-    this.ccr = newCCR;
-  }
-
-  private eor(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, size);
-    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
-    if (destAddress === null) return;
-    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
-    if (src === undefined || dest === undefined) {
-      return;
-    }
-
-    const [result, newCCR] = eorOP(size, src, dest, this.ccr);
-    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
-    this.ccr = newCCR;
-  }
-
-  private eori(size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const src = this.readOperandValue(op1, size);
-    const destAddress = this.prepareReadModifyWriteAddress(op2, size);
-    if (destAddress === null) return;
-    const dest = this.readReadModifyWriteOperand(op2, size, destAddress);
-    if (src === undefined || dest === undefined) {
-      return;
-    }
-
-    const [result, newCCR] = eorOP(size, src, dest, this.ccr);
-    this.writeReadModifyWriteOperand(op2, size, destAddress, result);
-    this.ccr = newCCR;
-  }
-
-  private not(size: number, op: Operand): void {
-    if (op === undefined) return;
-
-    const address = this.prepareReadModifyWriteAddress(op, size);
-    if (address === null) return;
-    const currentValue = this.readReadModifyWriteOperand(op, size, address);
-    if (currentValue === undefined) {
-      return;
-    }
-
-    const [result, newCCR] = notOP(size, currentValue, this.ccr);
-    this.writeReadModifyWriteOperand(op, size, address, result);
-    this.ccr = newCCR;
-  }
-
-  private neg(size: number, op: Operand): void {
-    if (op === undefined) return;
-
-    const address = this.prepareReadModifyWriteAddress(op, size);
-    if (address === null) return;
-    const currentValue = this.readReadModifyWriteOperand(op, size, address);
-    if (currentValue === undefined) {
-      return;
-    }
-
-    const [result, newCCR] = negOP(size, currentValue, this.ccr);
-    this.writeReadModifyWriteOperand(op, size, address, result);
-    this.ccr = newCCR;
-  }
-
-  private jmp(label: string): void {
-    this.branchToLabel(label);
-  }
-
-  private jsr(label: string): void {
-    this.pushLongToStack(this.pc);
-    this.branchToLabel(label);
-  }
-
-  private rts(): void {
-    this.pc = this.popLongFromStack();
-    this.lastInstruction = 'RTS';
-  }
-
-  private rte(): void {
-    if (!isSupervisorMode(this.statusRegister)) {
-      this.exception = 'Privilege violation: RTE requires supervisor mode';
-      return;
-    }
-    const previousStatus = this.popWordFromStack();
-    const previousPc = this.popLongFromStack();
-    this.applyStatusRegister(previousStatus);
-    this.pc = previousPc;
-    this.lastInstruction = 'RTE';
-  }
-
-  private bsr(label: string): void {
-    this.pushLongToStack(this.pc);
-    this.branchToLabel(label);
-  }
-
-  private mode(op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const srcValue = this.readOperandValue(op1, CODE_LONG);
-    if (srcValue === undefined) {
-      return;
-    }
-
-    if (op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR) {
-      this.registers[op2.value] = srcValue;
-      this.lastInstruction = `MODE #${srcValue}, ${op2.type === TOKEN_REG_DATA ? 'd' : 'a'}${op2.value % 8}`;
-    }
-  }
-
-  private movea(_size: number, op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const srcValue = this.readOperandValue(op1, CODE_LONG);
-    if (srcValue === undefined) {
-      return;
-    }
-
-    if (op2.type === TOKEN_REG_ADDR) {
-      this.registers[op2.value] = srcValue;
-    }
-  }
-
-  private exg(op1: Operand, op2: Operand): void {
-    // EXG: Exchange registers
-    if (op1 === undefined || op2 === undefined) return;
-
-    if (
-      (op1.type === TOKEN_REG_DATA && op2.type === TOKEN_REG_DATA) ||
-      (op1.type === TOKEN_REG_ADDR && op2.type === TOKEN_REG_ADDR) ||
-      (op1.type === TOKEN_REG_DATA && op2.type === TOKEN_REG_ADDR) ||
-      (op1.type === TOKEN_REG_ADDR && op2.type === TOKEN_REG_DATA)
-    ) {
-      const [newOp2, newOp1] = exgOP(this.registers[op1.value], this.registers[op2.value]);
-      this.registers[op1.value] = newOp1;
-      this.registers[op2.value] = newOp2;
-    } else {
-      this.errors.push(Strings.EXG_RESTRICTIONS + Strings.AT_LINE + this.line);
-    }
-  }
-
-  private swap(op: Operand): void {
-    // SWAP: Exchange word halves in a data register
-    if (op === undefined) return;
-
-    if (op.type === TOKEN_REG_DATA) {
-      const [result, newCCR] = swapOP(this.registers[op.value], this.ccr);
-      this.registers[op.value] = result;
-      this.ccr = newCCR;
-    } else {
-      this.errors.push(Strings.DATA_ONLY_SWAP + Strings.AT_LINE + this.line);
-    }
-  }
-
-  private ext(size: number, op: Operand): void {
-    // EXT: Sign extend
-    if (op === undefined) return;
-
-    if (op.type === TOKEN_REG_DATA) {
-      if (size === CODE_BYTE) {
-        this.errors.push(Strings.EXT_ON_BYTE + Strings.AT_LINE + this.line);
-        return;
-      }
-      const [result, newCCR] = extOP(size, this.registers[op.value], this.ccr);
-      this.registers[op.value] = result;
-      this.ccr = newCCR;
-    } else {
-      this.errors.push(Strings.DATA_ONLY_EXT + Strings.AT_LINE + this.line);
-    }
-  }
-
-  private lea(op1: Operand, op2: Operand): void {
-    if (op1 === undefined || op2 === undefined) return;
-
-    const address = this.resolveOperandAddress(op1);
-    if (address === undefined) {
-      return;
-    }
-
-    if (op2.type === TOKEN_REG_ADDR) {
-      this.registers[op2.value] = address;
-    }
-  }
-
-  private movem(size: number, op1: Operand, op2: Operand): void {
-    const transferSize = size === CODE_WORD ? CODE_WORD : CODE_LONG;
-    const bytesPerRegister = this.getTransferSize(transferSize);
-
-    if (op1.type === TOKEN_REGISTER_LIST) {
-      const registers = op1.registerList ?? [];
-      if (registers.length === 0) {
-        return;
-      }
-
-      let address = 0;
-      if (op2.type === TOKEN_OFFSET_ADDR && op2.preDecrement) {
-        const totalBytes = registers.length * bytesPerRegister;
-        this.registers[op2.value] -= totalBytes;
-        address = this.registers[op2.value] >>> 0;
-
-        for (const register of registers) {
-          this.writeMemoryValue(address, transferSize, this.registers[register]);
-          address += bytesPerRegister;
-        }
-        return;
-      }
-
-      const resolvedAddress = this.resolveOperandAddress(op2);
-      if (resolvedAddress === undefined) {
-        return;
-      }
-      address = resolvedAddress;
-
-      for (const register of registers) {
-        this.writeMemoryValue(address, transferSize, this.registers[register]);
-        address += bytesPerRegister;
-      }
-
-      if (op2.type === TOKEN_OFFSET_ADDR && op2.postIncrement) {
-        this.registers[op2.value] += registers.length * bytesPerRegister;
-      }
-      return;
-    }
-
-    if (op2.type !== TOKEN_REGISTER_LIST) {
-      this.errors.push(Strings.UNKNOWN_OPERAND + Strings.AT_LINE + this.line);
-      return;
-    }
-
-    const registers = op2.registerList ?? [];
-    if (registers.length === 0) {
-      return;
-    }
-
-    let address = 0;
-    if (op1.type === TOKEN_OFFSET_ADDR && op1.preDecrement) {
-      const totalBytes = registers.length * bytesPerRegister;
-      this.registers[op1.value] -= totalBytes;
-      address = this.registers[op1.value] >>> 0;
-    } else {
-      const resolvedAddress = this.resolveOperandAddress(op1);
-      if (resolvedAddress === undefined) {
-        return;
-      }
-      address = resolvedAddress;
-    }
-
-    for (const register of registers) {
-      this.registers[register] = this.readMemoryValue(address, transferSize);
-      address += bytesPerRegister;
-    }
-
-    if (op1.type === TOKEN_OFFSET_ADDR && op1.postIncrement) {
-      this.registers[op1.value] += registers.length * bytesPerRegister;
-    }
-  }
-
-  private btst(op1: Operand, op2: Operand): void {
-    const bitValue = this.readOperandValue(op1, CODE_LONG);
-    if (bitValue === undefined) {
-      return;
-    }
-
-    const isRegisterTarget = op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR;
-    const bitNumber = isRegisterTarget ? bitValue & 31 : bitValue & 7;
-    const targetValue = this.readOperandValue(op2, isRegisterTarget ? CODE_LONG : CODE_BYTE);
-    if (targetValue === undefined) {
-      return;
-    }
-
-    const bitSet = ((targetValue >>> bitNumber) & 0x1) === 1;
-    this.updateBtstFlags(bitSet);
-  }
-
-  private bra(label: string): void {
-    this.branchToLabel(label);
-  }
-
-  private beq(label: string): void {
-    // BEQ: Branch if Equal (Z flag set)
-    if (this.getZFlag()) {
-      this.bra(label);
-    }
-  }
-
-  private bne(label: string): void {
-    // BNE: Branch if Not Equal (Z flag clear)
-    if (!this.getZFlag()) {
-      this.bra(label);
-    }
-  }
-
-  private bge(label: string): void {
-    // BGE: Branch if Greater or Equal (N flag == V flag)
-    if (this.getNFlag() === this.getVFlag()) {
-      this.bra(label);
-    }
-  }
-
-  private bgt(label: string): void {
-    // BGT: Branch if Greater Than (N flag == V flag AND Z flag clear)
-    if (this.getNFlag() === this.getVFlag() && !this.getZFlag()) {
-      this.bra(label);
-    }
-  }
-
-  private ble(label: string): void {
-    // BLE: Branch if Less or Equal (N flag != V flag OR Z flag set)
-    if (this.getNFlag() !== this.getVFlag() || this.getZFlag()) {
-      this.bra(label);
-    }
-  }
-
-  private blt(label: string): void {
-    // BLT: Branch if Less Than (N flag != V flag)
-    if (this.getNFlag() !== this.getVFlag()) {
-      this.bra(label);
-    }
-  }
-
-  private asl(size: number, op1: Operand, op2: Operand): void {
-    // ASL: Arithmetic Shift Left
-    if (op1 === undefined || op2 === undefined) return;
-
-    let shiftCount = 0;
-    if (op1.type === TOKEN_IMMEDIATE) {
-      shiftCount = op1.value;
-    } else if (op1.type === TOKEN_REG_DATA) {
-      shiftCount = this.registers[op1.value] & 0x3f; // Only lower 6 bits used
-    }
-
-    if (op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR) {
-      const [result, newCCR] = aslOP(shiftCount, this.registers[op2.value], this.ccr, size);
-      this.registers[op2.value] = result;
-      this.ccr = newCCR;
-    }
-  }
-
-  private asr(size: number, op1: Operand, op2: Operand): void {
-    // ASR: Arithmetic Shift Right
-    if (op1 === undefined || op2 === undefined) return;
-
-    let shiftCount = 0;
-    if (op1.type === TOKEN_IMMEDIATE) {
-      shiftCount = op1.value;
-    } else if (op1.type === TOKEN_REG_DATA) {
-      shiftCount = this.registers[op1.value] & 0x3f;
-    }
-
-    if (op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR) {
-      const [result, newCCR] = asrOP(shiftCount, this.registers[op2.value], this.ccr, size);
-      this.registers[op2.value] = result;
-      this.ccr = newCCR;
-    }
-  }
-
-  private lsl(size: number, op1: Operand, op2: Operand): void {
-    // LSL: Logical Shift Left
-    if (op1 === undefined || op2 === undefined) return;
-
-    let shiftCount = 0;
-    if (op1.type === TOKEN_IMMEDIATE) {
-      shiftCount = op1.value;
-    } else if (op1.type === TOKEN_REG_DATA) {
-      shiftCount = this.registers[op1.value] & 0x3f;
-    }
-
-    if (op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR) {
-      const [result, newCCR] = lslOP(shiftCount, this.registers[op2.value], this.ccr, size);
-      this.registers[op2.value] = result;
-      this.ccr = newCCR;
-    }
-  }
-
-  private lsr(size: number, op1: Operand, op2: Operand): void {
-    // LSR: Logical Shift Right
-    if (op1 === undefined || op2 === undefined) return;
-
-    let shiftCount = 0;
-    if (op1.type === TOKEN_IMMEDIATE) {
-      shiftCount = op1.value;
-    } else if (op1.type === TOKEN_REG_DATA) {
-      shiftCount = this.registers[op1.value] & 0x3f;
-    }
-
-    if (op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR) {
-      const [result, newCCR] = lsrOP(shiftCount, this.registers[op2.value], this.ccr, size);
-      this.registers[op2.value] = result;
-      this.ccr = newCCR;
-    }
-  }
-
-  private rol(size: number, op1: Operand, op2: Operand): void {
-    // ROL: Rotate Left
-    if (op1 === undefined || op2 === undefined) return;
-
-    let shiftCount = 0;
-    if (op1.type === TOKEN_IMMEDIATE) {
-      shiftCount = op1.value;
-    } else if (op1.type === TOKEN_REG_DATA) {
-      shiftCount = this.registers[op1.value] & 0x3f;
-    }
-
-    if (op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR) {
-      const [result, newCCR] = rolOP(shiftCount, this.registers[op2.value], this.ccr, size);
-      this.registers[op2.value] = result;
-      this.ccr = newCCR;
-    }
-  }
-
-  private ror(size: number, op1: Operand, op2: Operand): void {
-    // ROR: Rotate Right
-    if (op1 === undefined || op2 === undefined) return;
-
-    let shiftCount = 0;
-    if (op1.type === TOKEN_IMMEDIATE) {
-      shiftCount = op1.value;
-    } else if (op1.type === TOKEN_REG_DATA) {
-      shiftCount = this.registers[op1.value] & 0x3f;
-    }
-
-    if (op2.type === TOKEN_REG_DATA || op2.type === TOKEN_REG_ADDR) {
-      const [result, newCCR] = rorOP(shiftCount, this.registers[op2.value], this.ccr, size);
-      this.registers[op2.value] = result;
-      this.ccr = newCCR;
-    }
-  }
-
-  // ============== Getters ==============
 
   getPC(): number {
-    return this.pc;
+    return this.strictCore?.state.pc ?? 0;
   }
 
   getRegisters(): Int32Array {
-    if (this.strictCore !== undefined && !this.facadeRegistersExposed) {
-      this.syncStrictStateToFacade();
-    }
-    this.facadeRegistersExposed = true;
-    return this.registers;
+    return this.getRegisterSnapshot();
   }
 
   getRegisterSnapshot(): Int32Array {
-    if (this.strictCore !== undefined && !this.facadeRegistersExposed) {
-      this.syncStrictStateToFacade();
-    }
-    return Int32Array.from(this.registers);
+    const state = this.strictCore?.state;
+    return state === undefined
+      ? new Int32Array(16)
+      : Int32Array.from([...state.a, ...state.d]);
   }
 
   setRegisterValue(register: number, value: number): void {
-    if (!Number.isInteger(register) || register < 0 || register >= this.registers.length) {
+    if (!Number.isInteger(register) || register < 0 || register >= 16) {
       throw new RangeError(`Register index must be an integer from 0 through 15: ${register}`);
     }
-
-    const runtimeSyncSnapshot = this.snapshotRuntimeSyncState();
-    this.registers[register] = value | 0;
-    this.syncFacadeStateToStrict();
-    this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
+    const core = this.strictCore;
+    if (core === undefined) throw new Error('No executable program image is loaded.');
+    const before = this.runtimeState();
+    if (register < 8) core.state.a[register] = value | 0;
+    else core.state.d[register - 8] = value | 0;
+    this.reconcileRuntimeSyncVersions(before, true);
   }
 
   getCCR(): number {
-    return this.ccr;
+    return this.strictCore?.state.ccr ?? 0;
   }
 
   getSR(): number {
-    return this.statusRegister;
+    return this.strictCore?.state.sr ?? 0;
   }
 
   getUSP(): number {
-    return isSupervisorMode(this.statusRegister)
-      ? this.userStackPointer >>> 0
-      : this.registers[STACK_POINTER_REGISTER] >>> 0;
+    const state = this.strictCore?.state;
+    if (state === undefined) return DEFAULT_STACK_POINTER;
+    return state.isSupervisor() ? state.usp : state.a[7] >>> 0;
   }
 
   getSSP(): number {
-    return isSupervisorMode(this.statusRegister)
-      ? this.registers[STACK_POINTER_REGISTER] >>> 0
-      : this.supervisorStackPointer >>> 0;
+    const state = this.strictCore?.state;
+    if (state === undefined) return DEFAULT_STACK_POINTER;
+    return state.isSupervisor() ? state.a[7] >>> 0 : state.ssp;
   }
 
   getMemory(): Record<number, number> {
     return this.memory.getMemory();
   }
 
-  getMemoryMeta(): {
-    usedBytes: number;
-    minAddress: number | null;
-    maxAddress: number | null;
-    version: number;
-  } {
-    const addressRange = this.memory.getAddressRange();
+  getMemoryMeta() {
+    const range = this.memory.getAddressRange();
     return {
       usedBytes: this.memory.getUsedBytes(),
-      minAddress: addressRange.minAddress,
-      maxAddress: addressRange.maxAddress,
+      minAddress: range.minAddress,
+      maxAddress: range.maxAddress,
       version: this.memory.getMemoryVersion(),
     };
   }
 
   getRuntimeSyncVersions(): RuntimeSyncVersions {
     const terminalMeta = this.terminal.getTerminalMeta();
-
     return {
       registers: this.registerSyncVersion,
       execution: this.executionSyncVersion,
@@ -2551,10 +460,10 @@ export class Emulator {
   }
 
   readMemoryRange(address: number, length: number): Uint8Array {
-    if (this.strictCore !== undefined && this.cpuProfile !== 'easy68k') {
-      return this.memory.readRange(address, length);
+    if (!Number.isInteger(length) || length < 0) {
+      throw new RangeError(`Memory range length must be a non-negative integer: ${length}`);
     }
-    return Uint8Array.from({ length }, (_, index) => this.readBusByte(address + index));
+    return Uint8Array.from({ length }, (_, index) => this.machine.bus.read8(address + index));
   }
 
   getHardwareSnapshot(): Easy68kHardwareSnapshot {
@@ -2562,32 +471,20 @@ export class Emulator {
   }
 
   configureHardware(config: Easy68kHardwareConfig): Easy68kHardwareValidationResult {
-    const result = this.hardware.configure(config);
-    if (result.valid) {
-      this.updateHardwareAddressWindow();
-    }
-    return result;
+    return this.hardware.configure(config);
   }
 
   configureHardwareDevices(
     configs: readonly Easy68kHardwareDeviceConfig[]
   ): Easy68kHardwareValidationResult {
-    const result = this.hardware.configureDevices(configs);
-    if (result.valid) {
-      this.updateHardwareAddressWindow();
-    }
-    return result;
+    return this.hardware.configureDevices(configs);
   }
 
   configureHardwareDevice(
     deviceId: string,
     config: Easy68kHardwareConfig
   ): Easy68kHardwareValidationResult {
-    const result = this.hardware.configureDevice(deviceId, config);
-    if (result.valid) {
-      this.updateHardwareAddressWindow();
-    }
-    return result;
+    return this.hardware.configureDevice(deviceId, config);
   }
 
   setHardwareToggle(bit: number, enabled: boolean, deviceId?: string): void {
@@ -2627,40 +524,36 @@ export class Emulator {
   }
 
   writeMemoryByte(address: number, value: number): void {
-    if (this.strictCore !== undefined && this.cpuProfile !== 'easy68k') {
-      this.memory.setByte(address, value);
-    } else this.writeBusByte(address, value);
+    this.machine.bus.write8(address, value);
   }
 
   writeMemoryWord(address: number, value: number): void {
-    if (this.strictCore !== undefined && this.cpuProfile !== 'easy68k') {
-      this.memory.setWord(address, value);
-    } else this.writeBusWord(address, value);
+    this.machine.bus.write16(address, value);
   }
 
   writeMemoryLong(address: number, value: number): void {
-    if (this.strictCore !== undefined && this.cpuProfile !== 'easy68k') {
-      this.memory.setLong(address, value);
-    } else this.writeBusLong(address, value);
+    this.machine.bus.write32(address, value);
+  }
+
+  private resolveExternalInterruptAddress(address: number): number | undefined {
+    const normalized = address & 0x00ff_ffff;
+    return this.strictProgramImage?.sourceMap.some((entry) => entry.address === normalized)
+      ? normalized
+      : undefined;
   }
 
   raiseExternalInterrupt(handlerAddress: number): boolean {
-    const resolvedHandlerAddress = this.resolveExternalInterruptAddress(handlerAddress);
-
-    if (resolvedHandlerAddress === undefined) {
-      return false;
-    }
-
-    this.pendingExternalInterruptAddress = resolvedHandlerAddress;
+    if (this.machine.id !== 'easy68k') return false;
+    const resolved = this.resolveExternalInterruptAddress(handlerAddress);
+    if (resolved === undefined) return false;
+    this.pendingExternalInterruptAddress = resolved;
     return true;
   }
 
   requestInterruptLevel(level: number): InterruptRequestResult {
-    if (!Number.isInteger(level) || level < 1 || level > 7) {
-      return 'rejected';
-    }
+    if (!Number.isInteger(level) || level < 1 || level > 7) return 'rejected';
     this.pendingInterruptLevels.add(level);
-    return isInterruptLevelEligible(this.statusRegister, level) ? 'accepted' : 'masked';
+    return isInterruptLevelEligible(this.getSR(), level) ? 'accepted' : 'masked';
   }
 
   getPendingInterruptLevels(): number[] {
@@ -2669,24 +562,21 @@ export class Emulator {
 
   queueInput(input: string | number | number[] | Uint8Array): void {
     if (typeof input === 'string') {
-      for (const char of input) {
-        this.inputQueue.push(char.charCodeAt(0) & BYTE_MASK);
+      for (let index = 0; index < input.length; index += 1) {
+        this.inputQueue.push(input.charCodeAt(index) & 0xff);
       }
       return;
     }
-
     if (typeof input === 'number') {
-      this.inputQueue.push(input & BYTE_MASK);
+      this.inputQueue.push(input & 0xff);
       return;
     }
-
-    for (const value of input) {
-      this.inputQueue.push(value & BYTE_MASK);
-    }
+    for (const byte of input) this.inputQueue.push(byte & 0xff);
   }
 
   clearInputQueue(): void {
     this.inputQueue = [];
+    if (this.machineTrapContext !== undefined) this.machineTrapContext.inputQueue = this.inputQueue;
   }
 
   getQueuedInputLength(): number {
@@ -2706,27 +596,27 @@ export class Emulator {
   }
 
   getSymbolAddress(symbol: string): number | undefined {
-    return this.resolveSymbolAddress(symbol);
+    return this.symbolLookup[symbol.trim().toLowerCase()];
   }
 
   getZFlag(): number {
-    return (this.ccr & 0x04) >>> 2;
+    return (this.getCCR() & 0x04) >>> 2;
   }
 
   getVFlag(): number {
-    return (this.ccr & 0x02) >>> 1;
+    return (this.getCCR() & 0x02) >>> 1;
   }
 
   getNFlag(): number {
-    return (this.ccr & 0x08) >>> 3;
+    return (this.getCCR() & 0x08) >>> 3;
   }
 
   getCFlag(): number {
-    return (this.ccr & 0x01) >>> 0;
+    return this.getCCR() & 0x01;
   }
 
   getXFlag(): number {
-    return (this.ccr & 0x10) >>> 4;
+    return (this.getCCR() & 0x10) >>> 4;
   }
 
   getLastInstruction(): string {
@@ -2734,7 +624,7 @@ export class Emulator {
   }
 
   getErrors(): string[] {
-    return this.errors;
+    return [...this.errors];
   }
 
   getDiagnostics(): CpuDiagnostic[] {
@@ -2744,30 +634,17 @@ export class Emulator {
           code: this.lastStrictFault.code,
           severity: 'error',
           message: this.lastStrictFault.message,
-          source: this.line > 0 ? { line: this.line } : undefined,
-          instructionAddress: this.pc,
+          source: this.lastStrictFault.source ?? (this.line > 0 ? { line: this.line } : undefined),
+          instructionAddress: this.getPC(),
         },
       ];
     }
-    const diagnostics = this.errors.map((message): CpuDiagnostic => ({
-      code: 'legacy-execution-error',
-      severity: 'error',
+    return this.errors.map((message) => ({
+      code: 'assembly-load-error',
+      severity: 'error' as const,
       message,
-      source: this.line > 0 ? { line: this.line } : undefined,
-      instructionAddress: this.pc,
+      instructionAddress: this.getPC(),
     }));
-
-    if (this.exception !== undefined) {
-      diagnostics.push({
-        code: 'legacy-execution-exception',
-        severity: 'error',
-        message: this.exception,
-        source: this.line > 0 ? { line: this.line } : undefined,
-        instructionAddress: this.pc,
-      });
-    }
-
-    return diagnostics;
   }
 
   getException(): string | undefined {
@@ -2775,7 +652,19 @@ export class Emulator {
   }
 
   getCpuProfile(): CpuProfile {
-    return this.cpuProfile;
+    return toLegacyCpuProfile(this.emulation) ?? this.emulation.cpuModel;
+  }
+
+  getEmulationConfig(): Readonly<EmulationConfig> {
+    return { ...this.emulation };
+  }
+
+  getMachineProfile(): MachineProfile {
+    return this.machine.id;
+  }
+
+  isHardwareConnected(): boolean {
+    return this.machine.mappedHardwareConnected;
   }
 
   getUndoCaptureMode(): UndoCaptureMode {
@@ -2788,85 +677,59 @@ export class Emulator {
       this.undoCheckpointInterval = normalizeUndoCheckpointInterval(checkpointInterval);
     }
     this.instructionsSinceUndoSnapshot = 0;
-
-    if (mode !== 'off' && this.undo.size() === 0) {
-      this.pushUndoSnapshot();
-    }
+    if (mode !== 'off' && this.undo.size() === 0) this.pushUndoSnapshot();
   }
 
   forceUndoCheckpoint(): void {
-    if (this.undoCaptureMode === 'off') {
-      return;
-    }
-
-    this.pushUndoSnapshot();
+    if (this.undoCaptureMode !== 'off') this.pushUndoSnapshot();
   }
 
-  /**
-   * Perform undo operation
-   */
   undoFromStack(): void {
-    const runtimeSyncSnapshot = this.snapshotRuntimeSyncState();
+    const core = this.strictCore;
+    if (core === undefined) return;
+    const before = this.runtimeState();
     const frame = this.undo.pop();
-    if (frame === undefined) {
-      return;
-    }
-
-    this.pc = frame.cpu.pc;
-    this.statusRegister = frame.cpu.sr;
-    this.userStackPointer = frame.cpu.usp;
-    this.supervisorStackPointer = frame.cpu.ssp;
+    if (frame === undefined) return;
+    core.state.sr = frame.cpu.sr;
+    core.state.usp = frame.cpu.usp;
+    core.state.ssp = frame.cpu.ssp;
+    core.state.a.set(frame.cpu.registers.slice(0, 8));
+    core.state.d.set(frame.cpu.registers.slice(8, 16));
+    core.state.pc = frame.cpu.pc;
+    this.memory.restoreUndoPages(frame.memoryPages);
+    this.machine.restore(frame.machine);
+    this.errors = [...frame.diagnostics.errors];
     this.lastInstruction = frame.execution.lastInstruction;
     this.line = frame.execution.line;
-    this.registers = new Int32Array(frame.cpu.registers);
-    this.memory.restoreUndoPages(frame.memoryPages);
-    this.hardware.restoreOutputSnapshot(frame.deviceOutputs);
-    this.errors = [...frame.diagnostics.errors];
     this.waitingForInput = false;
     this.halted = false;
-    this.pendingInputTask = undefined;
-    this.instructionsSinceUndoSnapshot = 0;
     this.lastStrictFault = undefined;
-    this.syncFacadeStateToStrict();
-    this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
+    this.exception = undefined;
+    this.instructionsSinceUndoSnapshot = 0;
+    this.reconcileRuntimeSyncVersions(before, true);
   }
 
-  /**
-   * Reset emulator to initial state
-   */
   reset(): void {
-    const runtimeSyncSnapshot = this.snapshotRuntimeSyncState();
-    this.pc = 0x0;
-    this.statusRegister = 0x0000;
-    this.userStackPointer = DEFAULT_STACK_POINTER;
-    this.supervisorStackPointer = DEFAULT_STACK_POINTER;
-    this.registers.fill(0);
-    this.registers[STACK_POINTER_REGISTER] = DEFAULT_STACK_POINTER;
+    const before = this.runtimeState();
     this.memory.setMemory(this.initialMemory);
-    this.hardware.reset();
-    this.undo.clear();
-    this.terminal.reset();
+    this.machine.reset();
     this.inputQueue = [];
+    if (this.machineTrapContext !== undefined) this.machineTrapContext.inputQueue = this.inputQueue;
     this.waitingForInput = false;
     this.halted = false;
-    this.pendingInputTask = undefined;
     this.pendingExternalInterruptAddress = undefined;
     this.pendingInterruptLevels.clear();
     this.lastInstruction = Strings.LAST_INSTRUCTION_DEFAULT_TEXT;
-    this.exception = undefined;
-    this.errors = [];
     this.line = 0;
-    this.lastStrictFault = undefined;
+    this.errors = [...this.initialErrors];
+    this.lastStrictFault = this.initialFault === undefined ? undefined : { ...this.initialFault };
+    this.exception = this.lastStrictFault?.message;
+    this.loadFailureReported = false;
     if (this.strictProgramImage !== undefined) {
-      this.strictCore = new StrictM68000Core({
-        bus: this.createStrictMemoryBus(),
-        profile: this.cpuProfile,
-        state: { sr: 0, usp: DEFAULT_STACK_POINTER, ssp: DEFAULT_STACK_POINTER },
-      });
-      this.strictCore.loadProgram(this.strictProgramImage);
-      this.syncStrictStateToFacade();
+      this.strictCore = this.createCore(this.strictProgramImage);
+      this.updateExecutionMetadata();
     }
     this.resetUndoHistory();
-    this.reconcileRuntimeSyncVersions(runtimeSyncSnapshot);
+    this.reconcileRuntimeSyncVersions(before, true);
   }
 }

@@ -243,7 +243,7 @@ function normalizeConfiguration(
       displayBase: address(source.displayBase, fallback.displayBase),
     } as const;
     const existing = existingDevices.find((device) => device.id === candidate.deviceId);
-    if (existing) {
+    if (existing?.deviceType === 'display') {
       return { ...candidate, displayBase: existing.displayBase };
     }
     const validation = validateEasy68kHardwareDevices([
@@ -251,7 +251,6 @@ function normalizeConfiguration(
       {
         id: candidate.deviceId,
         deviceType: 'display',
-        ...DEFAULT_EASY68K_HARDWARE_CONFIG,
         displayBase: candidate.displayBase,
       },
     ]);
@@ -275,7 +274,7 @@ function normalizeConfiguration(
       buttonAddress: address(source.buttonAddress, fallback.buttonAddress),
     } as const;
     const existing = existingDevices.find((device) => device.id === candidate.deviceId);
-    if (existing) {
+    if (existing?.deviceType === 'digital-io') {
       return {
         ...candidate,
         ledAddress: existing.ledAddress,
@@ -288,7 +287,6 @@ function normalizeConfiguration(
       {
         id: candidate.deviceId,
         deviceType: 'digital-io',
-        ...DEFAULT_EASY68K_HARDWARE_CONFIG,
         ledAddress: candidate.ledAddress,
         switchAddress: candidate.switchAddress,
         buttonAddress: candidate.buttonAddress,

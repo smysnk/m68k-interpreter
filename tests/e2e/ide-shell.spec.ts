@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v2';
+const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v3';
 
 async function openViewMenu(page: Page): Promise<void> {
   await page.getByRole('button', { name: /open app menu/i }).click();
@@ -8,12 +8,12 @@ async function openViewMenu(page: Page): Promise<void> {
 }
 
 test.describe('browser e2e ide shell', () => {
-  test('switches among every emulation mode from the status bar and persists the selection', async ({
+  test('selects all CPU and machine combinations independently and persists them', async ({
     page,
   }) => {
     await page.goto('/');
 
-    const selectMode = async (currentLabel: string, nextLabel: string): Promise<void> => {
+    const selectMode = async (currentLabel: string, nextLabel: string, expectedLabel: string): Promise<void> => {
       const modeButton = page.getByRole('button', { name: `Emulation mode: ${currentLabel}` });
       const scrollPositionBeforeOpen = await page.evaluate(() => ({ x: scrollX, y: scrollY }));
       await modeButton.click();
@@ -30,29 +30,31 @@ test.describe('browser e2e ide shell', () => {
       expect(menuBox).not.toBeNull();
       expect(modeButtonBox).not.toBeNull();
       expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(modeButtonBox!.y);
-      await expect(menu.getByRole('menuitemradio', { checked: true })).toHaveAccessibleName(
-        currentLabel
-      );
+      await expect(menu.getByRole('menuitemradio', { checked: true })).toHaveCount(2);
       await menu.getByRole('menuitemradio', { name: nextLabel }).click();
       await expect(
-        page.getByRole('button', { name: `Emulation mode: ${nextLabel}` })
+        page.getByRole('button', { name: `Emulation mode: ${expectedLabel}` })
       ).toBeVisible();
       await expect(menu).toHaveCount(0);
     };
 
-    await selectMode('Easy68K', 'MC68000');
-    await selectMode('MC68000', 'MC68010 Extensions');
+    await selectMode('MC68000 · Easy68K', 'MC68010 Extensions', 'MC68010 Extensions · Easy68K');
+    await selectMode('MC68010 Extensions · Easy68K', 'Bare', 'MC68010 Extensions · Bare');
 
     await page.waitForFunction(
-      (storageKey) => window.localStorage.getItem(storageKey)?.includes('"cpuProfile":"m68010"'),
+      (storageKey) => {
+        const value = window.localStorage.getItem(storageKey) ?? '';
+        return value.includes('"cpuModel":"m68010"') && value.includes('"machineProfile":"bare"');
+      },
       IDE_PERSISTENCE_KEY
     );
     await page.reload();
     await expect(
-      page.getByRole('button', { name: 'Emulation mode: MC68010 Extensions' })
+      page.getByRole('button', { name: 'Emulation mode: MC68010 Extensions · Bare' })
     ).toBeVisible();
 
-    await selectMode('MC68010 Extensions', 'Easy68K');
+    await selectMode('MC68010 Extensions · Bare', 'MC68000', 'MC68000 · Bare');
+    await selectMode('MC68000 · Bare', 'Easy68K', 'MC68000 · Easy68K');
   });
 
   test('uses a minimal workspace gutter and keeps panel content flush with its frame', async ({
@@ -291,7 +293,7 @@ test.describe('browser e2e ide shell', () => {
     }, IDE_PERSISTENCE_KEY);
 
     expect(persistedBeforeReload).toContain('"kind":"code"');
-    expect(persistedBeforeReload).toContain('"schemaVersion":2');
+    expect(persistedBeforeReload).toContain('"schemaVersion":3');
     expect(persistedBeforeReload).toContain(
       expectedTheme === 'dark' ? '"editorTheme":"M68K_DARK"' : '"editorTheme":"M68K_LIGHT"'
     );

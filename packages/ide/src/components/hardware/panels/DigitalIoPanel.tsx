@@ -1,11 +1,15 @@
 import React from 'react';
-import type { Easy68kHardwareDeviceSnapshot } from '@m68k/interpreter';
+import {
+  MACHINE_PROFILE_REGISTRY,
+  type Easy68kHardwareDeviceSnapshot,
+} from '@m68k/interpreter';
+import { useSelector } from 'react-redux';
 import { DigitalIoMatrix } from '@/components/hardware/DigitalIoMatrix';
 import { InterruptControls } from '@/components/hardware/InterruptControls';
 import { useHardwareDeviceController } from '@/hooks/useHardwareDeviceController';
 import { useHardwareController } from '@/hooks/useHardwareController';
 import { useHardwareDeviceSurface } from '@/runtime/useHardwareSurface';
-import type { PanelInstance } from '@/store';
+import type { PanelInstance, RootState } from '@/store';
 
 function emptyDigitalSnapshot(
   deviceId: string,
@@ -30,6 +34,7 @@ function emptyDigitalSnapshot(
 }
 
 export default function DigitalIoPanel({ instance }: { instance: PanelInstance }) {
+  const machineProfile = useSelector((state: RootState) => state.settings.machineProfile);
   const config = instance.config as Extract<
     PanelInstance['config'],
     { kind: 'hardware-digital-io' }
@@ -60,12 +65,18 @@ export default function DigitalIoPanel({ instance }: { instance: PanelInstance }
       data-hardware-device-id={config.deviceId}
       data-testid={`hardware-digital-io-${config.deviceId}`}
     >
-      <DigitalIoMatrix
-        snapshot={snapshot}
-        onAddressCommit={commitAddress}
-        onToggle={(bit, enabled) => void controller.setToggle(bit, enabled)}
-        onButton={(bit, pressed) => void controller.setButton(bit, pressed)}
-      />
+      {machineProfile === 'bare' ? (
+        <div className="hardware-disconnected-state" role="status">
+          {MACHINE_PROFILE_REGISTRY.bare.disconnectedMessage}
+        </div>
+      ) : (
+        <DigitalIoMatrix
+          snapshot={snapshot}
+          onAddressCommit={commitAddress}
+          onToggle={(bit, enabled) => void controller.setToggle(bit, enabled)}
+          onButton={(bit, pressed) => void controller.setButton(bit, pressed)}
+        />
+      )}
       <section
         aria-label="CPU interrupt lines"
         className="hardware-combined-interrupt-section"

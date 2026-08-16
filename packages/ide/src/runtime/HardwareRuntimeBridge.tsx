@@ -6,6 +6,7 @@ import {
 import { useSelector } from 'react-redux';
 import {
   RuntimeUnavailableError,
+  StaleRuntimeCommandError,
   runtimeCommandPort,
 } from '@/runtime/runtimeCommandPort';
 import { useHardwareTopologyVersion } from '@/runtime/useHardwareSurface';
@@ -18,9 +19,12 @@ import {
 
 function deviceSignature(devices: readonly Easy68kHardwareDeviceConfig[]): string {
   return devices
-    .map(
-      (device) =>
-        `${device.id}:${device.deviceType ?? 'board'}:${device.displayBase}:${device.ledAddress}:${device.switchAddress}:${device.buttonAddress}`
+    .map((device) =>
+      device.deviceType === 'display'
+        ? `${device.id}:display:${device.displayBase}`
+        : device.deviceType === 'digital-io'
+          ? `${device.id}:digital-io:${device.ledAddress}:${device.switchAddress}:${device.buttonAddress}`
+          : `${device.id}:board:${device.displayBase}:${device.ledAddress}:${device.switchAddress}:${device.buttonAddress}`
     )
     .join('|');
 }
@@ -28,6 +32,7 @@ function deviceSignature(devices: readonly Easy68kHardwareDeviceConfig[]): strin
 function reportSynchronizationError(error: unknown): void {
   if (
     error instanceof RuntimeUnavailableError ||
+    error instanceof StaleRuntimeCommandError ||
     (error instanceof Error && /disposed/i.test(error.message))
   ) {
     return;

@@ -204,7 +204,6 @@ export function getPanelHardwareDeviceConfigs(
       devices.push({
         id: instance.config.deviceId,
         deviceType: 'display',
-        ...DEFAULT_EASY68K_HARDWARE_CONFIG,
         displayBase: instance.config.displayBase,
       });
     } else if (instance.config.kind === 'hardware-digital-io') {
@@ -213,7 +212,6 @@ export function getPanelHardwareDeviceConfigs(
       devices.push({
         id: instance.config.deviceId,
         deviceType: 'digital-io',
-        ...DEFAULT_EASY68K_HARDWARE_CONFIG,
         ledAddress: instance.config.ledAddress,
         switchAddress: instance.config.switchAddress,
         buttonAddress: instance.config.buttonAddress,

@@ -1,6 +1,6 @@
 import type { ProgramImage } from '../assembler/programImage';
 import type { CpuFault, StepResult } from '../core/execution';
-import type { CpuProfile } from '../isa/types';
+import type { CpuModel } from '../isa/types';
 import {
   FLAG_C,
   FLAG_N,
@@ -29,13 +29,15 @@ import { M68000State, type M68000StateOptions } from './state';
 export interface StrictM68000CoreOptions {
   bus?: MemoryBus;
   state?: M68000StateOptions;
-  profile?: CpuProfile;
+  cpuModel?: CpuModel;
+  /** @deprecated Use cpuModel. */
+  profile?: CpuModel;
 }
 
 export class StrictM68000Core {
   readonly bus: MemoryBus;
   readonly state: M68000State;
-  readonly profile: CpuProfile;
+  readonly cpuModel: CpuModel;
   private stopped = false;
   private pendingInterruptLevel = 0;
   private programEndAddress: number | undefined;
@@ -47,7 +49,7 @@ export class StrictM68000Core {
   constructor(options: StrictM68000CoreOptions = {}) {
     this.bus = options.bus ?? new RamBus();
     this.state = new M68000State(options.state);
-    this.profile = options.profile ?? 'm68000';
+    this.cpuModel = options.cpuModel ?? options.profile ?? 'm68000';
   }
 
   loadProgram(image: ProgramImage): void {
@@ -1462,7 +1464,7 @@ export class StrictM68000Core {
           return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 20 };
         }
         case 'rtd': {
-          if (this.profile !== 'm68010') {
+          if (this.cpuModel !== 'm68010') {
             return this.faultResult({
               code: 'illegal-instruction',
               message: 'RTD requires the MC68010 extension profile',
@@ -1476,7 +1478,7 @@ export class StrictM68000Core {
           return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 16 };
         }
         case 'move-from-ccr': {
-          if (this.profile !== 'm68010') {
+          if (this.cpuModel !== 'm68010') {
             return this.faultResult({
               code: 'illegal-instruction',
               message: 'MOVE from CCR requires the MC68010 extension profile',

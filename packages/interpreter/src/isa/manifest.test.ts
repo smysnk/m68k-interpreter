@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { M68000_ISA_MANIFEST, summarizeIsaCoverage, validateIsaManifest } from './manifest';
+import {
+  M68000_ISA_MANIFEST,
+  MACHINE_COMPATIBILITY_EVIDENCE,
+  summarizeIsaCoverage,
+  validateIsaManifest,
+} from './manifest';
 
 describe('MC68000 ISA manifest', () => {
   it('contains unique and structurally valid instruction forms', () => {
@@ -10,26 +15,28 @@ describe('MC68000 ISA manifest', () => {
     expect(
       M68000_ISA_MANIFEST.find((instruction) => instruction.id === 'rtd.displacement')
     ).toMatchObject({
-      minimumProfile: 'm68010',
+      minimumCpuModel: 'm68010',
       support: 'extension-only',
     });
     expect(
-      M68000_ISA_MANIFEST.find((instruction) => instruction.id === 'mode.easy68k-pseudo')
+      MACHINE_COMPATIBILITY_EVIDENCE.find(
+        (evidence) => evidence.id === 'easy68k.mode-directive'
+      )
     ).toMatchObject({
-      minimumProfile: 'easy68k',
+      machineProfile: 'easy68k',
       support: 'compatibility-only',
     });
     expect(
       M68000_ISA_MANIFEST.find((instruction) => instruction.id === 'illegal.implied')
     ).toMatchObject({
-      minimumProfile: 'm68000',
+      minimumCpuModel: 'm68000',
       support: 'conformant',
     });
   });
 
   it('covers the complete strict mnemonic inventory targeted by the plan', () => {
     const strictMnemonics = new Set(
-      M68000_ISA_MANIFEST.filter((instruction) => instruction.minimumProfile === 'm68000').map(
+      M68000_ISA_MANIFEST.filter((instruction) => instruction.minimumCpuModel === 'm68000').map(
         (instruction) => instruction.mnemonic
       )
     );
@@ -44,14 +51,14 @@ describe('MC68000 ISA manifest', () => {
 
     expect(summary.totalForms).toBe(M68000_ISA_MANIFEST.length);
     expect(summary.uniqueMnemonics).toBeGreaterThan(50);
-    expect(summary.byProfile.m68000).toBeGreaterThan(100);
-    expect(summary.byProfile.m68010).toBe(2);
-    expect(summary.byProfile.easy68k).toBe(1);
+    expect(summary.byCpuModel.m68000).toBe(116);
+    expect(summary.byCpuModel.m68010).toBe(2);
+    expect(summary.machineCompatibility.easy68k).toBe(1);
     expect(summary.bySupport['legacy-only']).toBe(0);
     expect(summary.bySupport['strict-core-partial']).toBe(0);
     expect(summary.bySupport['integrated-needs-audit']).toBe(0);
     expect(summary.bySupport.missing).toBe(0);
-    expect(summary.bySupport.conformant).toBe(summary.byProfile.m68000);
+    expect(summary.bySupport.conformant).toBe(summary.byCpuModel.m68000);
     expect(Object.values(summary.bySupport).reduce((total, count) => total + count, 0)).toBe(
       summary.totalForms
     );

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import type { CpuProfile, ProgramSource } from '@m68k/interpreter';
+import type { EmulationConfig, ProgramSource } from '@m68k/interpreter';
 
 export type BenchmarkEngineId = 'interpreter';
 
@@ -22,7 +22,7 @@ export interface BenchmarkScenario {
   stopCondition?: BenchmarkStopCondition;
   terminalMarkers?: string[];
   expectation?: BenchmarkScenarioExpectation;
-  cpuProfile?: CpuProfile;
+  emulation?: EmulationConfig;
 }
 
 const nibblesPath = fileURLToPath(
@@ -40,7 +40,7 @@ export const NIBBLES_INTRO_BENCHMARK_SCENARIO: BenchmarkScenario = {
   maxSteps: 200000,
   stopCondition: 'waiting-for-input',
   terminalMarkers: ['DIFFICULTY', 'Joshua Bellamy', 'smysnk.com'],
-  cpuProfile: 'easy68k',
+  emulation: { cpuModel: 'm68000', machineProfile: 'easy68k' },
 };
 
 function buildColdLoadProgram(entryCount = 96): string {
@@ -140,7 +140,7 @@ export const ENGINE_BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     program: buildTightArithmeticLoopProgram(),
     mode: 'load-and-run',
     maxSteps: 5000,
-    cpuProfile: 'easy68k',
+    emulation: { cpuModel: 'm68000', machineProfile: 'easy68k' },
     expectation: {
       registers: {
         d0: 100,
@@ -159,7 +159,7 @@ export const ENGINE_BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     program: buildTightArithmeticLoopProgram(),
     mode: 'load-and-run',
     maxSteps: 5000,
-    cpuProfile: 'm68000',
+    emulation: { cpuModel: 'm68000', machineProfile: 'bare' },
     expectation: {
       registers: { d0: 100, d1: 300 },
       symbols: { ITER: 100, ACC: 300 },
@@ -173,7 +173,7 @@ export const ENGINE_BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
     program: buildTightArithmeticLoopProgram(),
     mode: 'load-and-run',
     maxSteps: 5000,
-    cpuProfile: 'm68010',
+    emulation: { cpuModel: 'm68010', machineProfile: 'bare' },
     expectation: {
       registers: { d0: 100, d1: 300 },
       symbols: { ITER: 100, ACC: 300 },

@@ -1,4 +1,5 @@
 import os from 'node:os';
+import { normalizeEmulationConfig } from '@m68k/interpreter';
 import type { EngineBatteryProfileReport, ScenarioProfileReport } from './engineHarness';
 
 export interface StructuredSuiteSummary {
@@ -165,6 +166,7 @@ function buildNodeMetadata(
   report: EngineBatteryProfileReport,
   statistic: string
 ): Record<string, boolean | number | string | null> {
+  const emulation = normalizeEmulationConfig(scenarioReport.scenario.emulation);
   return {
     seriesId: 'classic-interpreter',
     runtimeId: 'classic-interpreter',
@@ -172,7 +174,12 @@ function buildNodeMetadata(
     scenarioTitle: scenarioReport.scenario.title,
     statistic,
     engineAuthority: 'strict-core',
-    cpuProfile: scenarioReport.scenario.cpuProfile ?? 'easy68k',
+    cpuModel: emulation.cpuModel,
+    machineProfile: emulation.machineProfile,
+    transport: 'in-process',
+    phase: process.env.CPU_MACHINE_PROFILE_PHASE ?? 'unspecified',
+    commit: process.env.CPU_MACHINE_PROFILE_COMMIT ?? 'working-tree',
+    baselineId: process.env.CPU_MACHINE_PROFILE_BASELINE_ID ?? 'cpu-machine-profile-separation-v1',
     runnerKey,
     runtime: 'node',
     harnessVersion: '1',

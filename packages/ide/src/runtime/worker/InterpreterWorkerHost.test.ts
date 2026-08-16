@@ -2,8 +2,38 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InterpreterWorkerHost } from '@/runtime/worker/InterpreterWorkerHost';
 import type {
   InterpreterWorkerEvent,
+  InterpreterWorkerCommand,
   WorkerRuntimeSnapshot,
 } from '@/runtime/worker/interpreterWorkerProtocol';
+
+function loadProgramCommand(
+  id: number,
+  source: string,
+  columns = 40,
+  rows = 20
+): InterpreterWorkerCommand {
+  return {
+    id,
+    type: 'loadProgram',
+    request: {
+      source,
+      emulation: { cpuModel: 'm68000', machineProfile: 'easy68k' },
+      terminal: { columns, rows },
+      hardwareDevices: [
+        {
+          id: 'easy68k-default',
+          deviceType: 'board',
+          displayBase: 0xe00000,
+          ledAddress: 0xe00010,
+          switchAddress: 0xe00010,
+          buttonAddress: 0xe00012,
+        },
+      ],
+      execution: { delayMs: 0, speedMultiplier: 1 },
+      undo: { mode: 'full' },
+    },
+  };
+}
 
 function getLastFrameEvent(events: InterpreterWorkerEvent[]) {
   const frameEvent = [...events].reverse().find((event) => event.type === 'frame');
@@ -120,14 +150,7 @@ describe('InterpreterWorkerHost', () => {
     const events: InterpreterWorkerEvent[] = [];
     const host = new InterpreterWorkerHost((event) => events.push(event));
 
-    await host.handleCommand({
-      id: 1,
-      type: 'loadProgram',
-      source: GEOMETRY_SOURCE,
-      columns: 80,
-      rows: 25,
-      cpuProfile: 'easy68k',
-    });
+    await host.handleCommand(loadProgramCommand(1, GEOMETRY_SOURCE, 80, 25));
     events.length = 0;
 
     await host.handleCommand({ id: 2, type: 'setHardwareToggle', bit: 7, enabled: true });
@@ -163,14 +186,10 @@ describe('InterpreterWorkerHost', () => {
           id: 'display-a',
           deviceType: 'display',
           displayBase: 0xe00000,
-          ledAddress: 0,
-          switchAddress: 0,
-          buttonAddress: 0,
         },
         {
           id: 'digital-a',
           deviceType: 'digital-io',
-          displayBase: 0,
           ledAddress: 0xe00040,
           switchAddress: 0xe00040,
           buttonAddress: 0xe00042,
@@ -202,14 +221,7 @@ describe('InterpreterWorkerHost', () => {
   it('runs a bounded automatic IRQ scheduler and cancels it deterministically', async () => {
     const events: InterpreterWorkerEvent[] = [];
     const host = new InterpreterWorkerHost((event) => events.push(event));
-    await host.handleCommand({
-      id: 1,
-      type: 'loadProgram',
-      source: AUTO_IRQ_SOURCE,
-      columns: 80,
-      rows: 25,
-      cpuProfile: 'easy68k',
-    });
+    await host.handleCommand(loadProgramCommand(1, AUTO_IRQ_SOURCE, 80, 25));
     const countAddress = getLastFrameSnapshot(events).symbols?.IRQ_COUNT ?? -1;
     await host.handleCommand({
       id: 2,
@@ -238,14 +250,7 @@ describe('InterpreterWorkerHost', () => {
     });
 
     await host.handleCommand({ id: 1, type: 'init' });
-    await host.handleCommand({
-      id: 2,
-      type: 'loadProgram',
-      source: GEOMETRY_SOURCE,
-      columns: 64,
-      rows: 18,
-      cpuProfile: 'easy68k',
-    });
+    await host.handleCommand(loadProgramCommand(2, GEOMETRY_SOURCE, 64, 18));
 
     expect(events[0]).toEqual({ type: 'ready' });
     expect(events[1]).toEqual({ type: 'reply', id: 1, ok: true, payload: undefined });
@@ -282,14 +287,7 @@ describe('InterpreterWorkerHost', () => {
     });
 
     await host.handleCommand({ id: 1, type: 'init' });
-    await host.handleCommand({
-      id: 2,
-      type: 'loadProgram',
-      source: GEOMETRY_SOURCE,
-      columns: 40,
-      rows: 20,
-      cpuProfile: 'easy68k',
-    });
+    await host.handleCommand(loadProgramCommand(2, GEOMETRY_SOURCE));
 
     const loadedSnapshot = getLastFrameSnapshot(events);
     const valueAddress = loadedSnapshot.symbols?.VALUE ?? -1;
@@ -322,14 +320,7 @@ describe('InterpreterWorkerHost', () => {
     });
 
     await host.handleCommand({ id: 1, type: 'init' });
-    await host.handleCommand({
-      id: 2,
-      type: 'loadProgram',
-      source: WAIT_FOR_INPUT_SOURCE,
-      columns: 40,
-      rows: 20,
-      cpuProfile: 'easy68k',
-    });
+    await host.handleCommand(loadProgramCommand(2, WAIT_FOR_INPUT_SOURCE));
 
     await host.handleCommand({ id: 3, type: 'step' });
     await host.handleCommand({ id: 4, type: 'step' });
@@ -361,14 +352,7 @@ describe('InterpreterWorkerHost', () => {
     });
 
     await host.handleCommand({ id: 1, type: 'init' });
-    await host.handleCommand({
-      id: 2,
-      type: 'loadProgram',
-      source: HALT_SOURCE,
-      columns: 40,
-      rows: 20,
-      cpuProfile: 'easy68k',
-    });
+    await host.handleCommand(loadProgramCommand(2, HALT_SOURCE));
     await host.handleCommand({
       id: 3,
       type: 'run',
@@ -395,14 +379,7 @@ describe('InterpreterWorkerHost', () => {
     });
 
     await host.handleCommand({ id: 1, type: 'init' });
-    await host.handleCommand({
-      id: 2,
-      type: 'loadProgram',
-      source: LOOPING_OUTPUT_SOURCE,
-      columns: 40,
-      rows: 20,
-      cpuProfile: 'easy68k',
-    });
+    await host.handleCommand(loadProgramCommand(2, LOOPING_OUTPUT_SOURCE));
 
     events.length = 0;
     await host.handleCommand({
@@ -430,14 +407,7 @@ describe('InterpreterWorkerHost', () => {
     });
 
     await host.handleCommand({ id: 1, type: 'init' });
-    await host.handleCommand({
-      id: 2,
-      type: 'loadProgram',
-      source: LOOPING_OUTPUT_SOURCE,
-      columns: 40,
-      rows: 20,
-      cpuProfile: 'easy68k',
-    });
+    await host.handleCommand(loadProgramCommand(2, LOOPING_OUTPUT_SOURCE));
 
     events.length = 0;
     await host.handleCommand({
@@ -471,14 +441,7 @@ describe('InterpreterWorkerHost', () => {
     });
 
     await host.handleCommand({ id: 1, type: 'init' });
-    await host.handleCommand({
-      id: 2,
-      type: 'loadProgram',
-      source: LOOPING_NO_OUTPUT_SOURCE,
-      columns: 40,
-      rows: 20,
-      cpuProfile: 'easy68k',
-    });
+    await host.handleCommand(loadProgramCommand(2, LOOPING_NO_OUTPUT_SOURCE));
 
     events.length = 0;
     await host.handleCommand({
@@ -507,14 +470,7 @@ describe('InterpreterWorkerHost', () => {
     });
 
     await host.handleCommand({ id: 1, type: 'init' });
-    await host.handleCommand({
-      id: 2,
-      type: 'loadProgram',
-      source: WAIT_FOR_INPUT_SOURCE,
-      columns: 40,
-      rows: 20,
-      cpuProfile: 'easy68k',
-    });
+    await host.handleCommand(loadProgramCommand(2, WAIT_FOR_INPUT_SOURCE));
     await host.handleCommand({
       id: 3,
       type: 'run',
@@ -540,14 +496,7 @@ describe('InterpreterWorkerHost', () => {
     });
 
     await host.handleCommand({ id: 1, type: 'init' });
-    await host.handleCommand({
-      id: 2,
-      type: 'loadProgram',
-      source: EXCEPTION_SOURCE,
-      columns: 40,
-      rows: 20,
-      cpuProfile: 'easy68k',
-    });
+    await host.handleCommand(loadProgramCommand(2, EXCEPTION_SOURCE));
     await host.handleCommand({
       id: 3,
       type: 'run',
@@ -573,14 +522,7 @@ describe('InterpreterWorkerHost', () => {
     });
 
     await host.handleCommand({ id: 1, type: 'init' });
-    await host.handleCommand({
-      id: 2,
-      type: 'loadProgram',
-      source: WAIT_FOR_INPUT_SOURCE,
-      columns: 40,
-      rows: 20,
-      cpuProfile: 'easy68k',
-    });
+    await host.handleCommand(loadProgramCommand(2, WAIT_FOR_INPUT_SOURCE));
 
     events.length = 0;
     await host.handleCommand({ id: 3, type: 'step' });
@@ -597,14 +539,7 @@ describe('InterpreterWorkerHost', () => {
     });
 
     await host.handleCommand({ id: 1, type: 'init' });
-    await host.handleCommand({
-      id: 2,
-      type: 'loadProgram',
-      source: TOUCH_SOURCE,
-      columns: 40,
-      rows: 20,
-      cpuProfile: 'easy68k',
-    });
+    await host.handleCommand(loadProgramCommand(2, TOUCH_SOURCE));
 
     const snapshot = getLastFrameSnapshot(events);
     const protocol = {
@@ -644,14 +579,7 @@ describe('InterpreterWorkerHost', () => {
     });
 
     await host.handleCommand({ id: 1, type: 'init' });
-    await host.handleCommand({
-      id: 2,
-      type: 'loadProgram',
-      source: LOOPING_OUTPUT_SOURCE,
-      columns: 40,
-      rows: 20,
-      cpuProfile: 'easy68k',
-    });
+    await host.handleCommand(loadProgramCommand(2, LOOPING_OUTPUT_SOURCE));
     await host.handleCommand({
       id: 3,
       type: 'run',
