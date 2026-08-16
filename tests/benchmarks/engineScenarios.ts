@@ -23,6 +23,7 @@ export interface BenchmarkScenario {
   terminalMarkers?: string[];
   expectation?: BenchmarkScenarioExpectation;
   emulation?: EmulationConfig;
+  continueAfterArchitecturalException?: boolean;
 }
 
 const nibblesPath = fileURLToPath(
@@ -123,6 +124,37 @@ ${body}
   END START`;
 }
 
+function buildMc68010FunctionalProgram(): string {
+  return `ORG $80
+DC.L TRAP_HANDLER
+ORG $210
+DC.L BKPT_HANDLER
+ORG $300
+VALUE DC.L $12345678
+OUTPUT DC.L 0
+TRAP_HANDLER
+  MOVE.L #$200,D0
+  MOVEC D0,VBR
+  MOVEQ #3,D1
+  MOVEC D1,SFC
+  MOVEQ #4,D2
+  MOVEC D2,DFC
+  LEA VALUE,A0
+  MOVES.L (A0),D3
+  LEA OUTPUT,A1
+  MOVES.L D3,(A1)
+  ORI.W #$2000,(A7)
+  RTE
+BKPT_HANDLER
+  ADDQ.L #2,2(A7)
+  RTE
+START
+  TRAP #0
+  BKPT #3
+  NOP
+  END START`;
+}
+
 export const ENGINE_BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
   {
     id: 'cold-load-generated-source',
@@ -167,9 +199,8 @@ export const ENGINE_BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
   },
   {
     id: 'tight-arithmetic-loop-m68010',
-    title: 'Tight Arithmetic Loop (MC68010 Extensions)',
-    description:
-      'Measures MC68010-extension initialization and representative arithmetic execution.',
+    title: 'Tight Arithmetic Loop (MC68010)',
+    description: 'Measures MC68010 initialization and representative arithmetic execution.',
     program: buildTightArithmeticLoopProgram(),
     mode: 'load-and-run',
     maxSteps: 5000,
@@ -212,6 +243,21 @@ export const ENGINE_BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
       symbols: {
         TOTAL: 136,
       },
+    },
+  },
+  {
+    id: 'mc68010-control-moves-exceptions',
+    title: 'MC68010 Control, MOVES, And Exceptions',
+    description:
+      'Measures MOVEC, MOVES, BKPT acknowledgement, VBR exception entry, and format-0 RTE.',
+    program: buildMc68010FunctionalProgram(),
+    mode: 'load-and-run',
+    maxSteps: 100,
+    continueAfterArchitecturalException: true,
+    emulation: { cpuModel: 'm68010', machineProfile: 'bare' },
+    expectation: {
+      registers: { d3: 0x12345678 },
+      symbols: { OUTPUT: 0x12345678 },
     },
   },
 ];

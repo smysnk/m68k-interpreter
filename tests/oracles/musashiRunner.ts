@@ -6,6 +6,9 @@ export interface OracleCpuState {
   a: number[];
   pc: number;
   sr: number;
+  vbr?: number;
+  sfc?: number;
+  dfc?: number;
 }
 
 export interface OracleStepResult extends OracleCpuState {
@@ -13,24 +16,29 @@ export interface OracleStepResult extends OracleCpuState {
   writes: Array<[address: number, size: number, value: number]>;
 }
 
+export type OracleCpuModel = 'm68000' | 'm68010';
+
 export function runMusashiStep(
   instructionBytes: Uint8Array,
-  state: OracleCpuState
+  state: OracleCpuState,
+  cpuModel: OracleCpuModel = 'm68000'
 ): OracleStepResult {
-  return runOracleStep('musashi-runner', instructionBytes, state);
+  return runOracleStep('musashi-runner', instructionBytes, state, cpuModel);
 }
 
 export function runMoiraStep(
   instructionBytes: Uint8Array,
-  state: OracleCpuState
+  state: OracleCpuState,
+  cpuModel: OracleCpuModel = 'm68000'
 ): OracleStepResult {
-  return runOracleStep('moira-runner', instructionBytes, state);
+  return runOracleStep('moira-runner', instructionBytes, state, cpuModel);
 }
 
 function runOracleStep(
   executable: string,
   instructionBytes: Uint8Array,
-  state: OracleCpuState
+  state: OracleCpuState,
+  cpuModel: OracleCpuModel
 ): OracleStepResult {
   const runner = resolve('.tmp/oracles', executable);
   const hex = Array.from(instructionBytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -43,6 +51,13 @@ function runOracleStep(
   ];
   const output = execFileSync(runner, args, {
     encoding: 'utf8',
+    env: {
+      ...process.env,
+      M68K_CPU_MODEL: cpuModel,
+      M68K_VBR: String(state.vbr ?? 0),
+      M68K_SFC: String(state.sfc ?? 0),
+      M68K_DFC: String(state.dfc ?? 0),
+    },
   });
   return JSON.parse(output) as OracleStepResult;
 }

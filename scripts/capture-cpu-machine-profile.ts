@@ -6,8 +6,10 @@ import { ENGINE_BENCHMARK_SCENARIOS } from '../tests/benchmarks/engineScenarios'
 import { profileEngineBattery } from '../tests/benchmarks/engineHarness';
 
 const phase = process.argv[2] ?? 'final';
+const outputRoot =
+  process.env.PROFILE_OUTPUT_ROOT ?? '.test-results/cpu-machine-profile-separation';
 const outputDirectory = path.resolve(
-  `.test-results/cpu-machine-profile-separation/${phase === 'final' ? 'final' : `checkpoints/${phase}`}`
+  `${outputRoot}/${phase === 'final' ? 'final' : `checkpoints/${phase}`}`
 );
 const warmupRuns = Number.parseInt(process.env.PROFILE_WARMUPS ?? '10', 10);
 const measuredRuns = Number.parseInt(process.env.PROFILE_RUNS ?? '50', 10);
@@ -25,7 +27,10 @@ fs.writeFileSync(
       phase,
       generatedAt: new Date().toISOString(),
       commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-      dirty: execFileSync('git', ['status', '--short'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean),
+      dirty: execFileSync('git', ['status', '--short'], { encoding: 'utf8' })
+        .trim()
+        .split('\n')
+        .filter(Boolean),
       platform: process.platform,
       release: os.release(),
       architecture: process.arch,
@@ -37,6 +42,7 @@ fs.writeFileSync(
       environment: {
         PROFILE_WARMUPS: process.env.PROFILE_WARMUPS,
         PROFILE_RUNS: process.env.PROFILE_RUNS,
+        PROFILE_OUTPUT_ROOT: process.env.PROFILE_OUTPUT_ROOT,
       },
     },
     null,

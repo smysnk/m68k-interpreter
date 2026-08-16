@@ -11,6 +11,9 @@ export interface CpuUndoSnapshot {
   sr: number;
   usp: number;
   ssp: number;
+  vbr?: number;
+  sfc?: number;
+  dfc?: number;
   registers: Int32Array;
 }
 

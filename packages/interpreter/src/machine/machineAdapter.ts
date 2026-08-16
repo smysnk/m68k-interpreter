@@ -30,7 +30,7 @@ export interface MachineAdapter {
   readonly hardware: Easy68kHardware;
   readonly mappedHardwareConnected: boolean;
   handleTrap(context: MachineTrapContext): StepResult | undefined;
-  validateInterruptVector(level: number): string | undefined;
+  validateInterruptVector(level: number, vectorBase?: number): string | undefined;
   snapshot(): MachineSnapshot;
   restore(snapshot: MachineSnapshot): void;
   reset(): void;
@@ -78,15 +78,10 @@ abstract class BaseMachineAdapter implements MachineAdapter {
   readonly hardware: Easy68kHardware;
   readonly bus: MemoryBus;
 
-  protected constructor(
-    memory: Memory,
-    options: MachineAdapterOptions & { mapHardware: boolean }
-  ) {
+  protected constructor(memory: Memory, options: MachineAdapterOptions & { mapHardware: boolean }) {
     this.terminal = new TerminalDevice({ columns: options.columns, rows: options.rows });
     this.hardware = new Easy68kHardware(options.hardwareDevices ?? options.hardwareConfig);
-    const devices = options.mapHardware
-      ? [new Easy68kHardwareMappedDevice(this.hardware)]
-      : [];
+    const devices = options.mapHardware ? [new Easy68kHardwareMappedDevice(this.hardware)] : [];
     this.bus = new MappedMemoryBus(memory, devices, options.beforeRamWrite);
   }
 
@@ -94,7 +89,7 @@ abstract class BaseMachineAdapter implements MachineAdapter {
     return undefined;
   }
 
-  validateInterruptVector(_level: number): string | undefined {
+  validateInterruptVector(_level: number, _vectorBase = 0): string | undefined {
     return undefined;
   }
 
@@ -166,8 +161,8 @@ export class Easy68kMachineAdapter extends BaseMachineAdapter {
     return { kind: 'executed', pcBefore, pcAfter };
   }
 
-  override validateInterruptVector(level: number): string | undefined {
-    const vectorAddress = getEasy68kInterruptVectorAddress(level);
+  override validateInterruptVector(level: number, vectorBase = 0): string | undefined {
+    const vectorAddress = (vectorBase + getEasy68kInterruptVectorAddress(level)) & 0x00ff_ffff;
     return this.bus.read32(vectorAddress) === 0
       ? `Invalid or missing IRQ ${level} autovector at $${vectorAddress.toString(16).toUpperCase()}`
       : undefined;

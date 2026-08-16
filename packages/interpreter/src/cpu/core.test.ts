@@ -3,7 +3,13 @@ import { encodeBranch, encodeMoveq, encodeNop, encodeRts, encodeStop } from '../
 import { createProgramImage } from '../assembler/programImage';
 import { StrictM68000Core } from './core';
 import { evaluateBranchCondition, evaluateConditionCode } from './conditions';
-import { RamBus } from './memoryBus';
+import {
+  BusFault,
+  RamBus,
+  busOperation,
+  type BusAccessInput,
+  type BusTraceEvent,
+} from './memoryBus';
 
 describe('StrictM68000Core byte execution', () => {
   it('fetches variable-length bytes and applies MOVEQ flags', () => {
@@ -91,6 +97,33 @@ describe('StrictM68000Core byte execution', () => {
     });
     expect(userCore.state.pc).toBe(0);
   });
+
+  it.each([
+    { sr: 0x0000, fetchCode: 2, dataCode: 1 },
+    { sr: 0x2000, fetchCode: 6, dataCode: 5 },
+  ])(
+    'publishes active program and data function codes for SR $sr',
+    ({ sr, fetchCode, dataCode }) => {
+      const trace: BusTraceEvent[] = [];
+      const bus = new RamBus({ size: 0x4000, trace });
+      const core = new StrictM68000Core({
+        bus,
+        state: { sr, usp: 0x3000, ssp: 0x3800, addressRegisters: [0x200] },
+      });
+      bus.load(0x1000, Uint8Array.of(0x10, 0x10)); // MOVE.B (A0),D0
+      bus.write8(0x200, 0x7f);
+      core.state.pc = 0x1000;
+      trace.length = 0;
+
+      expect(core.step()).toMatchObject({ kind: 'executed' });
+      expect(trace).toContainEqual(
+        expect.objectContaining({ type: 'fetch', address: 0x1000, functionCode: fetchCode })
+      );
+      expect(trace).toContainEqual(
+        expect.objectContaining({ type: 'read', address: 0x200, functionCode: dataCode })
+      );
+    }
+  );
 });
 
 describe('MC68000 condition evaluator', () => {
@@ -629,5 +662,297 @@ describe('StrictM68000Core profile extensions', () => {
     expect(core.state.d[0] & 0xffff).toBe(0x15);
     expect(core.step()).toMatchObject({ kind: 'executed', pcAfter: 0x1234 });
     expect(core.state.a[7] >>> 0).toBe(0x300c);
+  });
+
+  it('executes every MC68010 MOVEC control-register selector with masks', () => {
+    const bus = new RamBus({ size: 0x8000 });
+    const core = new StrictM68000Core({
+      bus,
+      cpuModel: 'm68010',
+      state: { sr: 0x2700, pc: 0x1000, ssp: 0x7000 },
+    });
+    bus.load(
+      0x1000,
+      Uint8Array.of(
+        0x4e,
+        0x7b,
+        0x08,
+        0x01, // MOVEC D0,VBR
+        0x4e,
+        0x7b,
+        0x10,
+        0x00, // MOVEC D1,SFC
+        0x4e,
+        0x7b,
+        0x20,
+        0x01, // MOVEC D2,DFC
+        0x4e,
+        0x7a,
+        0x88,
+        0x01, // MOVEC VBR,A0
+        0x4e,
+        0x7b,
+        0x38,
+        0x00, // MOVEC D3,USP
+        0x4e,
+        0x7a,
+        0x98,
+        0x00 // MOVEC USP,A1
+      )
+    );
+    core.state.d[0] = 0x1234_0000;
+    core.state.d[1] = 0xff;
+    core.state.d[2] = 6;
+    core.state.d[3] = 0x6540;
+
+    for (let index = 0; index < 6; index += 1) {
+      expect(core.step()).toMatchObject({ kind: 'executed' });
+    }
+
+    expect(core.state.vbr).toBe(0x1234_0000);
+    expect(core.state.sfc).toBe(7);
+    expect(core.state.dfc).toBe(6);
+    expect(core.state.a[0] >>> 0).toBe(0x1234_0000);
+    expect(core.state.usp).toBe(0x6540);
+    expect(core.state.a[1] >>> 0).toBe(0x6540);
+  });
+
+  it('routes MOVES reads through SFC and writes through DFC', () => {
+    const trace: BusTraceEvent[] = [];
+    const bus = new RamBus({ size: 0x8000, trace });
+    const core = new StrictM68000Core({
+      bus,
+      cpuModel: 'm68010',
+      state: {
+        sr: 0x2700,
+        pc: 0x1000,
+        ssp: 0x7000,
+        sfc: 3,
+        dfc: 4,
+        addressRegisters: [0x200, 0x220],
+      },
+    });
+    bus.load(
+      0x1000,
+      Uint8Array.of(
+        0x0e,
+        0x10,
+        0x10,
+        0x00, // MOVES.B (A0),D1
+        0x0e,
+        0x51,
+        0x28,
+        0x00 // MOVES.W D2,(A1)
+      )
+    );
+    bus.write8(0x200, 0xab);
+    core.state.d[1] = 0x1234_5600;
+    core.state.d[2] = 0x0000_cdef;
+    trace.length = 0;
+
+    core.step();
+    core.step();
+
+    expect(core.state.d[1] >>> 0).toBe(0x1234_56ab);
+    expect(bus.read16(0x220)).toBe(0xcdef);
+    expect(trace).toContainEqual(
+      expect.objectContaining({ type: 'read', address: 0x200, size: 1, functionCode: 3 })
+    );
+    expect(trace).toContainEqual(
+      expect.objectContaining({ type: 'write', address: 0x220, size: 2, functionCode: 4 })
+    );
+  });
+
+  it('makes MOVE from SR privileged only on MC68010', () => {
+    const m68000Bus = new RamBus({ size: 0x4000 });
+    const m68000 = new StrictM68000Core({
+      bus: m68000Bus,
+      cpuModel: 'm68000',
+      state: { sr: 0, pc: 0x1000, ssp: 0x3000 },
+    });
+    m68000Bus.load(0x1000, Uint8Array.of(0x40, 0xc0));
+    expect(m68000.step()).toMatchObject({ kind: 'executed' });
+
+    const m68010Bus = new RamBus({ size: 0x4000 });
+    const m68010 = new StrictM68000Core({
+      bus: m68010Bus,
+      cpuModel: 'm68010',
+      state: { sr: 0, pc: 0x1000, ssp: 0x3000 },
+    });
+    m68010Bus.load(0x1000, Uint8Array.of(0x40, 0xc0));
+    expect(m68010.step()).toMatchObject({
+      kind: 'exception',
+      fault: { code: 'privilege-violation', vector: 8 },
+    });
+  });
+
+  it('relocates normal exception vectors through VBR and round-trips format zero with RTE', () => {
+    const bus = new RamBus({ size: 0x8000 });
+    const core = new StrictM68000Core({
+      bus,
+      cpuModel: 'm68010',
+      state: { sr: 0x0015, pc: 0x1000, usp: 0x6800, ssp: 0x7000, vbr: 0x400 },
+    });
+    bus.load(0x1000, Uint8Array.of(0x4e, 0x43));
+    bus.write32(0x400 + 35 * 4, 0x1200);
+    bus.load(0x1200, Uint8Array.of(0x4e, 0x73));
+
+    expect(core.step()).toMatchObject({ kind: 'exception', pc: 0x1200 });
+    expect(core.state.a[7] >>> 0).toBe(0x6ff8);
+    expect(bus.read16(0x6ffe)).toBe(35 * 4);
+    expect(core.step()).toMatchObject({ kind: 'executed', pcAfter: 0x1002 });
+    expect(core.state.sr).toBe(0x0015);
+    expect(core.state.ssp).toBe(0x7000);
+  });
+
+  it('raises vector 14 for an invalid MC68010 RTE frame without consuming it', () => {
+    const bus = new RamBus({ size: 0x8000 });
+    const core = new StrictM68000Core({
+      bus,
+      cpuModel: 'm68010',
+      state: {
+        sr: 0x2700,
+        pc: 0x1000,
+        ssp: 0x6000,
+        vbr: 0x400,
+      },
+    });
+    bus.load(0x1000, Uint8Array.of(0x4e, 0x73));
+    bus.write16(0x6000, 0x2700);
+    bus.write32(0x6002, 0x1234);
+    bus.write16(0x6006, 0x7000);
+    bus.write32(0x400 + 14 * 4, 0x1400);
+
+    expect(core.step()).toMatchObject({
+      kind: 'exception',
+      pc: 0x1400,
+      fault: { code: 'format-error', vector: 14 },
+    });
+    expect(core.state.a[7] >>> 0).toBe(0x5ff8);
+    expect(bus.read16(0x6006)).toBe(0x7000);
+  });
+
+  it('emits BKPT acknowledge metadata before entering the illegal-instruction vector', () => {
+    const trace: BusTraceEvent[] = [];
+    const bus = new RamBus({ size: 0x8000, trace });
+    const core = new StrictM68000Core({
+      bus,
+      cpuModel: 'm68010',
+      state: { sr: 0x2700, pc: 0x1000, ssp: 0x7000 },
+    });
+    bus.load(0x1000, Uint8Array.of(0x48, 0x4d));
+
+    expect(core.step()).toMatchObject({
+      kind: 'exception',
+      fault: { code: 'illegal-instruction', vector: 4 },
+    });
+    expect(trace).toContainEqual({
+      type: 'breakpoint-acknowledge',
+      vector: 5,
+      functionCode: 7,
+      cpuSpace: true,
+      acknowledged: false,
+    });
+  });
+
+  it('rolls back a faulting MOVES instruction and resumes it through a format-eight RTE', () => {
+    class OneShotFaultBus extends RamBus {
+      faulted = false;
+
+      override write16(address: number, value: number, access: BusAccessInput = 'write'): void {
+        if (!this.faulted && address === 0x200) {
+          this.faulted = true;
+          const context = typeof access === 'string' ? undefined : access;
+          throw new BusFault(
+            'bus-error',
+            address,
+            busOperation(access, 'write'),
+            2,
+            'Synthetic restartable write fault',
+            context?.functionCode
+          );
+        }
+        super.write16(address, value, access);
+      }
+    }
+
+    const bus = new OneShotFaultBus({ size: 0x8000 });
+    const core = new StrictM68000Core({
+      bus,
+      cpuModel: 'm68010',
+      state: {
+        sr: 0x2700,
+        pc: 0x1000,
+        ssp: 0x7000,
+        addressRegisters: [0x202],
+        dfc: 4,
+      },
+    });
+    bus.load(0x1000, Uint8Array.of(0x0e, 0x60, 0x08, 0x00)); // MOVES.W D0,-(A0)
+    bus.load(0x1200, Uint8Array.of(0x4e, 0x73));
+    bus.write32(2 * 4, 0x1200);
+    core.state.d[0] = 0x1234;
+
+    expect(core.step()).toMatchObject({
+      kind: 'exception',
+      pc: 0x1200,
+      fault: { code: 'bus-error', address: 0x200 },
+    });
+    expect(core.state.a[0] >>> 0).toBe(0x202);
+    expect(core.state.a[7] >>> 0).toBe(0x6fc6);
+    expect(bus.read16(0x6fcc) >>> 12).toBe(8);
+    expect(bus.read32(0x6fd0)).toBe(0x200);
+
+    expect(core.step()).toMatchObject({ kind: 'executed', pcAfter: 0x1000 });
+    expect(core.state.a[7] >>> 0).toBe(0x7000);
+    expect(core.step()).toMatchObject({ kind: 'executed', pcAfter: 0x1004 });
+    expect(core.state.a[0] >>> 0).toBe(0x200);
+    expect(bus.read16(0x200)).toBe(0x1234);
+  });
+
+  it('rolls back memory writes completed before a later instruction bus fault', () => {
+    class SecondWriteFaultBus extends RamBus {
+      faulted = true;
+
+      override write16(address: number, value: number, access: BusAccessInput = 'write'): void {
+        if (!this.faulted && address === 0x202) {
+          this.faulted = true;
+          const context = typeof access === 'string' ? undefined : access;
+          throw new BusFault(
+            'bus-error',
+            address,
+            busOperation(access, 'write'),
+            2,
+            'Synthetic second-write fault',
+            context?.functionCode
+          );
+        }
+        super.write16(address, value, access);
+      }
+    }
+
+    const bus = new SecondWriteFaultBus({ size: 0x8000 });
+    const core = new StrictM68000Core({
+      bus,
+      cpuModel: 'm68010',
+      state: { sr: 0x2700, ssp: 0x7000, addressRegisters: [0x200] },
+    });
+    bus.load(0x1000, Uint8Array.of(0x48, 0x90, 0x00, 0x03)); // MOVEM.W D0-D1,(A0)
+    bus.write32(2 * 4, 0x1200);
+    bus.write16(0x200, 0xaaaa);
+    bus.write16(0x202, 0xbbbb);
+    bus.faulted = false;
+    core.state.d[0] = 0x1111;
+    core.state.d[1] = 0x2222;
+    core.state.pc = 0x1000;
+
+    expect(core.step()).toMatchObject({
+      kind: 'exception',
+      pc: 0x1200,
+      fault: { code: 'bus-error', address: 0x202 },
+    });
+    expect(bus.read16(0x200)).toBe(0xaaaa);
+    expect(bus.read16(0x202)).toBe(0xbbbb);
+    expect(core.state.a[0] >>> 0).toBe(0x200);
   });
 });

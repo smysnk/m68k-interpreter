@@ -35,6 +35,12 @@ describe('source instruction encoder', () => {
     ['MOVE SR,D0', [0x40, 0xc0], 'move-status'],
     ['MOVE D0,CCR', [0x44, 0xc0], 'move-status'],
     ['MOVE A0,USP', [0x4e, 0x60], 'move-usp'],
+    ['BKPT #7', [0x48, 0x4f], 'bkpt'],
+    ['MOVEC VBR,D0', [0x4e, 0x7a, 0x08, 0x01], 'movec'],
+    ['MOVEC D1,SFC', [0x4e, 0x7b, 0x10, 0x00], 'movec'],
+    ['MOVES.B D0,(A0)', [0x0e, 0x10, 0x08, 0x00], 'moves'],
+    ['MOVES.W (A1),A2', [0x0e, 0x51, 0xa0, 0x00], 'moves'],
+    ['MOVES.L D3,4(A4)', [0x0e, 0xac, 0x38, 0x00, 0x00, 0x04], 'moves'],
   ] as const)(
     'encodes %s independently and round-trips through the decoder',
     (source, bytes, kind) => {

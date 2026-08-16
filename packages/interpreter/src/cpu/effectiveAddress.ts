@@ -2,7 +2,14 @@ import type { EffectiveAddressClass } from '../isa/types';
 import type { OperandSize } from './alu';
 import { signExtend, truncate } from './alu';
 import type { InstructionStream } from './instructionStream';
-import type { MemoryBus } from './memoryBus';
+import {
+  SUPERVISOR_DATA_READ,
+  SUPERVISOR_DATA_WRITE,
+  USER_DATA_READ,
+  USER_DATA_WRITE,
+  type BusAccessInput,
+  type MemoryBus,
+} from './memoryBus';
 import type { M68000State } from './state';
 
 export type EffectiveAddressAccess = 'read' | 'write' | 'readwrite' | 'address';
@@ -23,22 +30,35 @@ export interface EffectiveAddressContext {
   stream: InstructionStream;
   size: OperandSize;
   access: EffectiveAddressAccess;
+  readContext?: BusAccessInput;
+  writeContext?: BusAccessInput;
 }
 
 function addressStep(size: OperandSize, register: number): number {
   return size === 1 && register === 7 ? 2 : size;
 }
 
-function readMemory(bus: MemoryBus, address: number, size: OperandSize): number {
-  if (size === 1) return bus.read8(address);
-  if (size === 2) return bus.read16(address);
-  return bus.read32(address);
+function readMemory(
+  bus: MemoryBus,
+  address: number,
+  size: OperandSize,
+  context?: BusAccessInput
+): number {
+  if (size === 1) return bus.read8(address, context);
+  if (size === 2) return bus.read16(address, context);
+  return bus.read32(address, context);
 }
 
-function writeMemory(bus: MemoryBus, address: number, value: number, size: OperandSize): void {
-  if (size === 1) bus.write8(address, value);
-  else if (size === 2) bus.write16(address, value);
-  else bus.write32(address, value);
+function writeMemory(
+  bus: MemoryBus,
+  address: number,
+  value: number,
+  size: OperandSize,
+  context?: BusAccessInput
+): void {
+  if (size === 1) bus.write8(address, value, context);
+  else if (size === 2) bus.write16(address, value, context);
+  else bus.write32(address, value, context);
 }
 
 function readIndex(extension: number, state: M68000State): number {
@@ -102,6 +122,10 @@ export function resolveEffectiveAddress(
   const normalizedRegister = register & 0x7;
   const eaClass = classifyEffectiveAddress(normalizedMode, normalizedRegister);
   const { state, bus, stream, size, access } = context;
+  const readContext =
+    context.readContext ?? (state.isSupervisor() ? SUPERVISOR_DATA_READ : USER_DATA_READ);
+  const writeContext =
+    context.writeContext ?? (state.isSupervisor() ? SUPERVISOR_DATA_WRITE : USER_DATA_WRITE);
 
   if (eaClass === 'none') {
     throw new RangeError(`Illegal effective address mode ${normalizedMode}/${normalizedRegister}`);
@@ -209,12 +233,12 @@ export function resolveEffectiveAddress(
     register: normalizedRegister,
     address,
     read: () => {
-      const value = readMemory(bus, address, size);
+      const value = readMemory(bus, address, size, readContext);
       applyPostIncrement();
       return value;
     },
     write: (value) => {
-      writeMemory(bus, address, value, size);
+      writeMemory(bus, address, value, size, writeContext);
       applyPostIncrement();
     },
     resolveAddress: () => address,

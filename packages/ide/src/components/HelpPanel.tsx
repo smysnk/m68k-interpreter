@@ -56,15 +56,19 @@ const HelpPanel: React.FC = () => {
       </div>
 
       <div className="help-panel-section">
-        <h3>MC68000 And Easy68K Support</h3>
+        <h3>MC68000 And MC68010 Support</h3>
         <ul className="help-panel-list">
           <li>
             Assembler compatibility for standalone labels, `END &lt;label&gt;`, `EQU`, `DC.B/W/L`,
             `DS.B/W/L`, and character immediates.
           </li>
           <li>
-            The strict core implements every MC68000 instruction form in the generated ISA manifest.
-            MC68010 additions depend only on the selected CPU model.
+            The strict core implements all 116 tracked MC68000 forms and all seven tracked
+            MC68010-specific forms. Select either CPU independently of the machine profile.
+          </li>
+          <li>
+            MC68010 mode exposes VBR, SFC, and DFC, VBR-relative vectors, format-aware exception
+            frames, and restartable bus/address faults.
           </li>
           <li>
             Easy68K trap tasks used by Nibbles: `TRAP #15` tasks `1`, `3`, and `4`, plus `TRAP #11`
@@ -98,8 +102,8 @@ const HelpPanel: React.FC = () => {
             Hardware I/O Board are not implemented.
           </li>
           <li>
-            Exact address-error microcycles, internal frame words, and prefetch-stage attribution
-            remain temporal-conformance quarantines.
+            Pin-level bus timing, arbitration, prefetch-stage attribution, and transparent loop-mode
+            fetch suppression are outside the functionally complete CPU contract.
           </li>
           <li>
             The IDE currently uses the internal fixed-grid terminal adapter surface; broader display

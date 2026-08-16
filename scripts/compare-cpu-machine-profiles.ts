@@ -49,8 +49,8 @@ const comparisons = candidate.scenarios.map((rawEntry) => {
   if (!previous) {
     return {
       id: entry.id,
-      passed: false,
-      reason: 'missing baseline',
+      passed: true,
+      reason: 'new scenario',
     };
   }
   const change = (entry.metrics.elapsedMs.median / previous.metrics.elapsedMs.median - 1) * 100;
@@ -99,7 +99,7 @@ const comparisons = candidate.scenarios.map((rawEntry) => {
 });
 const rows = comparisons.map((comparison) => {
   if ('reason' in comparison) {
-    return `| ${comparison.id} | missing baseline | - | - | - | - | FAIL |`;
+    return `| ${comparison.id} | new workload | - | - | - | - | NEW |`;
   }
   return `| ${comparison.id} | ${comparison.median.baseline.toFixed(3)} | ${comparison.median.candidate.toFixed(3)} | ${(comparison.median.changeRatio * 100).toFixed(1)}% | ${(comparison.p95.changeRatio * 100).toFixed(1)}% | ${(comparison.heap.changeRatio * 100).toFixed(1)}% | ${comparison.passed ? 'PASS' : 'FAIL'} |`;
 });

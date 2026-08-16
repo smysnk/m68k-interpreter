@@ -16,6 +16,11 @@ import {
   truncate,
 } from './alu';
 import { evaluateBranchCondition, evaluateConditionCode } from './conditions';
+import {
+  controlRegisterFromSelector,
+  maskControlRegisterValue,
+  type Mc68010ControlRegister,
+} from './controlRegisters';
 import { decodeBinaryInstruction, type DecodedBinaryInstruction } from './decoder';
 import {
   classifyEffectiveAddress,
@@ -23,8 +28,31 @@ import {
   resolveEffectiveAddress,
 } from './effectiveAddress';
 import { InstructionStream } from './instructionStream';
-import { BusFault, type MemoryBus, RamBus } from './memoryBus';
-import { M68000State, type M68000StateOptions } from './state';
+import {
+  SUPERVISOR_DATA_READ,
+  SUPERVISOR_DATA_WRITE,
+  SUPERVISOR_PROGRAM_FETCH,
+  USER_DATA_READ,
+  USER_DATA_WRITE,
+  USER_PROGRAM_FETCH,
+  BusFault,
+  type BusAccessContext,
+  type BusFunctionCode,
+  type MemoryBus,
+  RamBus,
+} from './memoryBus';
+import { M68000State, type CpuStateSnapshot, type M68000StateOptions } from './state';
+
+const FUNCTION_CODE_READ = Array.from(
+  { length: 8 },
+  (_, functionCode) =>
+    ({ operation: 'read', functionCode: functionCode as BusFunctionCode }) as const
+);
+const FUNCTION_CODE_WRITE = Array.from(
+  { length: 8 },
+  (_, functionCode) =>
+    ({ operation: 'write', functionCode: functionCode as BusFunctionCode }) as const
+);
 
 export interface StrictM68000CoreOptions {
   bus?: MemoryBus;
@@ -38,18 +66,38 @@ export class StrictM68000Core {
   readonly bus: MemoryBus;
   readonly state: M68000State;
   readonly cpuModel: CpuModel;
+  step: () => StepResult;
   private stopped = false;
   private pendingInterruptLevel = 0;
   private programEndAddress: number | undefined;
   private readonly decodeCache = new Map<
     number,
-    { opcode: number; extension: number; instruction: DecodedBinaryInstruction }
+    {
+      opcode: number;
+      extension: number;
+      instruction: DecodedBinaryInstruction;
+      requiresTransaction: boolean;
+    }
   >();
+  private readonly instructionCheckpoint: CpuStateSnapshot = {
+    d: new Array<number>(8).fill(0),
+    a: new Array<number>(8).fill(0),
+    pc: 0,
+    sr: 0,
+    usp: 0,
+    ssp: 0,
+    vbr: 0,
+    sfc: 0,
+    dfc: 0,
+  };
+  private instructionTransactionActive = false;
+  private instructionTransaction: unknown;
 
   constructor(options: StrictM68000CoreOptions = {}) {
     this.bus = options.bus ?? new RamBus();
     this.state = new M68000State(options.state);
     this.cpuModel = options.cpuModel ?? options.profile ?? 'm68000';
+    this.step = this.executeStep;
   }
 
   loadProgram(image: ProgramImage): void {
@@ -59,27 +107,87 @@ export class StrictM68000Core {
     this.programEndAddress = image.endAddress;
   }
 
-  private faultResult(fault: CpuFault, stackedPc = this.state.pc): StepResult {
+  private fetchAccess(): BusAccessContext {
+    return this.state.isSupervisor() ? SUPERVISOR_PROGRAM_FETCH : USER_PROGRAM_FETCH;
+  }
+
+  private dataReadAccess(): BusAccessContext {
+    return this.state.isSupervisor() ? SUPERVISOR_DATA_READ : USER_DATA_READ;
+  }
+
+  private dataWriteAccess(): BusAccessContext {
+    return this.state.isSupervisor() ? SUPERVISOR_DATA_WRITE : USER_DATA_WRITE;
+  }
+
+  private vectorAddress(vector: number): number {
+    const base = this.cpuModel === 'm68010' ? this.state.vbr : 0;
+    return (base + vector * 4) >>> 0;
+  }
+
+  private pushNormalExceptionFrame(vector: number, stackedPc: number, oldSr: number): void {
+    if (this.cpuModel === 'm68010') this.push16(vector << 2);
+    this.push32(stackedPc >>> 0);
+    this.push16(oldSr);
+  }
+
+  private pushFaultExceptionFrame(
+    vector: number,
+    stackedPc: number,
+    oldSr: number,
+    fault: BusFault
+  ): void {
+    if (this.cpuModel !== 'm68010') {
+      this.pushNormalExceptionFrame(vector, stackedPc, oldSr);
+      return;
+    }
+
+    const frameSize = 58;
+    const frameAddress = ((this.state.a[7] >>> 0) - frameSize) >>> 0;
+    this.state.a[7] = frameAddress | 0;
+    const write = (offset: number, value: number): void =>
+      this.bus.write16(frameAddress + offset, value, this.dataWriteAccess());
+    const functionCode =
+      fault.functionCode ??
+      (fault.access === 'fetch'
+        ? this.fetchAccess().functionCode
+        : fault.access === 'write'
+          ? this.dataWriteAccess().functionCode
+          : this.dataReadAccess().functionCode) ??
+      0;
+    const specialStatus =
+      (fault.access === 'write' ? 0 : 0x0100) |
+      (fault.access === 'fetch' ? 0x2000 : 0) |
+      functionCode;
+
+    write(0, oldSr);
+    this.bus.write32(frameAddress + 2, stackedPc, this.dataWriteAccess());
+    write(6, 0x8000 | (vector << 2));
+    write(8, specialStatus);
+    this.bus.write32(frameAddress + 10, fault.address, this.dataWriteAccess());
+    for (let offset = 14; offset < frameSize; offset += 2) write(offset, 0);
+  }
+
+  private faultResult(fault: CpuFault, stackedPc = this.state.pc, busFault?: BusFault): StepResult {
     if (fault.vector !== undefined) {
       const snapshot = this.state.snapshot();
       const wasStopped = this.stopped;
       try {
         const oldSr = this.state.sr;
         this.state.sr = (oldSr | 0x2000) & 0x7fff;
-        this.push32(stackedPc >>> 0);
-        this.push16(oldSr);
-        this.state.pc = this.bus.read32(fault.vector * 4, 'fetch') & 0x00ff_ffff;
+        if (busFault !== undefined) {
+          this.pushFaultExceptionFrame(fault.vector, stackedPc, oldSr, busFault);
+        } else {
+          this.pushNormalExceptionFrame(fault.vector, stackedPc, oldSr);
+        }
+        this.state.pc =
+          this.bus.read32(this.vectorAddress(fault.vector), this.fetchAccess()) & 0x00ff_ffff;
         this.stopped = false;
-      } catch {
+      } catch (error) {
         // A fault while building an exception frame would halt a physical
         // MC68000. Preserve the original structured fault for the caller.
-        this.state.sr = snapshot.sr;
-        this.state.d.set(snapshot.d);
-        this.state.a.set(snapshot.a);
-        this.state.pc = snapshot.pc;
-        this.state.usp = snapshot.usp;
-        this.state.ssp = snapshot.ssp;
+        this.state.restore(snapshot);
         this.stopped = wasStopped;
+        if (this.cpuModel === 'm68010' && error instanceof BusFault) throw error;
       }
     }
     return {
@@ -89,33 +197,37 @@ export class StrictM68000Core {
     };
   }
 
-  private busFaultResult(error: BusFault): StepResult {
-    return this.faultResult({
-      code: error.code,
-      message: error.message,
-      vector: error.code === 'address-error' ? 3 : 2,
-      address: error.address,
-    });
+  private busFaultResult(error: BusFault, stackedPc = this.state.pc): StepResult {
+    return this.faultResult(
+      {
+        code: error.code,
+        message: error.message,
+        vector: error.code === 'address-error' ? 3 : 2,
+        address: error.address,
+      },
+      stackedPc,
+      error
+    );
   }
 
   private push32(value: number): void {
     this.state.a[7] = (this.state.a[7] - 4) | 0;
-    this.bus.write32(this.state.a[7] >>> 0, value);
+    this.bus.write32(this.state.a[7] >>> 0, value, this.dataWriteAccess());
   }
 
   private push16(value: number): void {
     this.state.a[7] = (this.state.a[7] - 2) | 0;
-    this.bus.write16(this.state.a[7] >>> 0, value);
+    this.bus.write16(this.state.a[7] >>> 0, value, this.dataWriteAccess());
   }
 
   private pop32(): number {
-    const value = this.bus.read32(this.state.a[7] >>> 0);
+    const value = this.bus.read32(this.state.a[7] >>> 0, this.dataReadAccess());
     this.state.a[7] = (this.state.a[7] + 4) | 0;
     return value;
   }
 
   private pop16(): number {
-    const value = this.bus.read16(this.state.a[7] >>> 0);
+    const value = this.bus.read16(this.state.a[7] >>> 0, this.dataReadAccess());
     this.state.a[7] = (this.state.a[7] + 2) | 0;
     return value;
   }
@@ -136,12 +248,13 @@ export class StrictM68000Core {
     const mask = (this.state.sr >>> 8) & 0x7;
     if (level === 0 || (level !== 7 && level <= mask)) return undefined;
 
+    if (this.cpuModel === 'm68010') this.beginInstructionTransaction();
     this.pendingInterruptLevel = 0;
     const oldSr = this.state.sr;
     this.state.sr = ((oldSr | 0x2000) & 0x78ff) | (level << 8);
-    this.push32(this.state.pc);
-    this.push16(oldSr);
-    this.state.pc = this.bus.read32((24 + level) * 4, 'fetch') & 0x00ff_ffff;
+    this.pushNormalExceptionFrame(24 + level, this.state.pc, oldSr);
+    this.state.pc =
+      this.bus.read32(this.vectorAddress(24 + level), this.fetchAccess()) & 0x00ff_ffff;
     this.stopped = false;
     return {
       kind: 'exception',
@@ -344,12 +457,162 @@ export class StrictM68000Core {
     else this.state.a[index - 8] = value | 0;
   }
 
-  step(): StepResult {
+  private readControlRegister(register: Mc68010ControlRegister): number {
+    switch (register) {
+      case 'sfc':
+        return this.state.sfc;
+      case 'dfc':
+        return this.state.dfc;
+      case 'usp':
+        return this.state.usp >>> 0;
+      case 'vbr':
+        return this.state.vbr >>> 0;
+    }
+  }
+
+  private writeControlRegister(register: Mc68010ControlRegister, value: number): void {
+    const masked = maskControlRegisterValue(register, value);
+    switch (register) {
+      case 'sfc':
+        this.state.sfc = masked;
+        break;
+      case 'dfc':
+        this.state.dfc = masked;
+        break;
+      case 'usp':
+        this.state.usp = masked;
+        break;
+      case 'vbr':
+        this.state.vbr = masked;
+        break;
+    }
+  }
+
+  private instructionRequiresTransaction(instruction: DecodedBinaryInstruction): boolean {
+    const directOrImmediate = (mode: number, register: number): boolean => {
+      const eaClass = classifyEffectiveAddress(mode, register);
+      return (
+        eaClass === 'data-register' || eaClass === 'address-register' || eaClass === 'immediate'
+      );
+    };
+
+    switch (instruction.kind) {
+      case 'nop':
+      case 'moveq':
+      case 'dbcc':
+      case 'register-shift':
+      case 'exg':
+      case 'ext':
+      case 'swap':
+      case 'immediate-status':
+      case 'movec':
+      case 'stop':
+      case 'reset':
+        return false;
+      case 'rtd':
+      case 'rts':
+      case 'rte':
+      case 'illegal':
+      case 'trap':
+      case 'trapv':
+      case 'unimplemented':
+      case 'bkpt':
+        return true;
+      case 'branch':
+        return instruction.condition === 'bsr';
+      case 'move':
+        return !(
+          directOrImmediate(instruction.sourceMode, instruction.sourceRegister) &&
+          directOrImmediate(instruction.destinationMode, instruction.destinationRegister)
+        );
+      case 'movea':
+        return !directOrImmediate(instruction.sourceMode, instruction.sourceRegister);
+      case 'binary-alu':
+      case 'address-alu':
+      case 'immediate-data':
+      case 'quick':
+      case 'unary':
+      case 'unary-extend':
+      case 'multiply-divide':
+      case 'chk':
+      case 'tas':
+      case 'scc':
+      case 'bit':
+        return !directOrImmediate(instruction.mode, instruction.register);
+      case 'rotate-extend':
+        return instruction.memory;
+      case 'move-status':
+      case 'move-from-ccr':
+        return !directOrImmediate(instruction.mode, instruction.register);
+      default:
+        return true;
+    }
+  }
+
+  private beginInstructionTransaction(): void {
+    if (this.instructionTransactionActive) return;
+    this.state.snapshot(this.instructionCheckpoint);
+    this.instructionTransactionActive = true;
+    this.instructionTransaction = this.bus.beginInstructionTransaction?.();
+    this.step = this.commitTransactionThenExecuteStep;
+  }
+
+  private commitTransactionThenExecuteStep(): StepResult {
+    this.bus.commitInstructionTransaction?.(this.instructionTransaction);
+    this.instructionTransactionActive = false;
+    this.instructionTransaction = undefined;
+    this.step = this.executeStep;
+    return this.executeStep();
+  }
+
+  private beginRestartableInstructionForSelectedModel(): void {
+    if (this.cpuModel === 'm68010') this.beginInstructionTransaction();
+  }
+
+  private decodeAndCacheInstruction(
+    address: number,
+    opcode: number,
+    extension: number
+  ): {
+    opcode: number;
+    extension: number;
+    instruction: DecodedBinaryInstruction;
+    requiresTransaction: boolean;
+  } {
+    const instructionBytes = Uint8Array.of(
+      (opcode >>> 8) & 0xff,
+      opcode & 0xff,
+      (extension >>> 8) & 0xff,
+      extension & 0xff
+    );
+    const instruction = decodeBinaryInstruction(instructionBytes);
+    const entry = {
+      opcode,
+      extension,
+      instruction,
+      requiresTransaction: this.instructionRequiresTransaction(instruction),
+    };
+    this.decodeCache.set(address, entry);
+    return entry;
+  }
+
+  private executeStep(): StepResult {
     try {
       const interrupt = this.servicePendingInterrupt();
       if (interrupt !== undefined) return interrupt;
     } catch (error) {
-      if (error instanceof BusFault) return this.busFaultResult(error);
+      if (error instanceof BusFault) {
+        if (this.cpuModel === 'm68010' && this.instructionTransactionActive) {
+          this.bus.rollbackInstructionTransaction?.(this.instructionTransaction);
+          const stackedPc = this.instructionCheckpoint.pc;
+          this.state.restore(this.instructionCheckpoint);
+          this.instructionTransactionActive = false;
+          this.instructionTransaction = undefined;
+          this.step = this.executeStep;
+          return this.busFaultResult(error, stackedPc);
+        }
+        return this.busFaultResult(error);
+      }
       throw error;
     }
 
@@ -367,26 +630,30 @@ export class StrictM68000Core {
     const pcBefore = this.state.pc >>> 0;
 
     try {
-      const opcode = this.bus.read16(pcBefore, 'fetch');
+      const fetchAccess = this.fetchAccess();
+      const opcode = this.bus.read16(pcBefore, fetchAccess);
       const needsExtension =
-        opcode === 0x4e72 || ((opcode & 0xf000) === 0x6000 && (opcode & 0xff) === 0);
-      const extension = needsExtension ? this.bus.read16(pcBefore + 2, 'fetch') : 0;
+        opcode === 0x4e72 ||
+        (opcode & 0xfffe) === 0x4e7a ||
+        (opcode & 0xff00) === 0x0e00 ||
+        ((opcode & 0xf000) === 0x6000 && (opcode & 0xff) === 0);
+      const extension = needsExtension ? this.bus.read16(pcBefore + 2, fetchAccess) : 0;
       const cached = this.decodeCache.get(pcBefore);
       let instruction: DecodedBinaryInstruction;
+      let requiresTransaction: boolean;
       if (cached?.opcode === opcode && cached.extension === extension) {
         instruction = cached.instruction;
+        requiresTransaction = cached.requiresTransaction;
       } else {
-        const instructionBytes = Uint8Array.of(
-          (opcode >>> 8) & 0xff,
-          opcode & 0xff,
-          (extension >>> 8) & 0xff,
-          extension & 0xff
-        );
-        instruction = decodeBinaryInstruction(instructionBytes);
-        this.decodeCache.set(pcBefore, { opcode, extension, instruction });
+        const decoded = this.decodeAndCacheInstruction(pcBefore, opcode, extension);
+        instruction = decoded.instruction;
+        requiresTransaction = decoded.requiresTransaction;
+      }
+      if (requiresTransaction) {
+        this.beginRestartableInstructionForSelectedModel();
       }
       const nextPc = (pcBefore + instruction.length) & 0x00ff_ffff;
-      const stream = new InstructionStream(this.bus, pcBefore + 2);
+      const stream = new InstructionStream(this.bus, pcBefore + 2, fetchAccess);
 
       switch (instruction.kind) {
         case 'nop':
@@ -1290,13 +1557,16 @@ export class StrictM68000Core {
             if (predecrement) address = (address - instruction.size) >>> 0;
             if (instruction.direction === 'registers-to-memory') {
               const value = this.readRegister(registerIndex);
-              if (instruction.size === 2) this.bus.write16(address, value);
-              else this.bus.write32(address, value);
+              if (instruction.size === 2) {
+                this.bus.write16(address, value, this.dataWriteAccess());
+              } else {
+                this.bus.write32(address, value, this.dataWriteAccess());
+              }
             } else {
               const value =
                 instruction.size === 2
-                  ? signExtend(this.bus.read16(address), 2)
-                  : this.bus.read32(address) | 0;
+                  ? signExtend(this.bus.read16(address, this.dataReadAccess()), 2)
+                  : this.bus.read32(address, this.dataReadAccess()) | 0;
               this.writeRegister(registerIndex, value);
             }
             if (!predecrement) address = (address + instruction.size) >>> 0;
@@ -1467,7 +1737,7 @@ export class StrictM68000Core {
           if (this.cpuModel !== 'm68010') {
             return this.faultResult({
               code: 'illegal-instruction',
-              message: 'RTD requires the MC68010 extension profile',
+              message: 'RTD requires the MC68010 CPU model',
               vector: 4,
             });
           }
@@ -1477,11 +1747,145 @@ export class StrictM68000Core {
           this.state.pc = restoredPc & 0x00ff_ffff;
           return { kind: 'executed', pcBefore, pcAfter: this.state.pc, cycles: 16 };
         }
+        case 'bkpt':
+          if (this.cpuModel !== 'm68010') {
+            return this.faultResult({
+              code: 'illegal-instruction',
+              message: 'BKPT requires the MC68010 CPU model',
+              vector: 4,
+            });
+          }
+          this.bus.breakpointAcknowledge?.(instruction.vector);
+          return this.faultResult({
+            code: 'illegal-instruction',
+            message: `BKPT #${instruction.vector} breakpoint acknowledge was not externally handled`,
+            vector: 4,
+          });
+        case 'movec': {
+          if (this.cpuModel !== 'm68010') {
+            return this.faultResult({
+              code: 'illegal-instruction',
+              message: 'MOVEC requires the MC68010 CPU model',
+              vector: 4,
+            });
+          }
+          if (!this.state.isSupervisor()) {
+            return this.faultResult({
+              code: 'privilege-violation',
+              message: 'MOVEC requires supervisor mode',
+              vector: 8,
+            });
+          }
+          stream.readWord();
+          const controlRegister = controlRegisterFromSelector(instruction.controlRegister);
+          if (controlRegister === undefined) {
+            return this.faultResult({
+              code: 'illegal-instruction',
+              message: `Illegal MC68010 control-register selector $${instruction.controlRegister
+                .toString(16)
+                .padStart(3, '0')}`,
+              vector: 4,
+            });
+          }
+          if (instruction.direction === 'control-to-register') {
+            this.writeRegister(
+              instruction.generalRegister,
+              this.readControlRegister(controlRegister)
+            );
+          } else {
+            this.writeControlRegister(
+              controlRegister,
+              this.readRegister(instruction.generalRegister)
+            );
+          }
+          this.state.pc = stream.cursor;
+          return {
+            kind: 'executed',
+            pcBefore,
+            pcAfter: this.state.pc,
+            cycles: instruction.direction === 'control-to-register' ? 12 : 10,
+          };
+        }
+        case 'moves': {
+          if (this.cpuModel !== 'm68010') {
+            return this.faultResult({
+              code: 'illegal-instruction',
+              message: 'MOVES requires the MC68010 CPU model',
+              vector: 4,
+            });
+          }
+          if (!this.state.isSupervisor()) {
+            return this.faultResult({
+              code: 'privilege-violation',
+              message: 'MOVES requires supervisor mode',
+              vector: 8,
+            });
+          }
+          const allowed = [
+            'address-indirect',
+            'postincrement',
+            'predecrement',
+            'displacement',
+            'indexed',
+            'absolute-short',
+            'absolute-long',
+          ] as const;
+          if (!isEffectiveAddressAllowed(instruction.mode, instruction.register, allowed)) {
+            return this.faultResult({
+              code: 'illegal-instruction',
+              message: 'MOVES requires a memory-alterable effective address',
+              vector: 4,
+            });
+          }
+          stream.readWord();
+          const readContext = FUNCTION_CODE_READ[this.state.sfc];
+          const writeContext = FUNCTION_CODE_WRITE[this.state.dfc];
+          const operand = resolveEffectiveAddress(instruction.mode, instruction.register, {
+            state: this.state,
+            bus: this.bus,
+            stream,
+            size: instruction.size,
+            access: instruction.direction === 'memory-to-register' ? 'read' : 'write',
+            readContext,
+            writeContext,
+          });
+          if (instruction.direction === 'memory-to-register') {
+            const value = operand.read();
+            if (instruction.generalRegister < 8) {
+              const registerValue = this.state.d[instruction.generalRegister];
+              this.state.d[instruction.generalRegister] =
+                instruction.size === 4
+                  ? value | 0
+                  : instruction.size === 2
+                    ? (registerValue & 0xffff_0000) | (value & 0xffff)
+                    : (registerValue & 0xffff_ff00) | (value & 0xff);
+            } else {
+              this.state.a[instruction.generalRegister - 8] =
+                instruction.size === 4 ? value | 0 : signExtend(value, instruction.size);
+            }
+          } else {
+            let value = this.readRegister(instruction.generalRegister);
+            const sameAddressRegister = instruction.generalRegister === instruction.register + 8;
+            if (sameAddressRegister && (instruction.mode === 3 || instruction.mode === 4)) {
+              const step =
+                instruction.size === 1 && instruction.register === 7 ? 2 : instruction.size;
+              value = instruction.mode === 3 ? value + step : value - step;
+            }
+            operand.write(value);
+          }
+          this.state.pc = stream.cursor;
+          return {
+            kind: 'executed',
+            pcBefore,
+            pcAfter: this.state.pc,
+            cycles: instruction.size === 4 ? 22 : 18,
+          };
+        }
         case 'move-from-ccr': {
           if (this.cpuModel !== 'm68010') {
             return this.faultResult({
               code: 'illegal-instruction',
-              message: 'MOVE from CCR requires the MC68010 extension profile',
+              message: 'MOVE from CCR requires the MC68010 CPU model',
               vector: 4,
             });
           }
@@ -1537,10 +1941,14 @@ export class StrictM68000Core {
             'absolute-short',
             'absolute-long',
           ] as const;
-          if (instruction.direction === 'to-sr' && !this.state.isSupervisor()) {
+          if (
+            (instruction.direction === 'to-sr' ||
+              (instruction.direction === 'from-sr' && this.cpuModel === 'm68010')) &&
+            !this.state.isSupervisor()
+          ) {
             return this.faultResult({
               code: 'privilege-violation',
-              message: 'MOVE to SR requires supervisor mode',
+              message: `MOVE ${instruction.direction === 'from-sr' ? 'from' : 'to'} SR requires supervisor mode`,
               vector: 8,
             });
           }
@@ -1583,7 +1991,8 @@ export class StrictM68000Core {
           if (instruction.direction === 'memory-to-register') {
             let value = 0;
             for (let index = 0; index < instruction.size; index += 1) {
-              value = (value * 0x100 + this.bus.read8(address + index * 2)) >>> 0;
+              value =
+                (value * 0x100 + this.bus.read8(address + index * 2, this.dataReadAccess())) >>> 0;
             }
             this.state.d[instruction.dataRegister] =
               instruction.size === 2
@@ -1593,7 +2002,7 @@ export class StrictM68000Core {
             const value = this.state.d[instruction.dataRegister] >>> 0;
             for (let index = 0; index < instruction.size; index += 1) {
               const shift = (instruction.size - index - 1) * 8;
-              this.bus.write8(address + index * 2, value >>> shift);
+              this.bus.write8(address + index * 2, value >>> shift, this.dataWriteAccess());
             }
           }
           this.state.pc = stream.cursor;
@@ -1741,6 +2150,43 @@ export class StrictM68000Core {
             });
           }
           {
+            if (this.cpuModel === 'm68010') {
+              const frameAddress = this.state.a[7] >>> 0;
+              const formatWord = this.bus.read16(frameAddress + 6, this.dataReadAccess());
+              const format = formatWord >>> 12;
+              if (format !== 0 && format !== 8) {
+                return this.faultResult({
+                  code: 'format-error',
+                  message: `Unsupported MC68010 exception-frame format ${format.toString(16)}`,
+                  vector: 14,
+                });
+              }
+              if (format === 8) {
+                const versionWord = this.bus.read16(frameAddress + 26, this.dataReadAccess());
+                if (((versionWord >>> 10) & 0xf) !== 0) {
+                  return this.faultResult({
+                    code: 'format-error',
+                    message: 'Unsupported MC68010 format-8 frame version',
+                    vector: 14,
+                  });
+                }
+                for (let offset = 8; offset < 58; offset += 2) {
+                  this.bus.read16(frameAddress + offset, this.dataReadAccess());
+                }
+              }
+              const restoredSr = this.bus.read16(frameAddress, this.dataReadAccess());
+              const restoredPc = this.bus.read32(frameAddress + 2, this.dataReadAccess());
+              const frameSize = format === 8 ? 58 : 8;
+              this.state.a[7] = (frameAddress + frameSize) | 0;
+              this.state.sr = restoredSr;
+              this.state.pc = restoredPc & 0x00ff_ffff;
+              return {
+                kind: 'executed',
+                pcBefore,
+                pcAfter: this.state.pc,
+                cycles: format === 8 ? 38 : 20,
+              };
+            }
             const restoredSr = this.pop16();
             const restoredPc = this.pop32();
             this.state.sr = restoredSr;
@@ -1769,6 +2215,15 @@ export class StrictM68000Core {
       }
     } catch (error) {
       if (error instanceof BusFault) {
+        if (this.cpuModel === 'm68010' && this.instructionTransactionActive) {
+          this.bus.rollbackInstructionTransaction?.(this.instructionTransaction);
+          const stackedPc = this.instructionCheckpoint.pc;
+          this.state.restore(this.instructionCheckpoint);
+          this.instructionTransactionActive = false;
+          this.instructionTransaction = undefined;
+          this.step = this.executeStep;
+          return this.busFaultResult(error, stackedPc);
+        }
         return this.busFaultResult(error);
       }
       throw error;

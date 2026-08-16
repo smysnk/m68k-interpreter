@@ -31,8 +31,13 @@ export class RuntimeUnavailableError extends Error {
 }
 
 export class StaleRuntimeCommandError extends Error {
-  constructor(readonly submittedEpoch: number, readonly currentEpoch: number) {
-    super(`Runtime command belongs to stale epoch ${submittedEpoch}; current epoch is ${currentEpoch}`);
+  constructor(
+    readonly submittedEpoch: number,
+    readonly currentEpoch: number
+  ) {
+    super(
+      `Runtime command belongs to stale epoch ${submittedEpoch}; current epoch is ${currentEpoch}`
+    );
     this.name = 'StaleRuntimeCommandError';
   }
 }
@@ -385,6 +390,16 @@ export class RuntimeCommandPort {
         runtime.setRegisterValue(register, value);
       } else {
         runtime.getRegisters()[register] = value;
+      }
+    });
+  }
+
+  setControlRegisterValue(register: 'vbr' | 'sfc' | 'dfc', value: number): Promise<void> {
+    return this.enqueue(async (runtime) => {
+      if (runtime.controller) {
+        await runtime.controller.requestSetControlRegisterValue(register, value);
+      } else if (runtime.setControlRegisterValue) {
+        runtime.setControlRegisterValue(register, value);
       }
     });
   }

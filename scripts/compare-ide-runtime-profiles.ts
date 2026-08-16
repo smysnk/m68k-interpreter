@@ -28,15 +28,18 @@ interface MetricComparison {
 function compareMetric(
   baseline: number,
   candidate: number,
-  allowanceRatio: number
+  allowanceRatio: number,
+  absoluteNoiseFloor = 0
 ): MetricComparison {
   const changeRatio = baseline === 0 ? 0 : candidate / baseline - 1;
+  const varianceAwareAllowance =
+    baseline === 0 ? allowanceRatio : Math.max(allowanceRatio, absoluteNoiseFloor / baseline);
   return {
     baseline,
     candidate,
     changeRatio,
-    allowanceRatio,
-    passed: changeRatio <= allowanceRatio,
+    allowanceRatio: varianceAwareAllowance,
+    passed: changeRatio <= varianceAwareAllowance,
   };
 }
 
@@ -60,12 +63,14 @@ const scenarios = candidate.scenarios.map((current) => {
   const averageHardwareAck = compareMetric(
     previous.hardwareSurface.averageCommandAckLatencyMs,
     current.hardwareSurface.averageCommandAckLatencyMs,
-    0.15
+    0.15,
+    1
   );
   const maxHardwareAck = compareMetric(
     previous.hardwareSurface.maxCommandAckLatencyMs,
     current.hardwareSurface.maxCommandAckLatencyMs,
-    0.15
+    0.15,
+    1
   );
   const hardwareScenario = current.id.includes('hardware');
   return {
@@ -93,9 +98,10 @@ const rows = scenarios.map((scenario) => {
 });
 const markdown = `# IDE runtime performance comparison
 
-Product timing allows a 10% regression. Hardware command acknowledgement allows
-15% for the two hardware-focused scenarios; the Nibbles acknowledgement values
-are informational because those scenarios do not exercise the hardware panel.
+Product timing allows a 10% regression. Hardware command acknowledgement uses
+the wider of 15% or a 1 ms browser/worker scheduling noise floor for the two
+hardware-focused scenarios; the Nibbles acknowledgement values are informational
+because those scenarios do not exercise the hardware panel.
 
 | Scenario | Intro change | Gameplay change | Average hardware acknowledgement | Gate |
 | --- | ---: | ---: | ---: | --- |

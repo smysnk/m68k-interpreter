@@ -26,18 +26,6 @@ Write, step through, and debug m68k assembly — no installation needed.
 - Independently addressable EASy68K panels for seven-segment displays, aligned switches/LEDs/active-low buttons, and CPU interrupt requests
 - Level 1–7 autovector interrupts, SR masking, automatic IRQ scheduling, and `RTE`
 
-## Compatibility and instruction coverage
-
-The CPU can be selected from the bottom status bar.
-
-| CPU selection | MC68000 forms | MC68010 additions |
-| ------------- | ------------: | ----------------: |
-| **MC68000**   |       116/116 |                 0 |
-| **MC68010**   |       116/116 |                 2 |
-
-MC68010 currently adds `RTD` and `MOVE from CCR`. See the generated
-[ISA coverage matrix](docs/generated/M68000_ISA_COVERAGE.md) for per-opcode details.
-
 ## Runtime shape
 
 - the strict byte-addressed core is the single instruction execution authority

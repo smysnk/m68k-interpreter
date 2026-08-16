@@ -44,9 +44,7 @@ describe('StatusBar', () => {
     const user = userEvent.setup();
     renderWithIdeProviders(<StatusBar />);
 
-    await user.click(
-      screen.getByRole('button', { name: 'Emulation mode: MC68000 · Easy68K' })
-    );
+    await user.click(screen.getByRole('button', { name: 'Emulation mode: MC68000 · Easy68K' }));
 
     expect(screen.getByRole('menu', { name: 'Select emulation mode' })).toHaveClass(
       'context-menu-surface',
@@ -57,16 +55,13 @@ describe('StatusBar', () => {
       'true'
     );
 
-    await user.click(screen.getByRole('menuitemradio', { name: 'MC68010 Extensions' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'MC68010' }));
 
     expect(ideStore.getState().settings.cpuModel).toBe('m68010');
     expect(ideStore.getState().settings.machineProfile).toBe('easy68k');
     expect(
-      screen.getByRole('button', { name: 'Emulation mode: MC68010 Extensions · Easy68K' })
-    ).toHaveAttribute(
-      'aria-expanded',
-      'false'
-    );
+      screen.getByRole('button', { name: 'Emulation mode: MC68010 · Easy68K' })
+    ).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('keeps the status bar focused on runtime info rather than program labels', () => {

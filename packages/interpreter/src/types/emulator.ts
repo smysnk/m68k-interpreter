@@ -30,6 +30,9 @@ export interface Registers {
   sr: number; // Status register view
   usp: number; // User stack pointer view
   ssp: number; // Supervisor stack pointer view
+  vbr?: number; // MC68010 vector base register
+  sfc?: number; // MC68010 source function code
+  dfc?: number; // MC68010 destination function code
 }
 
 export interface ConditionFlags {
@@ -110,6 +113,10 @@ export interface Emulator {
   getSR(): number;
   getUSP(): number;
   getSSP(): number;
+  getVBR(): number;
+  getSFC(): number;
+  getDFC(): number;
+  setControlRegisterValue(register: 'vbr' | 'sfc' | 'dfc', value: number): void;
   getMemory(): MemoryCell;
   getMemoryMeta(): MemoryMeta;
   getRuntimeSyncVersions(): RuntimeSyncVersions;

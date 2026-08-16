@@ -271,6 +271,9 @@ function runScenarioUntilStop(
   let steps = 0;
   for (; steps < scenario.maxSteps; steps += 1) {
     const shouldStop = session.emulationStep();
+    if (shouldStop && scenario.continueAfterArchitecturalException && session.getException()) {
+      continue;
+    }
     if (scenario.stopCondition === 'waiting-for-input' && session.isWaitingForInput()) {
       return {
         steps: steps + 1,

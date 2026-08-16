@@ -9,7 +9,7 @@ import {
 describe('registerDescriptors', () => {
   it('defines the expected register groups and visible register inventory', () => {
     expect(REGISTER_GROUPS.map((group) => group.id)).toEqual(['data', 'address', 'control']);
-    expect(getAllRegisterDescriptors()).toHaveLength(21);
+    expect(getAllRegisterDescriptors()).toHaveLength(24);
     expect(getRegisterDescriptorsByGroup('data').map((descriptor) => descriptor.key)).toEqual([
       'd0',
       'd1',
@@ -42,6 +42,21 @@ describe('registerDescriptors', () => {
       bitWidth: 32,
       decimalMode: 'unsigned',
       editable: false,
+    });
+    expect(getRegisterDescriptor('vbr')).toMatchObject({
+      bitWidth: 32,
+      editable: true,
+      minimumCpuModel: 'm68010',
+    });
+    expect(getRegisterDescriptor('sfc')).toMatchObject({
+      bitWidth: 8,
+      editable: true,
+      minimumCpuModel: 'm68010',
+    });
+    expect(getRegisterDescriptor('dfc')).toMatchObject({
+      bitWidth: 8,
+      editable: true,
+      minimumCpuModel: 'm68010',
     });
   });
 });

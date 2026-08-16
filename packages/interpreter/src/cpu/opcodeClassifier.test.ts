@@ -17,7 +17,13 @@ describe('classifyOpcodeWord', () => {
   it('gates MC68010-only opcodes by profile', () => {
     expect(classifyOpcodeWord(0x4e74, 'm68000').status).toBe('profile-illegal');
     expect(classifyOpcodeWord(0x42c0, 'm68000').status).toBe('profile-illegal');
+    expect(classifyOpcodeWord(0x4848, 'm68000').status).toBe('profile-illegal');
+    expect(classifyOpcodeWord(0x4e7a, 'm68000').status).toBe('profile-illegal');
+    expect(classifyOpcodeWord(0x0e10, 'm68000').status).toBe('profile-illegal');
     expect(classifyOpcodeWord(0x4e74, 'm68010').status).toBe('legal');
     expect(classifyOpcodeWord(0x42c0, 'm68010').status).toBe('legal');
+    expect(classifyOpcodeWord(0x484f, 'm68010').status).toBe('legal');
+    expect(classifyOpcodeWord(0x4e7b, 'm68010').status).toBe('legal');
+    expect(classifyOpcodeWord(0x0e90, 'm68010').status).toBe('legal');
   });
 });

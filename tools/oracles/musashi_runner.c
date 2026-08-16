@@ -92,6 +92,11 @@ static unsigned int parse_u32(const char *value) {
   return (unsigned int)parsed;
 }
 
+static unsigned int parse_env_u32(const char *name) {
+  const char *value = getenv(name);
+  return value == NULL ? 0u : parse_u32(value);
+}
+
 static void load_hex(unsigned int address, const char *hex) {
   size_t length = strlen(hex);
   size_t index;
@@ -124,7 +129,10 @@ int main(int argc, char **argv) {
   load_hex(pc, argv[1]);
 
   m68k_init();
-  m68k_set_cpu_type(M68K_CPU_TYPE_68000);
+  m68k_set_cpu_type(
+    getenv("M68K_CPU_MODEL") != NULL && strcmp(getenv("M68K_CPU_MODEL"), "m68010") == 0
+      ? M68K_CPU_TYPE_68010
+      : M68K_CPU_TYPE_68000);
   m68k_pulse_reset();
   m68k_execute(0);
 
@@ -136,6 +144,9 @@ int main(int argc, char **argv) {
   }
   m68k_set_reg(M68K_REG_SR, sr);
   m68k_set_reg(M68K_REG_PC, pc);
+  m68k_set_reg(M68K_REG_VBR, parse_env_u32("M68K_VBR"));
+  m68k_set_reg(M68K_REG_SFC, parse_env_u32("M68K_SFC"));
+  m68k_set_reg(M68K_REG_DFC, parse_env_u32("M68K_DFC"));
   write_count = 0;
 
   cycles = m68k_execute(1);
@@ -150,9 +161,12 @@ int main(int argc, char **argv) {
     if (index != 0) printf(",");
     printf("%u", m68k_get_reg(NULL, (m68k_register_t)(M68K_REG_A0 + index)));
   }
-  printf("],\"pc\":%u,\"sr\":%u,\"cycles\":%d,\"writes\":[",
+  printf("],\"pc\":%u,\"sr\":%u,\"vbr\":%u,\"sfc\":%u,\"dfc\":%u,\"cycles\":%d,\"writes\":[",
          m68k_get_reg(NULL, M68K_REG_PC),
          m68k_get_reg(NULL, M68K_REG_SR),
+         m68k_get_reg(NULL, M68K_REG_VBR),
+         m68k_get_reg(NULL, M68K_REG_SFC),
+         m68k_get_reg(NULL, M68K_REG_DFC),
          cycles);
   for (index = 0; index < write_count; index += 1) {
     if (index != 0) printf(",");

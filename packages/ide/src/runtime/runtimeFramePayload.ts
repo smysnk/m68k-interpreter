@@ -32,7 +32,10 @@ export function buildRegisters(
   ccr: number,
   sr: number,
   usp: number,
-  ssp: number
+  ssp: number,
+  vbr = 0,
+  sfc = 0,
+  dfc = 0
 ): Registers {
   const a7 = values[7] ?? 0;
 
@@ -58,6 +61,9 @@ export function buildRegisters(
     sr,
     usp,
     ssp,
+    vbr,
+    sfc,
+    dfc,
   };
 }
 
@@ -87,6 +93,9 @@ export function buildRuntimeFrameSyncPayload(args: {
   sr: number;
   usp: number;
   ssp: number;
+  vbr?: number;
+  sfc?: number;
+  dfc?: number;
   memory?: MemoryMeta;
   terminal?: TerminalMeta;
   lastInstruction: string;
@@ -112,7 +121,10 @@ export function buildRuntimeFrameSyncPayload(args: {
       args.ccr,
       args.sr,
       args.usp,
-      args.ssp
+      args.ssp,
+      args.vbr ?? 0,
+      args.sfc ?? 0,
+      args.dfc ?? 0
     );
   }
 

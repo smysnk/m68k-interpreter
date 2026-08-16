@@ -101,6 +101,9 @@ export interface RuntimeFrameSyncCache {
   sr: number;
   usp: number;
   ssp: number;
+  vbr: number;
+  sfc: number;
+  dfc: number;
 }
 
 export function createRuntimeFrameSyncCache(): RuntimeFrameSyncCache {
@@ -120,6 +123,9 @@ export function createRuntimeFrameSyncCache(): RuntimeFrameSyncCache {
     sr: Number.NaN,
     usp: Number.NaN,
     ssp: Number.NaN,
+    vbr: Number.NaN,
+    sfc: Number.NaN,
+    dfc: Number.NaN,
   };
 }
 
@@ -150,6 +156,9 @@ function ensureCacheForRuntime(
   cache.sr = Number.NaN;
   cache.usp = Number.NaN;
   cache.ssp = Number.NaN;
+  cache.vbr = Number.NaN;
+  cache.sfc = Number.NaN;
+  cache.dfc = Number.NaN;
   return cache;
 }
 
@@ -166,11 +175,11 @@ export interface RuntimeFrameSyncOptions {
 function hasFrameStorePayload(frame: RuntimeFrameSyncPayload): boolean {
   return Boolean(
     frame.registers ||
-      frame.memory ||
-      frame.flags ||
-      frame.terminal ||
-      frame.executionState ||
-      frame.runtimeMetrics
+    frame.memory ||
+    frame.flags ||
+    frame.terminal ||
+    frame.executionState ||
+    frame.runtimeMetrics
   );
 }
 
@@ -196,8 +205,8 @@ export function applyRuntimeFrameToIde(
   const publishMemorySurface = options.publishMemorySurface ?? true;
   const hardwareVersionChanged = Boolean(
     !syncVersions ||
-      !previousSyncVersions ||
-      previousSyncVersions.hardware !== syncVersions.hardware
+    !previousSyncVersions ||
+    previousSyncVersions.hardware !== syncVersions.hardware
   );
   const nextTerminal = pickRuntimeTerminalMeta(frame, cache);
   const nextMemory = pickRuntimeMemoryMeta(frame, cache);
@@ -244,7 +253,9 @@ export function applyRuntimeFrameToIde(
     cache.lastInstruction = frame.executionState?.lastInstruction ?? cache.lastInstruction;
     cache.errors = frame.executionState?.errors ?? cache.errors;
     cache.exception =
-      frame.executionState?.exception === undefined ? cache.exception : frame.executionState.exception;
+      frame.executionState?.exception === undefined
+        ? cache.exception
+        : frame.executionState.exception;
     if (frame.registers) {
       cache.registers = frame.registers;
     }
@@ -264,24 +275,22 @@ export function applyRuntimeFrameToIde(
         : Date.now()) - syncStartedAt,
     reusedRegisters: Boolean(
       syncVersions &&
-        previousSyncVersions &&
-        previousSyncVersions.registers === syncVersions.registers
+      previousSyncVersions &&
+      previousSyncVersions.registers === syncVersions.registers
     ),
     reusedFlags: Boolean(
       syncVersions &&
-        previousSyncVersions &&
-        previousSyncVersions.registers === syncVersions.registers
+      previousSyncVersions &&
+      previousSyncVersions.registers === syncVersions.registers
     ),
     reusedMemory: Boolean(
-      syncVersions &&
-        previousSyncVersions &&
-        previousSyncVersions.memory === syncVersions.memory
+      syncVersions && previousSyncVersions && previousSyncVersions.memory === syncVersions.memory
     ),
     reusedTerminal: Boolean(
       syncVersions &&
-        previousSyncVersions &&
-        previousSyncVersions.terminal === syncVersions.terminal &&
-        previousSyncVersions.terminalGeometry === syncVersions.terminalGeometry
+      previousSyncVersions &&
+      previousSyncVersions.terminal === syncVersions.terminal &&
+      previousSyncVersions.terminalGeometry === syncVersions.terminalGeometry
     ),
     publishedMemory,
     publishedTerminal,
@@ -304,8 +313,8 @@ export function syncRuntimeFrameToIde(
   if (!suppressRegisterSync && (!registers || !flags)) {
     const registerVersionChanged = Boolean(
       !syncVersions ||
-        !cache?.syncVersions ||
-        cache.syncVersions.registers !== syncVersions.registers
+      !cache?.syncVersions ||
+      cache.syncVersions.registers !== syncVersions.registers
     );
     let registersChanged = registerVersionChanged;
     let ccr = cache?.ccr ?? 0;
@@ -320,6 +329,9 @@ export function syncRuntimeFrameToIde(
       const sr = emulator.getSR();
       const usp = emulator.getUSP();
       const ssp = emulator.getSSP();
+      const vbr = emulator.getVBR?.() ?? 0;
+      const sfc = emulator.getSFC?.() ?? 0;
+      const dfc = emulator.getDFC?.() ?? 0;
       registersChanged =
         !cache ||
         cache.rawRegisters === null ||
@@ -328,6 +340,9 @@ export function syncRuntimeFrameToIde(
         cache.sr !== sr ||
         cache.usp !== usp ||
         cache.ssp !== ssp ||
+        cache.vbr !== vbr ||
+        cache.sfc !== sfc ||
+        cache.dfc !== dfc ||
         !rawRegistersEqual(cache.rawRegisters, rawRegisters);
 
       if (registers === undefined) {
@@ -335,7 +350,7 @@ export function syncRuntimeFrameToIde(
           registers = cache.registers;
           reusedRegisters = true;
         } else {
-          registers = buildRegisters(rawRegisters, pc, ccr, sr, usp, ssp);
+          registers = buildRegisters(rawRegisters, pc, ccr, sr, usp, ssp, vbr, sfc, dfc);
           if (cache) {
             cache.rawRegisters = Int32Array.from(rawRegisters);
             cache.registers = registers;
@@ -344,6 +359,9 @@ export function syncRuntimeFrameToIde(
             cache.sr = sr;
             cache.usp = usp;
             cache.ssp = ssp;
+            cache.vbr = vbr;
+            cache.sfc = sfc;
+            cache.dfc = dfc;
           }
         }
       }
@@ -364,30 +382,26 @@ export function syncRuntimeFrameToIde(
 
   const terminalVersionChanged = Boolean(
     !syncVersions ||
-      !cache?.syncVersions ||
-      cache.syncVersions.terminal !== syncVersions.terminal ||
-      cache.syncVersions.terminalGeometry !== syncVersions.terminalGeometry
+    !cache?.syncVersions ||
+    cache.syncVersions.terminal !== syncVersions.terminal ||
+    cache.syncVersions.terminalGeometry !== syncVersions.terminalGeometry
   );
   const terminal =
     terminalVersionChanged || !cache?.terminal ? emulator.getTerminalMeta() : undefined;
 
   const memoryVersionChanged = Boolean(
-    !syncVersions ||
-      !cache?.syncVersions ||
-      cache.syncVersions.memory !== syncVersions.memory
+    !syncVersions || !cache?.syncVersions || cache.syncVersions.memory !== syncVersions.memory
   );
   const memory = memoryVersionChanged || !cache?.memory ? emulator.getMemoryMeta() : undefined;
   const publishMemorySurface = options.publishMemorySurface ?? true;
 
   const executionChanged = Boolean(
-    !syncVersions ||
-      !cache?.syncVersions ||
-      cache.syncVersions.execution !== syncVersions.execution
+    !syncVersions || !cache?.syncVersions || cache.syncVersions.execution !== syncVersions.execution
   );
   const diagnosticsChanged = Boolean(
     !syncVersions ||
-      !cache?.syncVersions ||
-      cache.syncVersions.diagnostics !== syncVersions.diagnostics
+    !cache?.syncVersions ||
+    cache.syncVersions.diagnostics !== syncVersions.diagnostics
   );
   const shouldIncludeExecutionState =
     executionChanged ||
@@ -399,7 +413,9 @@ export function syncRuntimeFrameToIde(
   const runtimeLastInstruction = emulator.getLastInstruction();
   const runtimeErrors = emulator.getErrors();
   const runtimeException = emulator.getException() ?? null;
-  const lastInstruction = shouldIncludeExecutionState ? runtimeLastInstruction : cache.lastInstruction;
+  const lastInstruction = shouldIncludeExecutionState
+    ? runtimeLastInstruction
+    : cache.lastInstruction;
   const errors = shouldIncludeExecutionState ? runtimeErrors : cache.errors;
   const exception = shouldIncludeExecutionState ? runtimeException : cache.exception;
   const nextExecutionState = shouldIncludeExecutionState

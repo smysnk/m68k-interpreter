@@ -28,7 +28,8 @@ export type EffectiveAddressClass =
   | 'quick-immediate'
   | 'register-list'
   | 'condition-displacement'
-  | 'trap-vector';
+  | 'trap-vector'
+  | 'control-register';
 
 export type StatusFlag = 'x' | 'n' | 'z' | 'v' | 'c';
 

@@ -126,6 +126,25 @@ export type DecodedBinaryInstruction =
     }
   | { kind: 'rtr'; length: 2; opcode: number }
   | { kind: 'rtd'; length: 2; opcode: number }
+  | { kind: 'bkpt'; length: 2; opcode: number; vector: number }
+  | {
+      kind: 'movec';
+      length: 4;
+      opcode: number;
+      direction: 'control-to-register' | 'register-to-control';
+      generalRegister: number;
+      controlRegister: number;
+    }
+  | {
+      kind: 'moves';
+      length: 4;
+      opcode: number;
+      direction: 'memory-to-register' | 'register-to-memory';
+      size: OperandSize;
+      generalRegister: number;
+      mode: number;
+      register: number;
+    }
   | {
       kind: 'move-status';
       length: 2;
@@ -367,6 +386,39 @@ export function decodeBinaryInstruction(bytes: Uint8Array, offset = 0): DecodedB
 
   if ((opcode & 0xfff8) === 0x4e50) {
     return { kind: 'link', length: 2, opcode, register: opcode & 0x7 };
+  }
+
+  if ((opcode & 0xfff8) === 0x4848) {
+    return { kind: 'bkpt', length: 2, opcode, vector: opcode & 0x7 };
+  }
+
+  if ((opcode & 0xfffe) === 0x4e7a) {
+    const extension = readWord(bytes, offset + 2);
+    return {
+      kind: 'movec',
+      length: 4,
+      opcode,
+      direction: (opcode & 1) === 0 ? 'control-to-register' : 'register-to-control',
+      generalRegister: (extension >>> 12) & 0xf,
+      controlRegister: extension & 0x0fff,
+    };
+  }
+
+  if ((opcode & 0xff00) === 0x0e00) {
+    const size = decodeOperandSize((opcode >>> 6) & 0x3);
+    if (size !== undefined) {
+      const extension = readWord(bytes, offset + 2);
+      return {
+        kind: 'moves',
+        length: 4,
+        opcode,
+        direction: (extension & 0x0800) !== 0 ? 'register-to-memory' : 'memory-to-register',
+        size,
+        generalRegister: (extension >>> 12) & 0xf,
+        mode: (opcode >>> 3) & 0x7,
+        register: opcode & 0x7,
+      };
+    }
   }
 
   if ((opcode & 0xfff8) === 0x4e58) {

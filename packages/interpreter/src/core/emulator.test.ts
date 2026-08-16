@@ -1290,6 +1290,24 @@ IRQ7_COUNT DC.B 0
     expect(emulator.emulationStep()).toBe(true);
     expect(emulator.getException()).toContain('Invalid or missing IRQ 3 autovector');
   });
+
+  it('validates Easy68K autovectors relative to the MC68010 VBR', () => {
+    const emulator = new Emulator(
+      `ORG $264
+IRQ1_VECTOR DC.L IRQ1_HANDLER
+ORG $1000
+START BRA START
+IRQ1_HANDLER RTE
+  END START`,
+      { emulation: { cpuModel: 'm68010', machineProfile: 'easy68k' } }
+    );
+    emulator.setControlRegisterValue('vbr', 0x200);
+
+    expect(emulator.requestInterruptLevel(1)).toBe('accepted');
+    expect(emulator.emulationStep()).toBe(false);
+    expect(emulator.getException()).toBeUndefined();
+    expect(emulator.getPC()).toBe(emulator.getSymbolAddress('IRQ1_HANDLER'));
+  });
 });
 
 describe('Emulator strict-core facade', () => {

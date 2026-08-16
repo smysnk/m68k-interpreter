@@ -1,8 +1,17 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createIdeStore, resetFilesState, resetSettingsState, setActiveFile } from '@/store';
+import {
+  createIdeStore,
+  resetFilesState,
+  resetSettingsState,
+  setActiveFile,
+  setCpuModel,
+} from '@/store';
 import { selectFileExplorerModel } from '@/store/fileExplorerSelectors';
 import { selectFlagsPanelModel } from '@/store/flagsSelectors';
-import { selectRegisterFlagsHeadingModel, selectRegisterGroupsModel } from '@/store/registerSelectors';
+import {
+  selectRegisterFlagsHeadingModel,
+  selectRegisterGroupsModel,
+} from '@/store/registerSelectors';
 
 describe('viewSelectors', () => {
   beforeEach(() => {
@@ -55,5 +64,12 @@ describe('viewSelectors', () => {
     expect(heading.currentFlags.map((flag) => flag.label)).toEqual(['X', 'N', 'Z', 'V', 'C']);
     expect(groups.map((group) => group.id)).toEqual(['data', 'address', 'control']);
     expect(groups[0].descriptors).toHaveLength(8);
+    expect(groups[2].descriptors.map((descriptor) => descriptor.key)).not.toContain('vbr');
+
+    store.dispatch(setCpuModel('m68010'));
+    const mc68010Groups = selectRegisterGroupsModel(store.getState());
+    expect(mc68010Groups[2].descriptors.map((descriptor) => descriptor.key)).toEqual(
+      expect.arrayContaining(['vbr', 'sfc', 'dfc'])
+    );
   });
 });

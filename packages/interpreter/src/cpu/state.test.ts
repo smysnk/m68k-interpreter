@@ -19,4 +19,18 @@ describe('MC68000 register state', () => {
     state.a[7] = 0x0ff0;
     expect(state.snapshot()).toMatchObject({ usp: 0x0ff0, ssp: 0x1ff0 });
   });
+
+  it('snapshots and restores MC68010 control state without reallocating a checkpoint', () => {
+    const state = new M68000State({ vbr: 0x1234_0000, sfc: 9, dfc: 6 });
+    const checkpoint = state.snapshot();
+    state.vbr = 0;
+    state.sfc = 0;
+    state.dfc = 0;
+
+    expect(state.snapshot(checkpoint)).toBe(checkpoint);
+    expect(checkpoint).toMatchObject({ vbr: 0, sfc: 0, dfc: 0 });
+
+    state.restore({ ...checkpoint, vbr: 0x1234_0000, sfc: 7, dfc: 6 });
+    expect(state.snapshot()).toMatchObject({ vbr: 0x1234_0000, sfc: 7, dfc: 6 });
+  });
 });

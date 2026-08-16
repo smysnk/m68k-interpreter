@@ -50,6 +50,7 @@ interface FormOptions {
   privileged?: boolean;
   support?: InstructionSupport;
   notes?: string;
+  encoding?: { mask: number; value: number; extensionWords?: number | 'variable' };
 }
 
 function form(mnemonic: string, name: string, options: FormOptions = {}): InstructionForm {
@@ -64,6 +65,7 @@ function form(mnemonic: string, name: string, options: FormOptions = {}): Instru
     privileged: options.privileged,
     support: options.support ?? 'missing',
     notes: options.notes,
+    encoding: options.encoding,
   };
 }
 
@@ -571,6 +573,48 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
     sizes: ['word'],
     source: ['immediate'],
     support: 'extension-only',
+  }),
+  form('BKPT', 'vector', {
+    minimumCpuModel: 'm68010',
+    source: ['trap-vector'],
+    support: 'extension-only',
+    encoding: { mask: 0xfff8, value: 0x4848 },
+  }),
+  form('MOVEC', 'control-to-register', {
+    minimumCpuModel: 'm68010',
+    sizes: ['long'],
+    source: ['control-register'],
+    destination: REGISTER_DIRECT,
+    privileged: true,
+    support: 'extension-only',
+    encoding: { mask: 0xffff, value: 0x4e7a, extensionWords: 1 },
+  }),
+  form('MOVEC', 'register-to-control', {
+    minimumCpuModel: 'm68010',
+    sizes: ['long'],
+    source: REGISTER_DIRECT,
+    destination: ['control-register'],
+    privileged: true,
+    support: 'extension-only',
+    encoding: { mask: 0xffff, value: 0x4e7b, extensionWords: 1 },
+  }),
+  form('MOVES', 'memory-to-register', {
+    minimumCpuModel: 'm68010',
+    sizes: ['byte', 'word', 'long'],
+    source: MEMORY,
+    destination: REGISTER_DIRECT,
+    privileged: true,
+    support: 'extension-only',
+    encoding: { mask: 0xff00, value: 0x0e00, extensionWords: 'variable' },
+  }),
+  form('MOVES', 'register-to-memory', {
+    minimumCpuModel: 'm68010',
+    sizes: ['byte', 'word', 'long'],
+    source: REGISTER_DIRECT,
+    destination: MEMORY,
+    privileged: true,
+    support: 'extension-only',
+    encoding: { mask: 0xff00, value: 0x0e00, extensionWords: 'variable' },
   }),
 ];
 

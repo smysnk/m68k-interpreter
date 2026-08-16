@@ -131,17 +131,30 @@ export type { StrictM68000CoreOptions } from './cpu/core';
 export type {
   AddressRange,
   BusAccess,
+  BusAccessContext,
+  BusAccessInput,
   BusAccessSize,
   BusAccessType,
+  BusFunctionCode,
+  BusTraceEvent,
+  BreakpointAcknowledgeEvent,
   MemoryBus,
   MemoryMappedDevice,
 } from './cpu/memoryBus';
-export type {
-  MachineAdapter,
-  MachineSnapshot,
-  MachineTrapContext,
-} from './machine/machineAdapter';
-export type { M68000StateOptions } from './cpu/state';
+export type { MachineAdapter, MachineSnapshot, MachineTrapContext } from './machine/machineAdapter';
+export type { CpuStateSnapshot, M68000StateOptions } from './cpu/state';
+export {
+  MC68010_CONTROL_REGISTER,
+  controlRegisterFromSelector,
+  maskControlRegisterValue,
+} from './cpu/controlRegisters';
+export type { Mc68010ControlRegister } from './cpu/controlRegisters';
+export {
+  MC68010_ARCHITECTURAL_DIFFERENCES,
+  MC68010_DEFERRED_PHYSICAL_BUS_SCOPE,
+  MC68010_INSTRUCTION_INVENTORY,
+} from './isa/mc68010Inventory';
+export type { Mc68010InstructionInventoryEntry } from './isa/mc68010Inventory';
 export {
   M68000_ISA_MANIFEST,
   MACHINE_COMPATIBILITY_EVIDENCE,
@@ -158,10 +171,7 @@ export {
   normalizeEmulationConfig,
   toLegacyCpuProfile,
 } from './isa/emulationConfig';
-export type {
-  CpuModelDefinition,
-  MachineProfileDefinition,
-} from './isa/emulationConfig';
+export type { CpuModelDefinition, MachineProfileDefinition } from './isa/emulationConfig';
 export type {
   CpuModel,
   CpuProfile,

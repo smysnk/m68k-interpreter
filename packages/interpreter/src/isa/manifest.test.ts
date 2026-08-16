@@ -5,6 +5,7 @@ import {
   summarizeIsaCoverage,
   validateIsaManifest,
 } from './manifest';
+import { MC68010_INSTRUCTION_INVENTORY } from './mc68010Inventory';
 
 describe('MC68000 ISA manifest', () => {
   it('contains unique and structurally valid instruction forms', () => {
@@ -19,9 +20,7 @@ describe('MC68000 ISA manifest', () => {
       support: 'extension-only',
     });
     expect(
-      MACHINE_COMPATIBILITY_EVIDENCE.find(
-        (evidence) => evidence.id === 'easy68k.mode-directive'
-      )
+      MACHINE_COMPATIBILITY_EVIDENCE.find((evidence) => evidence.id === 'easy68k.mode-directive')
     ).toMatchObject({
       machineProfile: 'easy68k',
       support: 'compatibility-only',
@@ -52,7 +51,7 @@ describe('MC68000 ISA manifest', () => {
     expect(summary.totalForms).toBe(M68000_ISA_MANIFEST.length);
     expect(summary.uniqueMnemonics).toBeGreaterThan(50);
     expect(summary.byCpuModel.m68000).toBe(116);
-    expect(summary.byCpuModel.m68010).toBe(2);
+    expect(summary.byCpuModel.m68010).toBe(7);
     expect(summary.machineCompatibility.easy68k).toBe(1);
     expect(summary.bySupport['legacy-only']).toBe(0);
     expect(summary.bySupport['strict-core-partial']).toBe(0);
@@ -62,5 +61,14 @@ describe('MC68000 ISA manifest', () => {
     expect(Object.values(summary.bySupport).reduce((total, count) => total + count, 0)).toBe(
       summary.totalForms
     );
+  });
+
+  it('keeps the generated MC68010 denominator aligned with the ISA manifest', () => {
+    const manifestIds = M68000_ISA_MANIFEST.filter(
+      (instruction) => instruction.minimumCpuModel === 'm68010'
+    )
+      .map((instruction) => instruction.id)
+      .sort();
+    expect(MC68010_INSTRUCTION_INVENTORY.map((entry) => entry.id).sort()).toEqual(manifestIds);
   });
 });

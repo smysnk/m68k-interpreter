@@ -84,6 +84,9 @@ interface WorkerClientCache {
   sr: number;
   usp: number;
   ssp: number;
+  vbr: number;
+  sfc: number;
+  dfc: number;
   memoryMeta: MemoryMeta;
   memoryImage: Record<number, number>;
   terminalMeta: TerminalMeta;
@@ -140,6 +143,9 @@ function createEmptyWorkerClientCache(): WorkerClientCache {
     sr: 0,
     usp: 0,
     ssp: 0,
+    vbr: 0,
+    sfc: 0,
+    dfc: 0,
     memoryMeta: createEmptyMemoryMeta(),
     memoryImage: {},
     terminalMeta: createTerminalMeta(terminalFrameBuffer.columns, terminalFrameBuffer.rows),
@@ -492,6 +498,10 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
     return this.postCommand<void>({ type: 'setRegisterValue', register, value });
   }
 
+  requestSetControlRegisterValue(register: 'vbr' | 'sfc' | 'dfc', value: number): Promise<void> {
+    return this.postCommand<void>({ type: 'setControlRegisterValue', register, value });
+  }
+
   async requestDispatchTouchPacket(
     protocol: TerminalTouchProtocolSymbols,
     packet: TerminalTouchPacket
@@ -598,6 +608,18 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
 
   getSSP(): number {
     return this.cache.ssp;
+  }
+
+  getVBR(): number {
+    return this.cache.vbr;
+  }
+
+  getSFC(): number {
+    return this.cache.sfc;
+  }
+
+  getDFC(): number {
+    return this.cache.dfc;
   }
 
   readMemoryRange(address: number, length: number): Uint8Array {
@@ -762,6 +784,15 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
     }
     if (snapshot.ssp !== undefined) {
       this.cache.ssp = snapshot.ssp;
+    }
+    if (snapshot.vbr !== undefined) {
+      this.cache.vbr = snapshot.vbr;
+    }
+    if (snapshot.sfc !== undefined) {
+      this.cache.sfc = snapshot.sfc;
+    }
+    if (snapshot.dfc !== undefined) {
+      this.cache.dfc = snapshot.dfc;
     }
     if (snapshot.memoryMeta) {
       this.cache.memoryMeta = { ...snapshot.memoryMeta };

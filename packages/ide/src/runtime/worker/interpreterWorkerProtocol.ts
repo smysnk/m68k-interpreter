@@ -69,6 +69,9 @@ export interface WorkerRuntimeSnapshot {
   sr?: number;
   usp?: number;
   ssp?: number;
+  vbr?: number;
+  sfc?: number;
+  dfc?: number;
   memoryMeta?: MemoryMeta;
   memoryImage?: Record<number, number>;
   terminalMeta?: TerminalMeta;
@@ -117,6 +120,12 @@ export type InterpreterWorkerCommand =
   | { id: number; type: 'writeMemoryWord'; address: number; value: number }
   | { id: number; type: 'writeMemoryLong'; address: number; value: number }
   | { id: number; type: 'setRegisterValue'; register: number; value: number }
+  | {
+      id: number;
+      type: 'setControlRegisterValue';
+      register: 'vbr' | 'sfc' | 'dfc';
+      value: number;
+    }
   | { id: number; type: 'setUndoCaptureMode'; mode: UndoCaptureMode; checkpointInterval?: number }
   | { id: number; type: 'configureExecution'; config: WorkerExecutionConfig }
   | { id: number; type: 'pulseExecution'; frameBudgetMs?: number }

@@ -82,6 +82,9 @@ export const initialRegisters: Registers = {
   sr: 0,
   usp: 0,
   ssp: 0,
+  vbr: 0,
+  sfc: 0,
+  dfc: 0,
 };
 
 export const initialFlags: ConditionFlags = {

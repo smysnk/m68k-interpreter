@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { encodeMoveq, encodeNop } from '../../packages/interpreter/src/assembler/encoder';
 import { createProgramImage } from '../../packages/interpreter/src/assembler/programImage';
 import { StrictM68000Core } from '../../packages/interpreter/src/cpu/core';
+import { RamBus } from '../../packages/interpreter/src/cpu/memoryBus';
 import { runMoiraStep, runMusashiStep } from './musashiRunner';
 
 function initialState() {
@@ -119,6 +120,97 @@ describe('pinned Musashi single-step runner', () => {
         testCase.name
       ).toEqual(musashi.a);
       expect(local.state.sr, testCase.name).toBe(musashi.sr);
+    }
+  });
+
+  it('matches both independent MC68010 cores for new control and MOVES forms', () => {
+    const cases = [
+      {
+        name: 'MOVEC D0,VBR',
+        bytes: [0x4e, 0x7b, 0x08, 0x01],
+        d: [0x1234_0000],
+      },
+      {
+        name: 'MOVEC SFC,D1',
+        bytes: [0x4e, 0x7a, 0x10, 0x00],
+        sfc: 7,
+      },
+      {
+        name: 'MOVEC D2,DFC',
+        bytes: [0x4e, 0x7b, 0x20, 0x01],
+        d: [0, 0, 6],
+      },
+      {
+        name: 'MOVES.W D0,(A0)',
+        bytes: [0x0e, 0x50, 0x08, 0x00],
+        d: [0x1234],
+        a: [0x300],
+        dfc: 4,
+      },
+      {
+        name: 'MOVES.B (A0),D1',
+        bytes: [0x0e, 0x10, 0x10, 0x00],
+        d: [0, 0x1234_5678],
+        a: [0x300],
+        sfc: 3,
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const state = {
+        ...initialState(),
+        vbr: 0,
+        sfc: testCase.sfc ?? 0,
+        dfc: testCase.dfc ?? 0,
+      };
+      testCase.d?.forEach((value, index) => (state.d[index] = value));
+      testCase.a?.forEach((value, index) => (state.a[index] = value));
+      const bytes = Uint8Array.from(testCase.bytes);
+      const musashi = runMusashiStep(bytes, state, 'm68010');
+      const moira = runMoiraStep(bytes, state, 'm68010');
+
+      expect(moira, testCase.name).toMatchObject({
+        d: musashi.d,
+        a: musashi.a,
+        pc: musashi.pc,
+        sr: musashi.sr,
+        vbr: musashi.vbr,
+        sfc: musashi.sfc,
+        dfc: musashi.dfc,
+      });
+
+      const bus = new RamBus({ size: 0x4000 });
+      const local = new StrictM68000Core({
+        bus,
+        cpuModel: 'm68010',
+        state: {
+          dataRegisters: state.d,
+          addressRegisters: state.a,
+          pc: state.pc,
+          sr: state.sr,
+          vbr: state.vbr,
+          sfc: state.sfc,
+          dfc: state.dfc,
+        },
+      });
+      local.loadProgram(createProgramImage([{ bytes, line: 1 }], { origin: state.pc }));
+      expect(local.step(), testCase.name).toMatchObject({ kind: 'executed', pcAfter: musashi.pc });
+      expect(
+        Array.from(local.state.d, (value) => value >>> 0),
+        testCase.name
+      ).toEqual(musashi.d);
+      expect(
+        Array.from(local.state.a, (value) => value >>> 0),
+        testCase.name
+      ).toEqual(musashi.a);
+      expect(local.state.sr, testCase.name).toBe(musashi.sr);
+      expect(local.state.vbr, testCase.name).toBe(musashi.vbr);
+      expect(local.state.sfc, testCase.name).toBe(musashi.sfc);
+      expect(local.state.dfc, testCase.name).toBe(musashi.dfc);
+      if (testCase.name === 'MOVES.W D0,(A0)') {
+        expect(bus.read16(0x300)).toBe(0x1234);
+        expect(musashi.writes).toContainEqual([0x300, 2, 0x1234]);
+      }
     }
   });
 });

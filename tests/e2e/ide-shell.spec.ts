@@ -13,7 +13,11 @@ test.describe('browser e2e ide shell', () => {
   }) => {
     await page.goto('/');
 
-    const selectMode = async (currentLabel: string, nextLabel: string, expectedLabel: string): Promise<void> => {
+    const selectMode = async (
+      currentLabel: string,
+      nextLabel: string,
+      expectedLabel: string
+    ): Promise<void> => {
       const modeButton = page.getByRole('button', { name: `Emulation mode: ${currentLabel}` });
       const scrollPositionBeforeOpen = await page.evaluate(() => ({ x: scrollX, y: scrollY }));
       await modeButton.click();
@@ -38,22 +42,19 @@ test.describe('browser e2e ide shell', () => {
       await expect(menu).toHaveCount(0);
     };
 
-    await selectMode('MC68000 · Easy68K', 'MC68010 Extensions', 'MC68010 Extensions · Easy68K');
-    await selectMode('MC68010 Extensions · Easy68K', 'Bare', 'MC68010 Extensions · Bare');
+    await selectMode('MC68000 · Easy68K', 'MC68010', 'MC68010 · Easy68K');
+    await selectMode('MC68010 · Easy68K', 'Bare', 'MC68010 · Bare');
 
-    await page.waitForFunction(
-      (storageKey) => {
-        const value = window.localStorage.getItem(storageKey) ?? '';
-        return value.includes('"cpuModel":"m68010"') && value.includes('"machineProfile":"bare"');
-      },
-      IDE_PERSISTENCE_KEY
-    );
+    await page.waitForFunction((storageKey) => {
+      const value = window.localStorage.getItem(storageKey) ?? '';
+      return value.includes('"cpuModel":"m68010"') && value.includes('"machineProfile":"bare"');
+    }, IDE_PERSISTENCE_KEY);
     await page.reload();
     await expect(
-      page.getByRole('button', { name: 'Emulation mode: MC68010 Extensions · Bare' })
+      page.getByRole('button', { name: 'Emulation mode: MC68010 · Bare' })
     ).toBeVisible();
 
-    await selectMode('MC68010 Extensions · Bare', 'MC68000', 'MC68000 · Bare');
+    await selectMode('MC68010 · Bare', 'MC68000', 'MC68000 · Bare');
     await selectMode('MC68000 · Bare', 'Easy68K', 'MC68000 · Easy68K');
   });
 

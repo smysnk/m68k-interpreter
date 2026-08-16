@@ -1,4 +1,4 @@
-import type { MemoryBus } from './memoryBus';
+import type { BusAccessInput, MemoryBus } from './memoryBus';
 
 const ADDRESS_MASK = 0x00ff_ffff;
 
@@ -15,7 +15,8 @@ export class InstructionStream {
 
   constructor(
     private readonly bus: MemoryBus,
-    address: number
+    address: number,
+    private readonly fetchAccess: BusAccessInput = 'fetch'
   ) {
     this.cursorAddress = address & ADDRESS_MASK;
   }
@@ -26,7 +27,7 @@ export class InstructionStream {
 
   readWord(): number {
     const address = this.cursorAddress;
-    const value = this.bus.read16(address, 'fetch');
+    const value = this.bus.read16(address, this.fetchAccess);
     this.cursorAddress = (address + 2) & ADDRESS_MASK;
     return value;
   }
@@ -37,7 +38,7 @@ export class InstructionStream {
 
   readLong(): number {
     const address = this.cursorAddress;
-    const value = this.bus.read32(address, 'fetch');
+    const value = this.bus.read32(address, this.fetchAccess);
     this.cursorAddress = (address + 4) & ADDRESS_MASK;
     return value;
   }

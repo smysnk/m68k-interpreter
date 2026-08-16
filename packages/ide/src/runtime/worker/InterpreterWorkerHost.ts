@@ -373,10 +373,7 @@ export class InterpreterWorkerHost {
           return;
         case 'setRegisterValue': {
           const emulator = this.requireEmulator();
-          const registers = emulator.getRegisters();
-          if (command.register >= 0 && command.register < registers.length) {
-            registers[command.register] = command.value | 0;
-          }
+          emulator.setRegisterValue(command.register, command.value);
           this.publishFrame({
             lastFrameInstructions: 0,
             lastFrameDurationMs: 0,
@@ -385,6 +382,15 @@ export class InterpreterWorkerHost {
           this.emitEvent(createReplyEvent(command.id, true));
           return;
         }
+        case 'setControlRegisterValue':
+          this.requireEmulator().setControlRegisterValue(command.register, command.value);
+          this.publishFrame({
+            lastFrameInstructions: 0,
+            lastFrameDurationMs: 0,
+            lastStopReason: 'register_write',
+          });
+          this.emitEvent(createReplyEvent(command.id, true));
+          return;
         case 'dispatchTouchPacket': {
           const emulator = this.requireEmulator();
           emulator.writeMemoryByte(command.protocol.touchPending, command.packet.pending);
@@ -532,6 +538,9 @@ export class InterpreterWorkerHost {
         sr: snapshot.sr ?? runtime.getSR(),
         usp: snapshot.usp ?? runtime.getUSP(),
         ssp: snapshot.ssp ?? runtime.getSSP(),
+        vbr: snapshot.vbr ?? runtime.getVBR(),
+        sfc: snapshot.sfc ?? runtime.getSFC(),
+        dfc: snapshot.dfc ?? runtime.getDFC(),
         memory: snapshot.memoryMeta,
         terminal: snapshot.terminalMeta,
         lastInstruction: snapshot.lastInstruction ?? runtime.getLastInstruction(),
@@ -604,6 +613,9 @@ export class InterpreterWorkerHost {
       sr: includeRegisters ? runtime.getSR() : undefined,
       usp: includeRegisters ? runtime.getUSP() : undefined,
       ssp: includeRegisters ? runtime.getSSP() : undefined,
+      vbr: includeRegisters ? runtime.getVBR() : undefined,
+      sfc: includeRegisters ? runtime.getSFC() : undefined,
+      dfc: includeRegisters ? runtime.getDFC() : undefined,
       memoryMeta:
         includeMemoryMeta && (plan.memoryChanged || forceFullSections)
           ? runtime.getMemoryMeta()

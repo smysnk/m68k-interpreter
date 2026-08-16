@@ -28,10 +28,7 @@ const RegisterCard: React.FC<RegisterCardProps> = ({
     () => formatRegisterDecimal(value, descriptor.bitWidth, descriptor.decimalMode),
     [descriptor.bitWidth, descriptor.decimalMode, value]
   );
-  const formattedFullHexValue = React.useMemo(
-    () => formatRegisterHex(value, 32),
-    [value]
-  );
+  const formattedFullHexValue = React.useMemo(() => formatRegisterHex(value, 32), [value]);
   const [decimalDraft, setDecimalDraft] = React.useState(formattedDecimalValue);
   const [isCompact, setIsCompact] = React.useState(defaultCompact);
   const fullHexInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -95,43 +92,54 @@ const RegisterCard: React.FC<RegisterCardProps> = ({
     [descriptor, onCommit, value]
   );
 
-  const getFullHexNibbleIndex = React.useCallback((input: HTMLInputElement) => {
-    const hexDigits = formattedFullHexValue.slice(2);
-    const start = input.selectionStart ?? 2;
-    return Math.max(0, Math.min(start - 2, hexDigits.length - 1));
-  }, [formattedFullHexValue]);
+  const getFullHexNibbleIndex = React.useCallback(
+    (input: HTMLInputElement) => {
+      const hexDigits = formattedFullHexValue.slice(2);
+      const start = input.selectionStart ?? 2;
+      return Math.max(0, Math.min(start - 2, hexDigits.length - 1));
+    },
+    [formattedFullHexValue]
+  );
 
-  const commitFullHexDigit = React.useCallback((nibbleIndex: number, digit: string) => {
-    if (!descriptor.editable) {
-      return;
-    }
+  const commitFullHexDigit = React.useCallback(
+    (nibbleIndex: number, digit: string) => {
+      if (!descriptor.editable) {
+        return;
+      }
 
-    const currentHexDigits = formattedFullHexValue.slice(2);
-    const nextHexDigits = updateRegisterHexDigit(currentHexDigits, nibbleIndex, digit);
-    const nextValue = Number.parseInt(nextHexDigits, 16);
-    const nextNibbleIndex = Math.min(nibbleIndex + 1, currentHexDigits.length - 1);
+      const currentHexDigits = formattedFullHexValue.slice(2);
+      const nextHexDigits = updateRegisterHexDigit(currentHexDigits, nibbleIndex, digit);
+      const nextValue = Number.parseInt(nextHexDigits, 16);
+      const nextNibbleIndex = Math.min(nibbleIndex + 1, currentHexDigits.length - 1);
 
-    setSelectedFullHexNibble(nextNibbleIndex);
-    onCommit(descriptor, nextValue);
-  }, [descriptor, formattedFullHexValue, onCommit]);
+      setSelectedFullHexNibble(nextNibbleIndex);
+      onCommit(descriptor, nextValue);
+    },
+    [descriptor, formattedFullHexValue, onCommit]
+  );
 
-  const stepFullHexDigit = React.useCallback((nibbleIndex: number, delta: 1 | -1) => {
-    if (!descriptor.editable) {
-      return;
-    }
+  const stepFullHexDigit = React.useCallback(
+    (nibbleIndex: number, delta: 1 | -1) => {
+      if (!descriptor.editable) {
+        return;
+      }
 
-    const currentHexDigits = formattedFullHexValue.slice(2);
-    const nextHexDigits = stepRegisterHexDigit(currentHexDigits, nibbleIndex, delta);
-    const nextValue = Number.parseInt(nextHexDigits, 16);
+      const currentHexDigits = formattedFullHexValue.slice(2);
+      const nextHexDigits = stepRegisterHexDigit(currentHexDigits, nibbleIndex, delta);
+      const nextValue = Number.parseInt(nextHexDigits, 16);
 
-    setSelectedFullHexNibble(nibbleIndex);
-    onCommit(descriptor, nextValue);
-  }, [descriptor, formattedFullHexValue, onCommit]);
+      setSelectedFullHexNibble(nibbleIndex);
+      onCommit(descriptor, nextValue);
+    },
+    [descriptor, formattedFullHexValue, onCommit]
+  );
 
   return (
     <div
+      aria-label={`${descriptor.label} register. ${descriptor.description ?? ''}`.trim()}
       className={`register-card ${descriptor.editable ? '' : 'readonly'} ${isCompact ? 'compact' : 'expanded'}`.trim()}
       data-register-group={descriptor.groupId}
+      role="group"
     >
       <div className="register-card-shell">
         <div className="register-card-identity">
@@ -192,7 +200,9 @@ const RegisterCard: React.FC<RegisterCardProps> = ({
 
                 if (event.key === 'ArrowRight') {
                   event.preventDefault();
-                  setSelectedFullHexNibble(Math.min(formattedFullHexValue.length - 3, currentNibbleIndex + 1));
+                  setSelectedFullHexNibble(
+                    Math.min(formattedFullHexValue.length - 3, currentNibbleIndex + 1)
+                  );
                   return;
                 }
 

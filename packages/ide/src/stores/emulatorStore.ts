@@ -48,13 +48,13 @@ type EmulatorStoreFacade = RootState['emulator'] & {
   setExecutionState: (state: Partial<ExecutionState>) => void;
   setEmulatorInstance: (emulator: IdeRuntimeSession | null) => void;
   setTerminalSnapshot: (snapshot: TerminalSnapshot) => void;
-    setTerminalMeta: (terminalMeta: TerminalRuntimeState | TerminalMeta) => void;
-    syncEmulatorFrame: (frame: {
-      registers: Registers;
-      memory: MemoryMeta;
-      flags: ConditionFlags;
-      terminal: TerminalRuntimeState | TerminalMeta;
-      executionState?: Partial<ExecutionState>;
+  setTerminalMeta: (terminalMeta: TerminalRuntimeState | TerminalMeta) => void;
+  syncEmulatorFrame: (frame: {
+    registers: Registers;
+    memory: MemoryMeta;
+    flags: ConditionFlags;
+    terminal: TerminalRuntimeState | TerminalMeta;
+    executionState?: Partial<ExecutionState>;
     runtimeMetrics?: Partial<RuntimeMetrics>;
   }) => void;
   toggleShowFlags: () => void;
@@ -105,7 +105,8 @@ function createActions(dispatch: AppDispatch) {
     setRegisters: (registers: Partial<Registers>) => dispatch(setRegistersAction(registers)),
     setMemory: (memory: MemoryMeta) => dispatch(setMemoryAction(memory)),
     setFlags: (flags: Partial<ConditionFlags>) => dispatch(setFlagsAction(flags)),
-    setExecutionState: (nextState: Partial<ExecutionState>) => dispatch(setExecutionStateAction(nextState)),
+    setExecutionState: (nextState: Partial<ExecutionState>) =>
+      dispatch(setExecutionStateAction(nextState)),
     setEmulatorInstance: (emulator: IdeRuntimeSession | null) => {
       if (emulator) {
         runtimeSessionStore.replace(emulator);
@@ -137,8 +138,10 @@ function createActions(dispatch: AppDispatch) {
     }) => dispatch(syncEmulatorFrameAction(frame)),
     toggleShowFlags: () => dispatch(toggleShowFlagsAction()),
     setDelay: (delay: number) => dispatch(setDelayAction(delay)),
-    setSpeedMultiplier: (speedMultiplier: number) => dispatch(setSpeedMultiplierAction(speedMultiplier)),
-    setRuntimeMetrics: (runtimeMetrics: Partial<RuntimeMetrics>) => dispatch(setRuntimeMetricsAction(runtimeMetrics)),
+    setSpeedMultiplier: (speedMultiplier: number) =>
+      dispatch(setSpeedMultiplierAction(speedMultiplier)),
+    setRuntimeMetrics: (runtimeMetrics: Partial<RuntimeMetrics>) =>
+      dispatch(setRuntimeMetricsAction(runtimeMetrics)),
     pushHistory: () => dispatch(pushHistoryAction()),
     popHistory: () => dispatch(popHistoryAction()),
     reset: () => {
@@ -151,6 +154,8 @@ function createActions(dispatch: AppDispatch) {
       const emulator = runtimeSessionStore.getSession();
       if (emulator && name in registerMap) {
         void runtimeCommandPort.setRegisterValue(registerMap[name], value);
+      } else if (emulator && (name === 'vbr' || name === 'sfc' || name === 'dfc')) {
+        void runtimeCommandPort.setControlRegisterValue(name, value);
       }
       setRegister(name, value);
     },
@@ -165,7 +170,7 @@ function buildFacade(
     ...emulatorState,
     emulatorInstance: runtimeSessionStore.getSession(),
     ...actions,
-    getRegister: (name) => emulatorState.registers[name],
+    getRegister: (name) => emulatorState.registers[name] ?? 0,
   };
 }
 

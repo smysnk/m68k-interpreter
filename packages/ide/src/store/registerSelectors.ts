@@ -1,6 +1,9 @@
 import { createSelector } from '@reduxjs/toolkit';
 import type { RootState } from '@/store';
-import { getRegisterDescriptorsByGroup, REGISTER_GROUPS } from '@/components/registers/registerDescriptors';
+import {
+  getRegisterDescriptorsByGroup,
+  REGISTER_GROUPS,
+} from '@/components/registers/registerDescriptors';
 
 export const selectRegisterFlagsHeadingModel = createSelector(
   [(state: RootState) => state.emulator.flags, (state: RootState) => state.emulator.registers.ccr],
@@ -17,10 +20,12 @@ export const selectRegisterFlagsHeadingModel = createSelector(
 );
 
 export const selectRegisterGroupsModel = createSelector(
-  [(state: RootState) => state.emulator.registers],
-  (registers) =>
+  [(state: RootState) => state.emulator.registers, (state: RootState) => state.settings.cpuModel],
+  (registers, cpuModel) =>
     REGISTER_GROUPS.map((group) => {
-      const descriptors = getRegisterDescriptorsByGroup(group.id);
+      const descriptors = getRegisterDescriptorsByGroup(group.id).filter(
+        (descriptor) => descriptor.minimumCpuModel === undefined || cpuModel === 'm68010'
+      );
 
       return {
         ...group,

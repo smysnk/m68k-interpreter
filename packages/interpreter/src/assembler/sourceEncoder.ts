@@ -99,6 +99,27 @@ function addressRegister(operand: DecodedOperand): number {
   return operand.value;
 }
 
+function generalRegister(operand: DecodedOperand): number {
+  if (operand.type === TOKEN_REG_DATA) return operand.value - 8;
+  if (operand.type === TOKEN_REG_ADDR) return operand.value + 8;
+  throw new Error('Expected a data or address register');
+}
+
+function controlRegisterSelector(token: string): number {
+  switch (token.trim().toLowerCase()) {
+    case 'sfc':
+      return 0x000;
+    case 'dfc':
+      return 0x001;
+    case 'usp':
+      return 0x800;
+    case 'vbr':
+      return 0x801;
+    default:
+      throw new Error(`Unknown MC68010 control register: ${token}`);
+  }
+}
+
 function sizeCode(size: number): number {
   if (size === CODE_BYTE) return 0;
   if (size === CODE_WORD) return 1;
@@ -150,6 +171,40 @@ export function encodeSourceInstruction(
   }
   if (op === 'unlk') return wordsToBytes([0x4e58 | addressRegister(operands[0])]);
   if (op === 'trap') return wordsToBytes([0x4e40 | (operands[0].value & 0xf)]);
+  if (op === 'bkpt') {
+    if (operands.length !== 1 || operands[0].value < 0 || operands[0].value > 7) {
+      throw new Error('BKPT requires a vector from 0 through 7');
+    }
+    return wordsToBytes([0x4848 | operands[0].value]);
+  }
+  if (op === 'movec') {
+    if (operands.length !== 2) throw new Error('MOVEC requires two operands');
+    const sourceControl = ['sfc', 'dfc', 'usp', 'vbr'].includes(
+      instruction.operandTokens[0]?.trim().toLowerCase()
+    );
+    const controlToken = instruction.operandTokens[sourceControl ? 0 : 1];
+    const register = operands[sourceControl ? 1 : 0];
+    const extension = (generalRegister(register) << 12) | controlRegisterSelector(controlToken);
+    return wordsToBytes([sourceControl ? 0x4e7a : 0x4e7b, extension]);
+  }
+  if (op === 'moves') {
+    if (operands.length !== 2) throw new Error('MOVES requires two operands');
+    const firstIsRegister =
+      operands[0].type === TOKEN_REG_DATA || operands[0].type === TOKEN_REG_ADDR;
+    const secondIsRegister =
+      operands[1].type === TOKEN_REG_DATA || operands[1].type === TOKEN_REG_ADDR;
+    if (firstIsRegister === secondIsRegister) {
+      throw new Error('MOVES requires one general register and one memory operand');
+    }
+    const register = firstIsRegister ? operands[0] : operands[1];
+    const memory = firstIsRegister ? operands[1] : operands[0];
+    const ea = encodeEa(memory, size);
+    if (![2, 3, 4, 5, 6, 7].includes(ea.bits >>> 3) || (ea.bits >>> 3 === 7 && (ea.bits & 7) > 1)) {
+      throw new Error('MOVES requires a memory-alterable effective address');
+    }
+    const extension = (generalRegister(register) << 12) | (firstIsRegister ? 0x0800 : 0);
+    return wordsToBytes([0x0e00 | (sizeCode(size) << 6) | ea.bits, extension, ...ea.extensions]);
+  }
   if (op === 'moveq') {
     return wordsToBytes([0x7000 | (dataRegister(operands[1]) << 9) | (operands[0].value & 0xff)]);
   }

@@ -14,7 +14,13 @@ export function classifyOpcodeWord(opcode: number, cpuModel: CpuModel): OpcodeCl
     Uint8Array.of((opcode >>> 8) & 0xff, opcode & 0xff, 0, 0)
   );
   if (instruction.kind === 'unimplemented') return { status: 'illegal', instruction };
-  if (instruction.kind === 'rtd' || instruction.kind === 'move-from-ccr') {
+  if (
+    instruction.kind === 'rtd' ||
+    instruction.kind === 'move-from-ccr' ||
+    instruction.kind === 'bkpt' ||
+    instruction.kind === 'movec' ||
+    instruction.kind === 'moves'
+  ) {
     return cpuModel === 'm68010'
       ? { status: 'legal', instruction }
       : { status: 'profile-illegal', instruction, requiredProfile: 'm68010' };

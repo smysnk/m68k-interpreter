@@ -1,6 +1,9 @@
 import type { UndoCaptureMode } from '@m68k/interpreter';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
-import { InterpreterWorkerClient, type InterpreterWorkerLike } from '@/runtime/worker/InterpreterWorkerClient';
+import {
+  InterpreterWorkerClient,
+  type InterpreterWorkerLike,
+} from '@/runtime/worker/InterpreterWorkerClient';
 
 function createBrowserWorker(): Worker {
   return new Worker(new URL('./interpreter.worker.ts', import.meta.url), {
@@ -37,11 +40,15 @@ export function createWorkerIdeRuntimeSession(
       throw new AsyncRuntimeMutationRequiredError('configureHardwareDevices');
     },
     setHardwareToggle: (bit, enabled, deviceId) => {
-      void bit; void enabled; void deviceId;
+      void bit;
+      void enabled;
+      void deviceId;
       throw new AsyncRuntimeMutationRequiredError('setHardwareToggle');
     },
     setHardwareButton: (bit, pressed, deviceId) => {
-      void bit; void pressed; void deviceId;
+      void bit;
+      void pressed;
+      void deviceId;
       throw new AsyncRuntimeMutationRequiredError('setHardwareButton');
     },
     requestInterruptLevel: () => {
@@ -65,27 +72,33 @@ export function createWorkerIdeRuntimeSession(
       throw new AsyncRuntimeMutationRequiredError('undoFromStack');
     },
     writeMemoryByte: (address, value) => {
-      void address; void value;
+      void address;
+      void value;
       throw new AsyncRuntimeMutationRequiredError('writeMemoryByte');
     },
     writeMemoryLong: (address, value) => {
-      void address; void value;
+      void address;
+      void value;
       throw new AsyncRuntimeMutationRequiredError('writeMemoryLong');
     },
     writeMemoryWord: (address, value) => {
-      void address; void value;
+      void address;
+      void value;
       throw new AsyncRuntimeMutationRequiredError('writeMemoryWord');
     },
     setRegisterValue: (register, value) => {
-      void register; void value;
+      void register;
+      void value;
       throw new AsyncRuntimeMutationRequiredError('setRegisterValue');
     },
     resizeTerminal: (columns, rows) => {
-      void columns; void rows;
+      void columns;
+      void rows;
       throw new AsyncRuntimeMutationRequiredError('resizeTerminal');
     },
     setUndoCaptureMode: (mode, checkpointInterval) => {
-      void mode; void checkpointInterval;
+      void mode;
+      void checkpointInterval;
       throw new AsyncRuntimeMutationRequiredError('setUndoCaptureMode');
     },
     getUndoCaptureMode: () => undoCaptureMode,
@@ -107,6 +120,9 @@ export function createWorkerIdeRuntimeSession(
     getRegisters: client.getRegisters.bind(client),
     getSR: client.getSR.bind(client),
     getSSP: client.getSSP.bind(client),
+    getVBR: client.getVBR.bind(client),
+    getSFC: client.getSFC.bind(client),
+    getDFC: client.getDFC.bind(client),
     readMemoryRange: client.readMemoryRange.bind(client),
     getSymbolAddress: client.getSymbolAddress.bind(client),
     getSymbols: client.getSymbols.bind(client),

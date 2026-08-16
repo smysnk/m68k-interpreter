@@ -138,7 +138,8 @@ export class Emulator {
 
     this.initialMemory = this.memory.getMemory();
     this.initialErrors = [...this.errors];
-    this.initialFault = this.lastStrictFault === undefined ? undefined : { ...this.lastStrictFault };
+    this.initialFault =
+      this.lastStrictFault === undefined ? undefined : { ...this.lastStrictFault };
     this.lastInstruction =
       this.strictProgramImage === undefined
         ? Strings.LAST_INSTRUCTION_DEFAULT_TEXT
@@ -204,11 +205,7 @@ export class Emulator {
     registersMayHaveChanged = false
   ): void {
     const after = this.runtimeState();
-    if (
-      registersMayHaveChanged ||
-      before.pc !== after.pc ||
-      before.sr !== after.sr
-    ) {
+    if (registersMayHaveChanged || before.pc !== after.pc || before.sr !== after.sr) {
       this.registerSyncVersion += 1;
     }
     if (
@@ -238,6 +235,9 @@ export class Emulator {
         sr: core.state.sr,
         usp: this.getUSP(),
         ssp: this.getSSP(),
+        vbr: this.getVBR(),
+        sfc: this.getSFC(),
+        dfc: this.getDFC(),
         registers: this.getRegisterSnapshot(),
       },
       memoryPages: [],
@@ -288,10 +288,7 @@ export class Emulator {
       if (this.halted) return { kind: 'halted', pc: core.state.pc };
       if (core.isProgramComplete()) return core.step();
 
-      if (
-        this.machine.id === 'easy68k' &&
-        this.pendingExternalInterruptAddress !== undefined
-      ) {
+      if (this.machine.id === 'easy68k' && this.pendingExternalInterruptAddress !== undefined) {
         const handlerAddress = this.pendingExternalInterruptAddress;
         this.pendingExternalInterruptAddress = undefined;
         core.state.a[7] = (core.state.a[7] - 4) | 0;
@@ -311,13 +308,16 @@ export class Emulator {
       }
 
       this.maybeCaptureUndoSnapshot();
+      const interruptVectorBase = this.emulation.cpuModel === 'm68010' ? core.state.vbr : 0;
       const missingLevel = [...this.pendingInterruptLevels]
         .sort((left, right) => right - left)
-        .find((level) => this.machine.validateInterruptVector(level) !== undefined);
+        .find(
+          (level) => this.machine.validateInterruptVector(level, interruptVectorBase) !== undefined
+        );
       if (missingLevel !== undefined) {
         this.pendingInterruptLevels.delete(missingLevel);
         const message =
-          this.machine.validateInterruptVector(missingLevel) ??
+          this.machine.validateInterruptVector(missingLevel, interruptVectorBase) ??
           `Invalid or missing IRQ ${missingLevel} autovector`;
         const fault: CpuFault = { code: 'missing-autovector', message };
         this.exception = message;
@@ -395,9 +395,7 @@ export class Emulator {
 
   getRegisterSnapshot(): Int32Array {
     const state = this.strictCore?.state;
-    return state === undefined
-      ? new Int32Array(16)
-      : Int32Array.from([...state.a, ...state.d]);
+    return state === undefined ? new Int32Array(16) : Int32Array.from([...state.a, ...state.d]);
   }
 
   setRegisterValue(register: number, value: number): void {
@@ -430,6 +428,31 @@ export class Emulator {
     const state = this.strictCore?.state;
     if (state === undefined) return DEFAULT_STACK_POINTER;
     return state.isSupervisor() ? state.a[7] >>> 0 : state.ssp;
+  }
+
+  getVBR(): number {
+    return this.emulation.cpuModel === 'm68010' ? (this.strictCore?.state.vbr ?? 0) : 0;
+  }
+
+  getSFC(): number {
+    return this.emulation.cpuModel === 'm68010' ? (this.strictCore?.state.sfc ?? 0) : 0;
+  }
+
+  getDFC(): number {
+    return this.emulation.cpuModel === 'm68010' ? (this.strictCore?.state.dfc ?? 0) : 0;
+  }
+
+  setControlRegisterValue(register: 'vbr' | 'sfc' | 'dfc', value: number): void {
+    if (this.emulation.cpuModel !== 'm68010') {
+      throw new Error(`${register.toUpperCase()} is unavailable on the MC68000 CPU model`);
+    }
+    const core = this.strictCore;
+    if (core === undefined) throw new Error('No executable program image is loaded.');
+    const before = this.runtimeState();
+    if (register === 'vbr') core.state.vbr = value >>> 0;
+    else if (register === 'sfc') core.state.sfc = value & 0x7;
+    else core.state.dfc = value & 0x7;
+    this.reconcileRuntimeSyncVersions(before, true);
   }
 
   getMemory(): Record<number, number> {
@@ -693,6 +716,9 @@ export class Emulator {
     core.state.sr = frame.cpu.sr;
     core.state.usp = frame.cpu.usp;
     core.state.ssp = frame.cpu.ssp;
+    core.state.vbr = frame.cpu.vbr ?? 0;
+    core.state.sfc = frame.cpu.sfc ?? 0;
+    core.state.dfc = frame.cpu.dfc ?? 0;
     core.state.a.set(frame.cpu.registers.slice(0, 8));
     core.state.d.set(frame.cpu.registers.slice(8, 16));
     core.state.pc = frame.cpu.pc;
