@@ -20,7 +20,11 @@ test('injectLandingContent adds crawlable interpreter copy only for the interpre
 
   assert.match(interpreter, /<h1[^>]*>M68K Interpreter — Run Motorola 68000 Assembly/);
   assert.match(interpreter, /href="\/m68k-interpreter\/help"/);
+  assert.match(interpreter, /<dialog class="seo-content" id="about-this-build"/);
+  assert.match(interpreter, /<form class="seo-content__close" method="dialog">/);
+  assert.doesNotMatch(interpreter, /<section class="seo-content"/);
   assert.match(nibbles, /<h1[^>]*>Play Nibbles 68000/);
+  assert.match(nibbles, /<dialog class="seo-content" id="about-this-build"/);
   assert.equal(root, source);
 });
 
