@@ -20,7 +20,10 @@ export const normalizeBasePath = (value) => {
 
 const interpreterLanding = (basePath) => `
     <!-- crawlable-product-content:start -->
-    <section class="seo-content" id="about-this-build" aria-labelledby="m68k-interpreter-title">
+    <dialog class="seo-content" id="about-this-build" aria-labelledby="m68k-interpreter-title">
+      <form class="seo-content__close" method="dialog">
+        <button type="submit" aria-label="Close About this IDE">Close</button>
+      </form>
       <div class="seo-content__inner">
         <p class="seo-content__eyebrow">Zero-setup assembly development environment</p>
         <h1 id="m68k-interpreter-title">M68K Interpreter — Run Motorola 68000 Assembly in Your Browser</h1>
@@ -51,12 +54,15 @@ const interpreterLanding = (basePath) => `
           <a href="https://github.com/gianlucarea/m68k-interpreter">Visit the original upstream project</a>
         </nav>
       </div>
-    </section>
+    </dialog>
     <!-- crawlable-product-content:end -->`;
 
 const nibblesLanding = () => `
     <!-- crawlable-product-content:start -->
-    <section class="seo-content" id="about-this-build" aria-labelledby="nibbles-title">
+    <dialog class="seo-content" id="about-this-build" aria-labelledby="nibbles-title">
+      <form class="seo-content__close" method="dialog">
+        <button type="submit" aria-label="Close About this IDE">Close</button>
+      </form>
       <div class="seo-content__inner">
         <p class="seo-content__eyebrow">A college assembly game, running again</p>
         <h1 id="nibbles-title">Play Nibbles 68000 in Your Browser</h1>
@@ -66,7 +72,7 @@ const nibblesLanding = () => `
           <a href="https://github.com/smysnk/nibbles68k">View the Nibbles source</a>
         </nav>
       </div>
-    </section>
+    </dialog>
     <!-- crawlable-product-content:end -->`;
 
 export const injectLandingContent = (html, basePathValue) => {

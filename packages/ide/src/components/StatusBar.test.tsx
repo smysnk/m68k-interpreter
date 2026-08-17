@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import StatusBar from './StatusBar';
@@ -68,6 +68,26 @@ describe('StatusBar', () => {
     renderWithIdeProviders(<StatusBar />);
 
     expect(screen.queryByText(/Program:/)).not.toBeInTheDocument();
+  });
+
+  it('opens the crawlable About content as a dialog from the status bar', async () => {
+    const user = userEvent.setup();
+    const dialog = document.createElement('dialog');
+    dialog.id = 'about-this-build';
+    dialog.showModal = vi.fn(() => dialog.setAttribute('open', ''));
+    document.body.append(dialog);
+
+    renderWithIdeProviders(<StatusBar showAboutButton />);
+
+    const aboutButton = screen.getByRole('button', { name: 'About this IDE' });
+    expect(aboutButton).toHaveAttribute('aria-controls', 'about-this-build');
+    expect(aboutButton).toHaveAttribute('aria-haspopup', 'dialog');
+
+    await user.click(aboutButton);
+
+    expect(dialog.showModal).toHaveBeenCalledOnce();
+    expect(dialog).toHaveAttribute('open');
+    dialog.remove();
   });
 
   it('renders the bottom panel inline in compact mobile shells', () => {

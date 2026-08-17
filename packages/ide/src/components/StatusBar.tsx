@@ -18,13 +18,18 @@ const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/josh1g';
 const CPU_MODEL_OPTIONS = Object.values(CPU_MODEL_REGISTRY);
 const MACHINE_PROFILE_OPTIONS = Object.values(MACHINE_PROFILE_REGISTRY);
 
-const StatusBar: React.FC = () => {
+interface StatusBarProps {
+  showAboutButton?: boolean;
+}
+
+const StatusBar: React.FC<StatusBarProps> = ({
+  showAboutButton = import.meta.env.BASE_URL !== '/',
+}) => {
   const model = useSelector((state: RootState) => selectStatusBarModel(state));
   const cpuModel = useSelector((state: RootState) => state.settings.cpuModel);
   const machineProfile = useSelector((state: RootState) => state.settings.machineProfile);
   const dispatch = useDispatch<AppDispatch>();
   const isCompactShell = useCompactShell();
-  const showAboutLink = import.meta.env.BASE_URL !== '/';
   const [modeMenuOpen, setModeMenuOpen] = React.useState(false);
   const modeButtonRef = React.useRef<HTMLButtonElement>(null);
   const modeMenuRef = React.useRef<HTMLDivElement>(null);
@@ -131,10 +136,23 @@ const StatusBar: React.FC = () => {
     </a>
   );
 
-  const aboutLink = (
-    <a className="status-bar-link status-bar-link-about" href="#about-this-build">
+  const openAboutDialog = React.useCallback(() => {
+    const dialog = document.querySelector<HTMLDialogElement>('dialog#about-this-build');
+    if (dialog === null || dialog.open) return;
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
+  }, []);
+
+  const aboutButton = (
+    <button
+      aria-controls="about-this-build"
+      aria-haspopup="dialog"
+      className="status-bar-link status-bar-link-about"
+      onClick={openAboutDialog}
+      type="button"
+    >
       About this IDE
-    </a>
+    </button>
   );
 
   const coffeeLink = (
@@ -160,7 +178,7 @@ const StatusBar: React.FC = () => {
             {model.runtime.label}
           </span>
           {modeControl}
-          {showAboutLink ? aboutLink : null}
+          {showAboutButton ? aboutButton : null}
           {websiteLink}
           {coffeeLink}
         </div>
@@ -174,7 +192,7 @@ const StatusBar: React.FC = () => {
           </div>
           <div className="status-bar-section status-bar-section-center" />
           <div className="status-bar-section status-bar-section-right">
-            {showAboutLink ? aboutLink : null}
+            {showAboutButton ? aboutButton : null}
             {websiteLink}
             {coffeeLink}
           </div>
