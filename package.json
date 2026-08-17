@@ -14,6 +14,7 @@
     "build": "yarn workspaces foreach -Apt --exclude m68k-interpreter-monorepo run build",
     "build:interpreter": "yarn workspace @m68k/interpreter build",
     "build:ide": "yarn workspace @m68k/ide build",
+    "build:smysnk": "yarn workspace @m68k/ide build:smysnk",
     "build:pages": "yarn workspace @m68k/ide build:pages",
     "capture:readme-demo": "node ./scripts/capture-readme-demo.mjs",
     "readme:videos": "node ./scripts/upload-readme-videos.mjs",

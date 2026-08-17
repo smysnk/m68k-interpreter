@@ -24,6 +24,7 @@ const StatusBar: React.FC = () => {
   const machineProfile = useSelector((state: RootState) => state.settings.machineProfile);
   const dispatch = useDispatch<AppDispatch>();
   const isCompactShell = useCompactShell();
+  const showAboutLink = import.meta.env.BASE_URL !== '/';
   const [modeMenuOpen, setModeMenuOpen] = React.useState(false);
   const modeButtonRef = React.useRef<HTMLButtonElement>(null);
   const modeMenuRef = React.useRef<HTMLDivElement>(null);
@@ -130,6 +131,12 @@ const StatusBar: React.FC = () => {
     </a>
   );
 
+  const aboutLink = (
+    <a className="status-bar-link status-bar-link-about" href="#about-this-build">
+      About this IDE
+    </a>
+  );
+
   const coffeeLink = (
     <a
       className="status-bar-link status-bar-link-coffee"
@@ -153,6 +160,7 @@ const StatusBar: React.FC = () => {
             {model.runtime.label}
           </span>
           {modeControl}
+          {showAboutLink ? aboutLink : null}
           {websiteLink}
           {coffeeLink}
         </div>
@@ -166,6 +174,7 @@ const StatusBar: React.FC = () => {
           </div>
           <div className="status-bar-section status-bar-section-center" />
           <div className="status-bar-section status-bar-section-right">
+            {showAboutLink ? aboutLink : null}
             {websiteLink}
             {coffeeLink}
           </div>

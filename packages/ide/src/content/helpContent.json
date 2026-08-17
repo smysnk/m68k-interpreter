@@ -1,0 +1,50 @@
+{
+  "title": "M68K Interpreter Help",
+  "subtitle": "Motorola 68000 and 68010 assembly quick start, Easy68K compatibility, hardware support, and known limitations.",
+  "sections": [
+    {
+      "id": "workspace",
+      "title": "Panel Workspace",
+      "items": [
+        "Choose one to four columns, then add Screen, Code, Registers, Memory, Seven-segment, combined Digital I/O and IRQ, or Help panels from the View menu.",
+        "Drag a panel by its header to reorder it or move it between columns.",
+        "Minimize retains a compact header, and close removes the panel from the current layout.",
+        "Only the Screen marked Interactive owns keyboard, touch, focus, and terminal geometry. Click a passive Screen mirror to transfer ownership.",
+        "The Layouts menu applies immutable built-in views and saves, restores, renames, or deletes personal views. The active draft resumes automatically after reload.",
+        "On compact screens, the desktop layout is preserved and projected through a single-panel switcher."
+      ]
+    },
+    {
+      "id": "nibbles",
+      "title": "Play Nibbles",
+      "paragraphs": [
+        "Select nibbles.asm from the file explorer, press Run, then use W A S D, arrow keys, or keypad 4 5 6 8. Press Enter to confirm menus.",
+        "Reset clears the current emulator session and terminal so the loaded program can be launched again from a clean state.",
+        "The IDE composes a strict byte-addressed CPU model with an independent machine profile. The Easy68K machine layers terminal, trap, and trainer-board services onto either supported CPU."
+      ]
+    },
+    {
+      "id": "compatibility",
+      "title": "MC68000 and MC68010 Support",
+      "items": [
+        "Assembler compatibility includes standalone labels, END with an entry label, EQU, DC.B/W/L, DS.B/W/L, and character immediates.",
+        "The strict core implements all 116 tracked MC68000 forms and all seven tracked MC68010-specific forms. Select either CPU independently of the machine profile.",
+        "MC68010 mode exposes VBR, SFC, and DFC, VBR-relative vectors, format-aware exception frames, and restartable bus and address faults.",
+        "Easy68K compatibility includes TRAP #15 tasks 1, 3, and 4, plus TRAP #11 task 0 for halt.",
+        "Terminal rendering supports clear screen, cursor motion, carriage return, line feed, and ANSI SGR color and style sequences used by Nibbles.",
+        "Memory-mapped Easy68K hardware includes independently addressable eight-byte seven-segment displays and digital I/O boards with shared switch and LED bytes, active-low buttons, and configurable 24-bit addresses.",
+        "Level 1 through 7 autovector interrupts include SR masking, supervisor stack frames, automatic scheduling, and RTE."
+      ]
+    },
+    {
+      "id": "limitations",
+      "title": "Known Limitations",
+      "items": [
+        "Easy68K terminal and device services are a targeted compatibility subset; this does not limit strict MC68000 instruction coverage.",
+        "Trainer board DUART routines and generic graphics or framebuffer devices beyond the Hardware I/O Board are not implemented.",
+        "Pin-level bus timing, arbitration, prefetch-stage attribution, and transparent loop-mode fetch suppression are outside the functionally complete CPU contract.",
+        "The IDE currently uses the internal fixed-grid terminal adapter surface; broader display integration remains a future swap."
+      ]
+    }
+  ]
+}

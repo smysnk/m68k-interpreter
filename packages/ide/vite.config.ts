@@ -45,10 +45,7 @@ export default defineConfig({
     cssCodeSplit: false,
     rollupOptions: {
       output: {
-        assetFileNames(assetInfo) {
-          const assetName = assetInfo.names?.[0] ?? assetInfo.name ?? '';
-          return assetName.endsWith('.css') ? 'assets/app.css' : 'assets/[name]-[hash][extname]';
-        },
+        assetFileNames: 'assets/[name]-[hash][extname]',
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',
       },

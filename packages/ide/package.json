@@ -40,9 +40,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
-    "build:pages": "tsc -p tsconfig.json --noEmit && VITE_DEPLOY_TARGET=pages vite build && touch out/.nojekyll",
+    "build:smysnk": "tsc -p tsconfig.json --noEmit && VITE_DEPLOY_TARGET=smysnk vite build && node ./build/renderStaticPages.mjs",
+    "build:pages": "tsc -p tsconfig.json --noEmit && node ./build/renderGithubPagesRedirect.mjs",
     "preview": "vite preview",
-    "test": "../../node_modules/.bin/vitest run --config vitest.config.ts",
+    "test": "../../node_modules/.bin/vitest run --config vitest.config.ts && node --test ./build/renderStaticPages.test.mjs",
     "type-check": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

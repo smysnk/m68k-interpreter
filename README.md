@@ -2,6 +2,8 @@
 
 **Hosted Demo:** [**smysnk.com/m68k-interpreter**](https://smysnk.com/m68k-interpreter)
 
+**Reference:** [M68K instructions and Easy68K compatibility](https://smysnk.com/m68k-interpreter/help) · [Play Nibbles 68000](https://smysnk.com/nibbles)
+
 [![M68K Interpreter demo video](assets/m68k-interpreter-demo.webp)](https://github.com/user-attachments/assets/ec1eefff-b997-4261-bd53-46690e0b6075)
 
 A Motorola 68000 assembly emulator that runs entirely in the browser.  
@@ -70,7 +72,7 @@ React 19 · Redux Toolkit · TypeScript · Vite · Vitest · Playwright
 ## Run locally
 
 ```bash
-git clone https://github.com/gianlucarea/m68k-interpreter.git
+git clone https://github.com/smysnk/m68k-interpreter.git
 cd m68k-interpreter
 yarn install
 cp .env.example .env
