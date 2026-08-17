@@ -87,12 +87,25 @@ export default {
       adapter: "vitest",
       package: "ide",
       cwd: rootDir,
-      command: ["yarn", "workspace", "@m68k/ide", "test"],
+      command: ["yarn", "vitest", "run", "--config", "packages/ide/vitest.config.ts"],
       module: "experience",
       theme: "ide",
       coverage: {
         enabled: true,
         mode: "second-pass"
+      }
+    },
+    {
+      id: "ide-static-pages",
+      label: "IDE Static Page Generation",
+      adapter: "shell",
+      package: "ide",
+      cwd: rootDir,
+      command: ["node", "--test", "packages/ide/build/renderStaticPages.test.mjs"],
+      module: "experience",
+      theme: "ide",
+      coverage: {
+        enabled: false
       }
     },
     {
