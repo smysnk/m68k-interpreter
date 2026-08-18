@@ -8,6 +8,10 @@ import type {
   Easy68kHardwareConfig,
   Easy68kHardwareDeviceConfig,
   Easy68kHardwareSnapshot,
+  Easy68kGraphicsPatch,
+  Easy68kGraphicsState,
+  Easy68kSoundAsset,
+  Easy68kSoundSnapshot,
   EmulationConfig,
 } from '@m68k/interpreter';
 import type { RuntimeFrameSyncPayload } from '@/runtime/runtimeFramePayload';
@@ -52,6 +56,7 @@ export interface RuntimeLoadRequest {
   emulation: EmulationConfig;
   terminal: { columns: number; rows: number };
   hardwareDevices: Easy68kHardwareDeviceConfig[];
+  soundAssets?: Easy68kSoundAsset[];
   execution: WorkerExecutionConfig;
   undo: { mode: UndoCaptureMode; checkpointInterval?: number };
 }
@@ -87,9 +92,12 @@ export interface WorkerRuntimeSnapshot {
   syncVersions?: RuntimeSyncVersions;
   runtimeMetrics?: Partial<WorkerRuntimeMetricsSnapshot>;
   hardwareSnapshot?: Easy68kHardwareSnapshot;
+  graphicsState?: Easy68kGraphicsState;
+  graphicsPatch?: Easy68kGraphicsPatch;
+  soundSnapshot?: Easy68kSoundSnapshot;
 }
 
-export type WorkerFrameKind = 'full' | 'terminal' | 'hardware' | 'heartbeat';
+export type WorkerFrameKind = 'full' | 'terminal' | 'hardware' | 'graphics' | 'sound' | 'heartbeat';
 
 export type InterpreterWorkerCommand =
   | { id: number; type: 'init' }
@@ -132,6 +140,10 @@ export type InterpreterWorkerCommand =
   | { id: number; type: 'requestSnapshot' }
   | { id: number; type: 'readMemoryRange'; address: number; length: number }
   | { id: number; type: 'getSymbolAddress'; symbol: string }
+  | { id: number; type: 'completeSoundVoice'; voiceId: number }
+  | { id: number; type: 'stopAllSounds' }
+  | { id: number; type: 'stopSoundReference'; player: 'standard' | 'polyphonic'; reference: number }
+  | { id: number; type: 'registerSoundAssets'; assets: Easy68kSoundAsset[] }
   | {
       id: number;
       type: 'dispatchTouchPacket';

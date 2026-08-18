@@ -26,7 +26,21 @@ Write, step through, and debug m68k assembly — no installation needed.
 - Export register and memory state to file
 - Runtime batching and keyboard capture for browser-playable terminal programs
 - Independently addressable EASy68K panels for seven-segment displays, aligned switches/LEDs/active-low buttons, and CPU interrupt requests
+- Canonical Easy68K graphics and WAV sound services with duplicable Graphics and Sound panels
 - Level 1–7 autovector interrupts, SR masking, automatic IRQ scheduling, and `RTE`
+
+## Compatibility and instruction coverage
+
+| Profile         | Opcodes/forms | Terminal | Graphics | Sound | Trainer I/O |
+| --------------- | ------------: | :------: | :------: | :---: | :---------: |
+| MC68000 CPU     |           116 |    —     |    —     |   —   |      —      |
+| MC68010 CPU     |           123 |    —     |    —     |   —   |      —      |
+| Bare machine    |             — |    —     |    —     |   —   |      —      |
+| Easy68K machine |             — |    5     |    17    |   8   |      ✓      |
+
+CPU and machine profiles are selected independently. Easy68K services use the canonical
+`TRAP #15` ABI: the task is in `D0.B`, execution resumes at `PC + 2`, and task `9`
+terminates a program. See [Easy68K compatibility and limitations](docs/EASY68K_SUBSET_AND_LIMITATIONS.md).
 
 ## Runtime shape
 

@@ -1,6 +1,5 @@
 import type { Memory } from '../core/memory';
 import type { StepResult } from '../core/execution';
-import type { StrictM68000Core } from '../cpu/core';
 import type { MemoryBus, MemoryMappedDevice } from '../cpu/memoryBus';
 import {
   Easy68kHardware,
@@ -9,25 +8,35 @@ import {
   type Easy68kHardwareDeviceConfig,
   type Easy68kHardwareOutputSnapshot,
 } from '../devices/easy68kHardware';
+import { Easy68kGraphicsDevice, type Easy68kGraphicsSnapshot } from '../devices/easy68kGraphics';
+import {
+  Easy68kSoundDevice,
+  type Easy68kSoundAsset,
+  type Easy68kSoundSnapshot,
+} from '../devices/easy68kSound';
 import { TerminalDevice } from '../devices/terminal';
 import type { MachineProfile } from '../isa/types';
+import { Easy68kTrapDispatcher, type Easy68kTrapContext } from './easy68kTrapServices';
 import { MappedMemoryBus } from './mappedMemoryBus';
 
-export type MachineSnapshot = unknown;
-
-export interface MachineTrapContext {
-  core: StrictM68000Core;
-  inputQueue: number[];
-  setWaiting(task: number): void;
-  clearWaiting(): void;
-  halt(): void;
+export interface MachineSnapshotV2 {
+  version: 2;
+  hardware: Easy68kHardwareOutputSnapshot;
+  graphics?: Easy68kGraphicsSnapshot;
+  sound?: Easy68kSoundSnapshot;
 }
+
+export type MachineSnapshot = MachineSnapshotV2;
+
+export type MachineTrapContext = Easy68kTrapContext;
 
 export interface MachineAdapter {
   readonly id: MachineProfile;
   readonly bus: MemoryBus;
   readonly terminal: TerminalDevice;
   readonly hardware: Easy68kHardware;
+  readonly graphics?: Easy68kGraphicsDevice;
+  readonly sound?: Easy68kSoundDevice;
   readonly mappedHardwareConnected: boolean;
   handleTrap(context: MachineTrapContext): StepResult | undefined;
   validateInterruptVector(level: number, vectorBase?: number): string | undefined;
@@ -42,6 +51,7 @@ export interface MachineAdapterOptions {
   hardwareConfig?: Easy68kHardwareConfig;
   hardwareDevices?: readonly Easy68kHardwareDeviceConfig[];
   mapHardware?: boolean;
+  soundAssets?: readonly Easy68kSoundAsset[];
   beforeRamWrite?: (address: number) => void;
 }
 
@@ -94,11 +104,11 @@ abstract class BaseMachineAdapter implements MachineAdapter {
   }
 
   snapshot(): MachineSnapshot {
-    return this.hardware.getOutputSnapshot();
+    return { version: 2, hardware: this.hardware.getOutputSnapshot() };
   }
 
   restore(snapshot: MachineSnapshot): void {
-    this.hardware.restoreOutputSnapshot(snapshot as Easy68kHardwareOutputSnapshot);
+    this.hardware.restoreOutputSnapshot(snapshot.hardware);
   }
 
   reset(): void {
@@ -119,46 +129,45 @@ export class BareMachineAdapter extends BaseMachineAdapter {
 export class Easy68kMachineAdapter extends BaseMachineAdapter {
   readonly id = 'easy68k' as const;
   readonly mappedHardwareConnected = true;
+  readonly graphics: Easy68kGraphicsDevice;
+  readonly sound: Easy68kSoundDevice;
+  private readonly trapDispatcher: Easy68kTrapDispatcher;
 
   constructor(memory: Memory, options: MachineAdapterOptions = {}) {
     super(memory, { ...options, mapHardware: true });
+    this.graphics = new Easy68kGraphicsDevice();
+    this.sound = new Easy68kSoundDevice(options.soundAssets);
+    this.trapDispatcher = new Easy68kTrapDispatcher({
+      bus: this.bus,
+      terminal: this.terminal,
+      graphics: this.graphics,
+      sound: this.sound,
+    });
   }
 
   override handleTrap(context: MachineTrapContext): StepResult | undefined {
-    const pcBefore = context.core.state.pc >>> 0;
-    const opcode = this.bus.read16(pcBefore, 'fetch');
-    if ((opcode & 0xfff0) !== 0x4e40) return undefined;
-    const vector = opcode & 0x0f;
-    const task = this.bus.read16(pcBefore + 2, 'fetch');
-    const pcAfter = (pcBefore + 4) & 0x00ff_ffff;
+    return this.trapDispatcher.handle(context);
+  }
 
-    if (vector === 11 && task === 0) {
-      context.core.state.pc = pcAfter;
-      context.halt();
-      return { kind: 'halted', pc: pcAfter };
-    }
-    if (vector !== 15) return undefined;
-    if (task === 1) {
-      this.terminal.writeByte(context.core.state.d[0] & 0xff);
-    } else if (task === 3) {
-      context.core.state.pc = pcAfter;
-      if (context.inputQueue.length === 0) {
-        context.setWaiting(task);
-        return { kind: 'waiting', pc: pcAfter };
-      }
-      const byte = context.inputQueue.shift() ?? 0;
-      context.core.state.d[0] = (context.core.state.d[0] & 0xffff_ff00) | (byte & 0xff);
-    } else if (task === 4) {
-      context.core.state.ccr =
-        context.inputQueue.length > 0
-          ? context.core.state.ccr & ~0x04
-          : context.core.state.ccr | 0x04;
-    } else {
-      return undefined;
-    }
-    context.clearWaiting();
-    context.core.state.pc = pcAfter;
-    return { kind: 'executed', pcBefore, pcAfter };
+  override snapshot(): MachineSnapshot {
+    return {
+      version: 2,
+      hardware: this.hardware.getOutputSnapshot(),
+      graphics: this.graphics.snapshot(),
+      sound: this.sound.getSnapshot(),
+    };
+  }
+
+  override restore(snapshot: MachineSnapshot): void {
+    super.restore(snapshot);
+    if (snapshot.graphics) this.graphics.restore(snapshot.graphics);
+    if (snapshot.sound) this.sound.restore(snapshot.sound);
+  }
+
+  override reset(): void {
+    super.reset();
+    this.graphics.reset();
+    this.sound.reset();
   }
 
   override validateInterruptVector(level: number, vectorBase = 0): string | undefined {

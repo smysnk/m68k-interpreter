@@ -187,6 +187,26 @@ export class TerminalDevice {
     return readTerminalFrameBufferText(this.frameBuffer);
   }
 
+  setCursor(column: number, row: number): void {
+    if (
+      !Number.isInteger(column) ||
+      !Number.isInteger(row) ||
+      column < 0 ||
+      row < 0 ||
+      column >= this.columns ||
+      row >= this.rows
+    ) {
+      return;
+    }
+    this.cursorColumn = column;
+    this.cursorRow = row;
+    this.pendingWrap = false;
+  }
+
+  clear(): void {
+    this.reset();
+  }
+
   getDebugSnapshot(): TerminalSnapshot {
     const cells = Array.from({ length: this.rows }, (_, row) =>
       Array.from({ length: this.columns }, (_, column) => {

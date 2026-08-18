@@ -33,6 +33,11 @@ import {
   runtimeCommandPort,
 } from '@/runtime/runtimeCommandPort';
 import { hardwareSurfaceStore } from '@/runtime/hardwareSurfaceStore';
+import { graphicsSurfaceStore } from '@/runtime/graphicsSurfaceStore';
+import { soundSurfaceStore } from '@/runtime/soundSurfaceStore';
+import { easy68kAudioHost } from '@/runtime/easy68kAudioHost';
+import { DEFAULT_EASY68K_SOUND_ASSETS } from '@/runtime/defaultSoundAssets';
+import { loadPersistedEasy68kSoundAssets } from '@/runtime/easy68kSoundAssetManifest';
 import { syncRuntimeGeometryBridge } from '@/runtime/terminalProgramBridge';
 import { buildRuntimeLoadRequest } from '@/runtime/useRuntimeConfiguration';
 import { subscribeToCurrentRuntimeFrames } from '@/runtime/useRuntimeFrameSubscription';
@@ -520,6 +525,8 @@ export const useEmulatorEvents = () => {
       const previousRuntime = emulatorRef.current;
       emulatorRef.current = null;
       hardwareSurfaceStore.reset();
+      graphicsSurfaceStore.reset();
+      soundSurfaceStore.reset();
       await disposeRuntimeReplacement({
         previous: previousRuntime,
         clearPublishedRuntime: () => publishRuntimeSession(null, dispatch),
@@ -532,6 +539,10 @@ export const useEmulatorEvents = () => {
         machineProfile: selectedSettings.machineProfile,
       } as const;
       const configuredHardwareDevices = getConfiguredHardwareDevices();
+      const configuredSoundAssets =
+        selectedEmulation.machineProfile === 'easy68k'
+          ? [...DEFAULT_EASY68K_SOUND_ASSETS, ...loadPersistedEasy68kSoundAssets()]
+          : [];
       const emulator =
         !isJsdomEnvironment() && supportsInterpreterWorkerRuntime()
           ? createWorkerIdeRuntimeSession()
@@ -541,6 +552,7 @@ export const useEmulatorEvents = () => {
                 rows,
                 emulation: selectedEmulation,
                 hardwareDevices: configuredHardwareDevices,
+                soundAssets: configuredSoundAssets,
               })
             );
 
@@ -552,44 +564,43 @@ export const useEmulatorEvents = () => {
       if (workerController?.subscribeEvents) {
         workerUnsubscribeRef.current = subscribeToCurrentRuntimeFrames({
           controller: workerController,
-          isCurrent: () =>
-            runtimeEpochRef.current === epoch && emulatorRef.current === emulator,
+          isCurrent: () => runtimeEpochRef.current === epoch && emulatorRef.current === emulator,
           onEvent: (event) => {
-          if (event.type === 'frame') {
-            if (event.kind === 'heartbeat') {
+            if (event.type === 'frame') {
+              if (event.kind === 'heartbeat') {
+                return;
+              }
+
+              applyRuntimeFrameToIde(
+                emulator,
+                event.frame,
+                (frame) => dispatch(syncEmulatorFrameAction(frame)),
+                {
+                  cache: frameSyncCacheRef.current,
+                  syncVersions: event.snapshot.syncVersions,
+                }
+              );
               return;
             }
 
-            applyRuntimeFrameToIde(
-              emulator,
-              event.frame,
-              (frame) => dispatch(syncEmulatorFrameAction(frame)),
-              {
-                cache: frameSyncCacheRef.current,
-                syncVersions: event.snapshot.syncVersions,
-              }
-            );
-            return;
-          }
-
-          if (event.type === 'fault') {
-            dispatch(
-              setExecutionStateAction({
-                started: false,
-                ended: true,
-                stopped: false,
-                exception: event.exception ?? null,
-                errors: event.errors,
-              })
-            );
-            dispatch(
-              setRuntimeMetricsAction({
-                lastFrameInstructions: 0,
-                lastFrameDurationMs: 0,
-                lastStopReason: 'exception',
-              })
-            );
-          }
+            if (event.type === 'fault') {
+              dispatch(
+                setExecutionStateAction({
+                  started: false,
+                  ended: true,
+                  stopped: false,
+                  exception: event.exception ?? null,
+                  errors: event.errors,
+                })
+              );
+              dispatch(
+                setRuntimeMetricsAction({
+                  lastFrameInstructions: 0,
+                  lastFrameDurationMs: 0,
+                  lastStopReason: 'exception',
+                })
+              );
+            }
           },
         });
       }
@@ -600,26 +611,32 @@ export const useEmulatorEvents = () => {
           await disposeRuntime(emulator);
           return null;
         }
-        await runtimeCommandPort.loadProgram(buildRuntimeLoadRequest({
-          source: code,
-          emulation: selectedEmulation,
-          columns,
-          rows,
-          hardwareDevices: configuredHardwareDevices,
-          execution: {
-            delayMs: toWorkerDelayMs(delayRef.current),
-            speedMultiplier: speedMultiplierRef.current,
-            frameBudgetMs: getFrameBudgetForEnvironment(),
-            publishMemoryDuringContinuousFrames: true,
-            terminalFocusedContinuousFrames: false,
-          },
-          undoMode: 'full',
-        }));
+        await runtimeCommandPort.loadProgram(
+          buildRuntimeLoadRequest({
+            source: code,
+            emulation: selectedEmulation,
+            columns,
+            rows,
+            hardwareDevices: configuredHardwareDevices,
+            execution: {
+              delayMs: toWorkerDelayMs(delayRef.current),
+              speedMultiplier: speedMultiplierRef.current,
+              frameBudgetMs: getFrameBudgetForEnvironment(),
+              publishMemoryDuringContinuousFrames: true,
+              terminalFocusedContinuousFrames: false,
+            },
+            undoMode: 'full',
+          })
+        );
         if (runtimeEpochRef.current !== epoch) {
           await disposeRuntime(emulator);
           return null;
         }
       } else {
+        easy68kAudioHost.configureAssets(configuredSoundAssets);
+        easy68kAudioHost.setVoiceEndedHandler((voiceId) => {
+          void runtimeCommandPort.stopCompletedSoundVoice(voiceId);
+        });
         syncRuntimeGeometryBridge(emulator, columns, rows);
       }
 
@@ -673,6 +690,9 @@ export const useEmulatorEvents = () => {
       '';
 
     const handleRun = (): void => {
+      if (ideStore.getState().settings.machineProfile === 'easy68k') {
+        void easy68kAudioHost.unlock();
+      }
       void (async () => {
         if (isInitializingRuntimeRef.current) {
           queuedRunAfterInitRef.current = true;
@@ -742,6 +762,9 @@ export const useEmulatorEvents = () => {
     };
 
     const handleResume = (): void => {
+      if (ideStore.getState().settings.machineProfile === 'easy68k') {
+        void easy68kAudioHost.unlock();
+      }
       void (async () => {
         const emulator = emulatorRef.current;
         if (!emulator || emulator.isHalted() || emulator.getException()) {
@@ -796,6 +819,9 @@ export const useEmulatorEvents = () => {
     };
 
     const handleStep = (): void => {
+      if (ideStore.getState().settings.machineProfile === 'easy68k') {
+        void easy68kAudioHost.unlock();
+      }
       void (async () => {
         clearScheduledExecution();
 
@@ -911,6 +937,9 @@ export const useEmulatorEvents = () => {
         dispatch(resetEmulatorState());
         publishRuntimeSession(null, dispatch);
         hardwareSurfaceStore.reset();
+        graphicsSurfaceStore.reset();
+        soundSurfaceStore.reset();
+        easy68kAudioHost.dispose();
         await disposeRuntime(runtime);
       })();
     };
@@ -937,6 +966,9 @@ export const useEmulatorEvents = () => {
       emulatorRef.current = null;
       publishRuntimeSession(null, dispatch);
       hardwareSurfaceStore.reset();
+      graphicsSurfaceStore.reset();
+      soundSurfaceStore.reset();
+      easy68kAudioHost.dispose();
     };
   }, [dispatch]);
 

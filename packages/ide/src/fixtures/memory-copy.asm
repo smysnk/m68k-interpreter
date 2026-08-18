@@ -1,3 +1,4 @@
+; @m68k-ide/v1 layout=debug machine=easy68k cpu=m68000 focus=memory memory=$1000 speed=1 run=auto
         ORG     $1000
 
 SOURCE   DC.B    'Copy me into DEST',0
@@ -13,7 +14,7 @@ COPY_LOOP
         TST.B   D0
         BNE     COPY_LOOP
 
-        TRAP    #11
-        DC.W    0
+        MOVEQ   #9,D0
+        TRAP    #15
 
         END     START

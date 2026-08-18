@@ -1,8 +1,11 @@
 import { InterpreterWorkerHost } from '@/runtime/worker/InterpreterWorkerHost';
-import type { InterpreterWorkerCommand, InterpreterWorkerEvent } from '@/runtime/worker/interpreterWorkerProtocol';
+import type {
+  InterpreterWorkerCommand,
+  InterpreterWorkerEvent,
+} from '@/runtime/worker/interpreterWorkerProtocol';
 
 interface WorkerScopeLike {
-  postMessage(message: InterpreterWorkerEvent): void;
+  postMessage(message: InterpreterWorkerEvent, transfer?: Transferable[]): void;
   addEventListener(
     type: 'message',
     listener: (event: { data: InterpreterWorkerCommand }) => void
@@ -11,7 +14,8 @@ interface WorkerScopeLike {
 
 const workerScope = self as unknown as WorkerScopeLike;
 const host = new InterpreterWorkerHost((event) => {
-  workerScope.postMessage(event);
+  const pixels = event.type === 'frame' ? event.snapshot.graphicsPatch?.pixels : undefined;
+  workerScope.postMessage(event, pixels ? [pixels.buffer] : undefined);
 });
 
 workerScope.addEventListener('message', (event) => {

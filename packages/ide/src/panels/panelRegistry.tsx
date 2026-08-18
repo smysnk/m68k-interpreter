@@ -4,11 +4,11 @@ import HelpPanel from '@/components/HelpPanel';
 import Memory from '@/components/Memory';
 import Registers from '@/components/Registers';
 import Terminal from '@/components/Terminal';
+import GraphicsPanel from '@/components/GraphicsPanel';
+import SoundPanel from '@/components/SoundPanel';
 import DigitalIoPanel from '@/components/hardware/panels/DigitalIoPanel';
 import SevenSegmentPanel from '@/components/hardware/panels/SevenSegmentPanel';
-import {
-  SevenSegmentHeaderAccessory,
-} from '@/components/hardware/panels/HardwarePanelHeaderAccessories';
+import { SevenSegmentHeaderAccessory } from '@/components/hardware/panels/HardwarePanelHeaderAccessories';
 import {
   PANEL_KIND_DEFINITIONS,
   PANEL_KINDS,
@@ -68,7 +68,14 @@ export const PANEL_REGISTRY: Record<PanelKind, PanelRegistryEntry> = {
   },
   memory: {
     ...metadata('memory'),
-    render: ({ instance }) => <Memory instanceId={instance.id} />,
+    render: ({ instance }) => (
+      <Memory
+        initialStartAddress={
+          instance.config.kind === 'memory' ? instance.config.startAddress : undefined
+        }
+        instanceId={instance.id}
+      />
+    ),
   },
   'hardware-display': {
     ...metadata('hardware-display'),
@@ -79,6 +86,14 @@ export const PANEL_REGISTRY: Record<PanelKind, PanelRegistryEntry> = {
     ...metadata('hardware-digital-io'),
     render: ({ instance }) => <DigitalIoPanel instance={instance} />,
   },
+  graphics: {
+    ...metadata('graphics'),
+    render: ({ instance }) => <GraphicsPanel instance={instance} />,
+  },
+  sound: {
+    ...metadata('sound'),
+    render: ({ instance }) => <SoundPanel instance={instance} />,
+  },
   help: {
     ...metadata('help'),
     render: () => <HelpPanel />,
@@ -87,8 +102,7 @@ export const PANEL_REGISTRY: Record<PanelKind, PanelRegistryEntry> = {
 
 export const PANEL_KIND_ORDER: readonly PanelKind[] = [...PANEL_KINDS].sort(
   (left, right) =>
-    PANEL_KIND_DEFINITIONS[left].addMenuOrder -
-    PANEL_KIND_DEFINITIONS[right].addMenuOrder
+    PANEL_KIND_DEFINITIONS[left].addMenuOrder - PANEL_KIND_DEFINITIONS[right].addMenuOrder
 );
 
 export function getPanelDomIds(instanceId: string) {

@@ -11,11 +11,18 @@ import type {
   Easy68kHardwareValidationResult,
   InterruptRequestResult,
   UndoCaptureMode,
+  Easy68kSoundAsset,
 } from '@m68k/interpreter';
 import { validateEasy68kHardwareDevices } from '@m68k/interpreter';
 import type { WorkerExecutionConfig } from '@/runtime/worker/interpreterWorkerProtocol';
 import type { RuntimeLoadRequest } from '@/runtime/worker/interpreterWorkerProtocol';
 import { hardwareSurfaceStore } from '@/runtime/hardwareSurfaceStore';
+import { easy68kAudioHost } from '@/runtime/easy68kAudioHost';
+import { soundSurfaceStore } from '@/runtime/soundSurfaceStore';
+import {
+  loadPersistedEasy68kSoundAssets,
+  persistEasy68kSoundAssets,
+} from '@/runtime/easy68kSoundAssetManifest';
 
 function publishInProcessHardware(runtime: IdeRuntimeSession): void {
   if (!runtime.controller && runtime.getHardwareSnapshot) {
@@ -148,6 +155,73 @@ export class RuntimeCommandPort {
         runtime.clearInputQueue();
       }
     });
+  }
+
+  stopAllSounds(): Promise<void> {
+    return this.enqueue(async (runtime) => {
+      easy68kAudioHost.stopAll();
+      if (runtime.controller?.requestStopAllSounds) {
+        await runtime.controller.requestStopAllSounds();
+      } else {
+        runtime.stopAllSounds?.();
+        const snapshot = runtime.getSoundSnapshot?.(true);
+        if (snapshot) soundSurfaceStore.publishDevice(snapshot);
+      }
+    });
+  }
+
+  stopSoundReference(player: 'standard' | 'polyphonic', reference: number): Promise<boolean> {
+    return this.enqueue(async (runtime) => {
+      const stopped = runtime.controller?.requestStopSoundReference
+        ? await runtime.controller.requestStopSoundReference(player, reference)
+        : (runtime.stopSoundReference?.(player, reference) ?? false);
+      const snapshot = runtime.getSoundSnapshot?.(true);
+      if (snapshot) soundSurfaceStore.publishDevice(snapshot);
+      return stopped;
+    });
+  }
+
+  stopCompletedSoundVoice(voiceId: number): Promise<void> {
+    return this.enqueue(async (runtime) => {
+      if (runtime.controller?.requestCompleteSoundVoice) {
+        await runtime.controller.requestCompleteSoundVoice(voiceId);
+      } else {
+        runtime.completeSoundVoice?.(voiceId);
+        const snapshot = runtime.getSoundSnapshot?.(true);
+        if (snapshot) soundSurfaceStore.publishDevice(snapshot);
+      }
+    });
+  }
+
+  registerSoundAssets(assets: readonly Easy68kSoundAsset[]): Promise<Easy68kSoundAsset[]> {
+    if (!this.sessions.getSnapshot().session) {
+      easy68kAudioHost.registerAssets(assets);
+      this.persistSoundAssets(assets);
+      return Promise.resolve(
+        assets.map((asset) => ({
+          ...asset,
+          bytes: new Uint8Array(asset.bytes),
+        }))
+      );
+    }
+    return this.enqueue(async (runtime) => {
+      const accepted = runtime.controller?.requestRegisterSoundAssets
+        ? await runtime.controller.requestRegisterSoundAssets(assets)
+        : (runtime.registerSoundAssets?.(assets) ?? []);
+      easy68kAudioHost.registerAssets(accepted);
+      this.persistSoundAssets(accepted);
+      const snapshot = runtime.getSoundSnapshot?.(true);
+      if (snapshot) soundSurfaceStore.publishDevice(snapshot);
+      return accepted;
+    });
+  }
+
+  private persistSoundAssets(assets: readonly Easy68kSoundAsset[]): void {
+    const merged = new Map(
+      loadPersistedEasy68kSoundAssets().map((asset) => [asset.path, asset] as const)
+    );
+    for (const asset of assets) merged.set(asset.path, asset);
+    persistEasy68kSoundAssets([...merged.values()]);
   }
 
   configureHardware(config: Easy68kHardwareConfig): Promise<Easy68kHardwareValidationResult> {

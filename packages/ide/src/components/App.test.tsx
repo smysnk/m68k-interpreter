@@ -8,6 +8,7 @@ import {
   createIdeStore,
   ideStore,
   resetFilesState,
+  resetSourceIdeState,
   resetSettingsState,
   resetToPreset,
   setActiveFile,
@@ -59,6 +60,7 @@ describe('App', () => {
     window.localStorage.clear();
     useEmulatorStore.getState().reset();
     ideStore.dispatch(resetFilesState());
+    ideStore.dispatch(resetSourceIdeState());
     ideStore.dispatch(resetSettingsState());
     ideStore.dispatch(resetToPreset('classic'));
     window.editorCode = '';
@@ -70,6 +72,9 @@ describe('App', () => {
     const closeSidebar = vi.fn();
 
     renderWithIdeProviders(<FileExplorerSidebar open onClose={closeSidebar} />, { store });
+
+    expect(screen.queryByText('workspace/scratch.asm')).not.toBeInTheDocument();
+    expect(screen.queryByText('fixtures/nibbles.asm')).not.toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole('button', { name: /scratch\.asm/i }));
 
@@ -167,7 +172,7 @@ describe('App', () => {
     expect(ideStore.getState().files.activeFileId).toBe('example:nibbles.asm');
   });
 
-  it('focuses the code panel when opening Nibbles from the sidebar', () => {
+  it('applies the source-requested terminal focus when opening Nibbles', async () => {
     ideStore.dispatch(setActiveFile('workspace:scratch.asm'));
 
     render(<App />);
@@ -175,12 +180,15 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
     fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
 
-    const layout = ideStore.getState().panelLayout.activeLayout;
-    expect(layout.instances[layout.focusedPanelId ?? '']?.kind).toBe('code');
-    expect(screen.getByTestId('assembly-editor')).toBeInTheDocument();
+    await waitFor(() => {
+      const layout = ideStore.getState().panelLayout.activeLayout;
+      expect(layout.instances[layout.focusedPanelId ?? '']?.kind).toBe('terminal');
+    });
+    expect(screen.getByText(/source config · terminal-focus/i)).toBeInTheDocument();
   });
 
   it('adds registers, memory, and hardware as independent panel instances', () => {
+    ideStore.dispatch(setActiveFile('workspace:scratch.asm'));
     render(<App />);
     expect(screen.getAllByText('Flags').length).toBeGreaterThan(0);
     openViewMenu();
@@ -239,11 +247,11 @@ describe('App', () => {
     renderWithIdeProviders(<AppShell />, { store });
 
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-theme', 'dark');
-    expect(store.getState().panelLayout.activeLayout.columns).toHaveLength(3);
+    expect(store.getState().panelLayout.activeLayout.columns).toHaveLength(1);
+    expect(store.getState().sourceIde.baseline?.panelLayout.activeLayout.columns).toHaveLength(3);
     expect(
       Object.values(store.getState().panelLayout.activeLayout.instances).map((panel) => panel.kind)
-    ).toEqual(['code', 'memory', 'help']);
-    expect(screen.getByRole('heading', { name: 'Help' })).toBeVisible();
+    ).toEqual(['terminal']);
     expect(store.getState().files.activeFileId).toBe('example:nibbles.asm');
     expect(store.getState().emulator.editorCode).toBe(nibblesSource);
   });

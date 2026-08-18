@@ -1,3 +1,4 @@
+; @m68k-ide/v1 layout=debug machine=easy68k cpu=m68000 focus=registers speed=1 run=auto
         ORG     $1000
 
 VALUE_A  DC.L    12
@@ -22,7 +23,7 @@ START
         ADD.L   D4,D4
         MOVE.L  D4,DOUBLE
 
-        TRAP    #11
-        DC.W    0
+        MOVEQ   #9,D0
+        TRAP    #15
 
         END     START

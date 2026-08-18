@@ -1,3 +1,4 @@
+; @m68k-ide/v1 layout=terminal-focus machine=easy68k cpu=m68000 focus=terminal speed=1 run=auto
 ;=============================================================================
 ;        File: nibbles.asm
 ;      Author: Joshua Bellamy
@@ -111,8 +112,9 @@ loadlevel
         BSR     _DRAWFOOD
 
 start
+	  MOVEQ	#7,D0
         TRAP	#15 ; check if we have a character waiting for us
-	  DC.W	4
+	  TST.B	D1
 	  BEQ movesnk; if not, move on  
         BSR _SGETCH  ; else, get the character
 
@@ -354,8 +356,8 @@ gamecompletescr
         MOVE.B  #GAME_MODE_GAMEOVER,GAME_MODE
         MOVE #STR_GAME_COMPLETE_SCR,A1 
         BSR _DISPSTR         
-        TRAP #11        ; end game
-        DC.W 0
+        MOVEQ #9,D0     ; end game
+        TRAP #15
 
   
 ; << End of Main >>
@@ -2363,8 +2365,8 @@ gg_get_select
         CMP.B  #0,D3   ; see if we're done
         BEQ    gg_done_select 
 
-        TRAP    #11    ; end game
-        DC.W    0
+        MOVEQ   #9,D0  ; end game
+        TRAP    #15
 
         
 
@@ -2390,15 +2392,19 @@ gg_select_key_right
 ***** Subroutine for receiving a character - simulator *****
 
 _SGETCH 
+        MOVEQ	#5,D0
         TRAP	#15
-        DC.W	3
+        MOVE.B  D1,D0
         RTS
 
 **** Subroutine for sending character - simulator *****
 
 _SPUTCH 
+        MOVEM.L D0-D1,-(SP)
+        MOVE.B  D0,D1
+        MOVEQ   #6,D0
         TRAP	#15         
-        DC.W	1
+        MOVEM.L (SP)+,D0-D1
         RTS
 
 ***** Subroutine for receiving a character - trainer board *****

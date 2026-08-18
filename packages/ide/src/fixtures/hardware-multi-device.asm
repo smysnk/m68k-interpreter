@@ -1,3 +1,4 @@
+; @m68k-ide/v1 layout=hardware-lab machine=easy68k cpu=m68000 focus=hardware-digital-io speed=1 run=auto display=$E00000,$E00020 digital-io=$E00040,$E00050
 ; Exercise two independently mapped seven-segment displays and two digital I/O boards.
 ; The browser independence test configures the panels to these named address ranges.
 ORG $1000

@@ -1,3 +1,4 @@
+; @m68k-ide/v1 layout=terminal-focus machine=easy68k cpu=m68000 focus=terminal speed=1 run=auto
         ORG     $1000
 
 START
@@ -7,24 +8,27 @@ START
         MOVE.B  D0,LAST_KEY
         LEA     LABEL,A0
         BSR     PUTS
+        MOVE.B  LAST_KEY,D1
+        MOVEQ   #6,D0
         TRAP    #15
-        DC.W    1
         LEA     NEWLINE,A0
         BSR     PUTS
-        TRAP    #11
-        DC.W    0
+        MOVEQ   #9,D0
+        TRAP    #15
 
 SGETCH
+        MOVEQ   #5,D0
         TRAP    #15
-        DC.W    3
+        MOVE.B  D1,D0
         RTS
 
 PUTS
         MOVE.B  (A0)+,D0
         TST.B   D0
         BEQ     PUTS_DONE
+        MOVE.B  D0,D1
+        MOVEQ   #6,D0
         TRAP    #15
-        DC.W    1
         BRA     PUTS
 
 PUTS_DONE

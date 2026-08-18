@@ -12,7 +12,10 @@ describe('Undo', () => {
     undo.push({
       cpu: { pc: 4, sr: 0x2001, usp: 0x1000, ssp: 0x2000, registers },
       memoryPages: [memory.captureUndoPage(0)],
-      machine: { display: new Array(8).fill(0), leds: 0, outputVersion: 1 },
+      machine: {
+        version: 2,
+        hardware: { display: new Array(8).fill(0), leds: 0, outputVersion: 1 },
+      },
       diagnostics: { errors },
       execution: { lastInstruction: 'MOVE.B', line: 3 },
     });

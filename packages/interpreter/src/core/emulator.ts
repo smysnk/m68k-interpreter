@@ -11,6 +11,8 @@ import {
 } from '../devices/easy68kHardware';
 import type { TerminalDevice, TerminalMeta, TerminalSnapshot } from '../devices/terminal';
 import type { TerminalFrameBuffer } from '../devices/terminalBuffer';
+import type { Easy68kGraphicsPatch, Easy68kGraphicsState } from '../devices/easy68kGraphics';
+import type { Easy68kSoundAsset, Easy68kSoundSnapshot } from '../devices/easy68kSound';
 import { normalizeEmulationConfig, toLegacyCpuProfile } from '../isa/emulationConfig';
 import type { CpuProfile, EmulationConfig, MachineProfile } from '../isa/types';
 import {
@@ -41,6 +43,7 @@ export interface EmulatorOptions {
   undoCheckpointInterval?: number;
   hardwareConfig?: Easy68kHardwareConfig;
   hardwareDevices?: readonly Easy68kHardwareDeviceConfig[];
+  soundAssets?: readonly Easy68kSoundAsset[];
 }
 
 function normalizeUndoCheckpointInterval(value: number | undefined): number {
@@ -72,6 +75,7 @@ export class Emulator {
   private exception: string | undefined;
   private inputQueue: number[] = [];
   private waitingForInput = false;
+  private waitingForInputTask: number | null = null;
   private halted = false;
   private pendingExternalInterruptAddress: number | undefined;
   private readonly pendingInterruptLevels = new Set<number>();
@@ -92,6 +96,7 @@ export class Emulator {
       rows: options.rows,
       hardwareConfig: options.hardwareConfig,
       hardwareDevices: options.hardwareDevices,
+      soundAssets: options.soundAssets,
       beforeRamWrite: (address) => this.captureUndoPageForAddress(address),
     });
     this.terminal = this.machine.terminal;
@@ -157,11 +162,13 @@ export class Emulator {
     this.machineTrapContext = {
       core,
       inputQueue: this.inputQueue,
-      setWaiting: () => {
+      setWaiting: (task) => {
         this.waitingForInput = true;
+        this.waitingForInputTask = task;
       },
       clearWaiting: () => {
         this.waitingForInput = false;
+        this.waitingForInputTask = null;
       },
       halt: () => {
         this.halted = true;
@@ -302,8 +309,11 @@ export class Emulator {
       if (this.machine.id === 'easy68k' && this.waitingForInput) {
         if (this.inputQueue.length === 0) return { kind: 'waiting', pc: core.state.pc };
         const byte = this.inputQueue.shift() ?? 0;
-        core.state.d[0] = (core.state.d[0] & 0xffff_ff00) | (byte & 0xff);
+        if (this.waitingForInputTask === 5) {
+          core.state.d[1] = (core.state.d[1] & 0xffff_ff00) | (byte & 0xff);
+        }
         this.waitingForInput = false;
+        this.waitingForInputTask = null;
         return { kind: 'executed', pcBefore, pcAfter: core.state.pc };
       }
 
@@ -479,6 +489,8 @@ export class Emulator {
       terminal: terminalMeta.version,
       terminalGeometry: terminalMeta.geometryVersion,
       hardware: this.hardware.getSnapshot().version,
+      graphics: this.machine.graphics?.getVersion(),
+      sound: this.machine.sound?.getVersion(),
     };
   }
 
@@ -491,6 +503,38 @@ export class Emulator {
 
   getHardwareSnapshot(): Easy68kHardwareSnapshot {
     return this.hardware.getSnapshot();
+  }
+
+  getGraphicsState(): Easy68kGraphicsState | undefined {
+    return this.machine.graphics?.getState();
+  }
+
+  consumeGraphicsPatch(forceFull = false): Easy68kGraphicsPatch | undefined {
+    return this.machine.graphics?.consumePatch(forceFull);
+  }
+
+  getSoundSnapshot(includeCommands = false): Easy68kSoundSnapshot | undefined {
+    return this.machine.sound?.getSnapshot(includeCommands);
+  }
+
+  getSoundAssets(): Easy68kSoundAsset[] {
+    return this.machine.sound?.getAssets() ?? [];
+  }
+
+  registerSoundAssets(assets: readonly Easy68kSoundAsset[]): Easy68kSoundAsset[] {
+    return this.machine.sound?.registerAssets(assets) ?? [];
+  }
+
+  completeSoundVoice(voiceId: number): void {
+    this.machine.sound?.completeVoice(voiceId);
+  }
+
+  stopAllSounds(): void {
+    this.machine.sound?.stopAll();
+  }
+
+  stopSoundReference(player: 'standard' | 'polyphonic', reference: number): boolean {
+    return this.machine.sound?.stopReference(player, reference) ?? false;
   }
 
   configureHardware(config: Easy68kHardwareConfig): Easy68kHardwareValidationResult {
@@ -728,6 +772,7 @@ export class Emulator {
     this.lastInstruction = frame.execution.lastInstruction;
     this.line = frame.execution.line;
     this.waitingForInput = false;
+    this.waitingForInputTask = null;
     this.halted = false;
     this.lastStrictFault = undefined;
     this.exception = undefined;
@@ -742,6 +787,7 @@ export class Emulator {
     this.inputQueue = [];
     if (this.machineTrapContext !== undefined) this.machineTrapContext.inputQueue = this.inputQueue;
     this.waitingForInput = false;
+    this.waitingForInputTask = null;
     this.halted = false;
     this.pendingExternalInterruptAddress = undefined;
     this.pendingInterruptLevels.clear();

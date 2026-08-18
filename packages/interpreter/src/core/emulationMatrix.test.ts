@@ -32,17 +32,23 @@ describe.each(combinations)('$cpuModel + $machineProfile', (emulation) => {
       expect(emulator.readMemoryRange(0xe00010, 1)[0]).toBe(0xa5);
     }
   });
+
+  it(`${emulation.machineProfile === 'easy68k' ? 'owns' : 'does not allocate'} multimedia devices`, () => {
+    const emulator = new Emulator('START\n  END START', { emulation });
+    expect(emulator.getGraphicsState() !== undefined).toBe(emulation.machineProfile === 'easy68k');
+    expect(emulator.getSoundSnapshot() !== undefined).toBe(emulation.machineProfile === 'easy68k');
+  });
 });
 
 describe('orthogonal capability gates', () => {
   it.each(['m68000', 'm68010'] as const)('provides Easy68K traps on %s', (cpuModel) => {
     const emulator = new Emulator(
       `START
-  MOVE.B #'A',D0
+  MOVE.B #'A',D1
+  MOVEQ #6,D0
   TRAP #15
-  DC.W 1
-  TRAP #11
-  DC.W 0
+  MOVEQ #9,D0
+  TRAP #15
   END START`,
       { emulation: { cpuModel, machineProfile: 'easy68k' } }
     );
@@ -51,25 +57,29 @@ describe('orthogonal capability gates', () => {
   });
 
   it('does not intercept Easy68K traps on Bare', () => {
-    const emulator = new Emulator('START\n  TRAP #15\n  DC.W 1\n  END START', {
+    const emulator = new Emulator('START\n  MOVEQ #6,D0\n  TRAP #15\n  END START', {
       emulation: { cpuModel: 'm68000', machineProfile: 'bare' },
     });
+    expect(emulator.stepInstruction()).toMatchObject({ kind: 'executed' });
     expect(emulator.stepInstruction()).toMatchObject({ kind: 'exception' });
     expect(emulator.getTerminalText().trim()).toBe('');
   });
 
-  it('reads the Easy68K task word from live memory', () => {
+  it('does not consume the word after a canonical Easy68K trap', () => {
     const emulator = new Emulator(
       `START
-  MOVE.B #'A',D0
+  MOVE.B #'A',D1
+  MOVEQ #6,D0
   TRAP #15
-  DC.W 1
+  DC.W $4E71
   END START`
     );
     emulator.stepInstruction();
-    const trapAddress = emulator.getPC();
-    emulator.writeMemoryWord(trapAddress + 2, 4);
     emulator.stepInstruction();
-    expect(emulator.getTerminalText().trim()).toBe('');
+    const trapAddress = emulator.getPC();
+    emulator.stepInstruction();
+    expect(emulator.getTerminalText()).toContain('A');
+    expect(emulator.getPC()).toBe(trapAddress + 2);
+    expect(emulator.stepInstruction()).toMatchObject({ kind: 'executed' });
   });
 });

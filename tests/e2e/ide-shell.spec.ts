@@ -155,6 +155,30 @@ test.describe('browser e2e ide shell', () => {
     await expect(page.getByTestId('navbar-view-layouts-submenu')).toBeVisible();
   });
 
+  test('keeps the panel layout unchanged when execution starts', async ({ page }) => {
+    await page.goto('/');
+
+    const terminalPanels = page.locator('[data-panel-kind="terminal"]');
+    await expect(terminalPanels).toHaveCount(1);
+    await terminalPanels.getByRole('button', { name: 'Close Screen' }).click();
+    await expect(terminalPanels).toHaveCount(0);
+
+    const panelKindsBeforeRun = await page.locator('.panel-frame').evaluateAll((panels) =>
+      panels.map((panel) => (panel as HTMLElement).dataset.panelKind)
+    );
+
+    await page.getByRole('button', { name: /run program/i }).click();
+
+    await expect(terminalPanels).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.locator('.panel-frame').evaluateAll((panels) =>
+          panels.map((panel) => (panel as HTMLElement).dataset.panelKind)
+        )
+      )
+      .toEqual(panelKindsBeforeRun);
+  });
+
   test('sizes docked hardware cards to their content instead of stretching them', async ({
     page,
   }) => {

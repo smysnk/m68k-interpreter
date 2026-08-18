@@ -194,6 +194,11 @@ function migrateV2ToV3(value: Record<string, unknown>): Record<string, unknown> 
   };
 }
 
+function migrateV3ToV4(value: Record<string, unknown>): Record<string, unknown> {
+  if (finite(value.schemaVersion, 1) >= 4) return value;
+  return { ...value, schemaVersion: 4 };
+}
+
 function migratePanelLayoutDocument(value: unknown): unknown {
   if (!isRecord(value)) return value;
   let migrated = value;
@@ -202,6 +207,9 @@ function migratePanelLayoutDocument(value: unknown): unknown {
   }
   if (finite(migrated.schemaVersion, 1) < 3) {
     migrated = migrateV2ToV3(migrated);
+  }
+  if (finite(migrated.schemaVersion, 1) < 4) {
+    migrated = migrateV3ToV4(migrated);
   }
   return migrated;
 }
@@ -225,6 +233,20 @@ function normalizeConfiguration(
       ...(typeof source.startAddress === 'number'
         ? { startAddress: normalizeDeviceAddress(source.startAddress) }
         : {}),
+    };
+  }
+  if (kind === 'graphics') {
+    const scaleMode =
+      source.scaleMode === 'one-to-one' || source.scaleMode === 'integer'
+        ? source.scaleMode
+        : 'fit';
+    return { kind, scaleMode, smoothing: source.smoothing === true };
+  }
+  if (kind === 'sound') {
+    return {
+      kind,
+      showAssets: source.showAssets !== false,
+      showVoices: source.showVoices !== false,
     };
   }
   if (kind === 'hardware-display') {

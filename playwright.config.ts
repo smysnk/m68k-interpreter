@@ -5,6 +5,7 @@ const baseURL = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
   testDir: './tests/e2e',
+  snapshotPathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}{ext}',
   fullyParallel: false,
   timeout: 90_000,
   expect: {

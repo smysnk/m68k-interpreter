@@ -11,8 +11,6 @@ export class Strings {
   static readonly UNKNOWN_LABEL = 'Execution killed: unknown label: ';
   static readonly END_MISSING = 'Execution killed: END directive missing';
   static readonly DUPLICATE_END = 'Execution killed: duplicate END directive';
-  static readonly MISSING_TRAP_TASK = 'Execution killed: missing TRAP task word';
-  static readonly UNSUPPORTED_TRAP_VECTOR = 'Execution killed: unsupported TRAP vector/task: ';
 
   // Errors
   static readonly INVALID_OP_SIZE = 'Invalid operation size (defaulted to word)';
@@ -33,7 +31,8 @@ export class Strings {
   static readonly DATA_ONLY_EXT = 'Can only EXT a data register';
   static readonly ONE_BIT_MEMORY_SHIFT = 'Memory shifter for more than 1 bit';
   static readonly WORD_ONLY_MEMORY_SHIFT = 'You can only shift words in memory';
-  static readonly IMMEDIATE_SHIFT_MAX_SIZE = 'You can only shift for at most 8 bits while using immediate values';
+  static readonly IMMEDIATE_SHIFT_MAX_SIZE =
+    'You can only shift for at most 8 bits while using immediate values';
   static readonly ONE_BIT_MEMORY_ROTATE = 'Memory shifter for more than 1 bit';
   static readonly WORD_ONLY_MEMORY_ROTATE = 'You can only rotate words in memory';
   static readonly IMMEDIATE_ROTATE_MAX_SIZE =

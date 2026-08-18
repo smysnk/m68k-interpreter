@@ -640,18 +640,15 @@ DONE
   });
 });
 
-describe('Emulator - Phase 5 terminal and traps', () => {
-  it('writes characters through TRAP #15 task 1 and halts through TRAP #11 task 0', () => {
+describe('Emulator - canonical Easy68K terminal services', () => {
+  it('writes characters through task 6 and halts through task 9', () => {
     const code = `
 START
-  MOVE.B #'A',D0
-  BSR _SPUTCH
-  TRAP #11
-  DC.W 0
-_SPUTCH
+  MOVE.B #'A',D1
+  MOVEQ #6,D0
   TRAP #15
-  DC.W 1
-  RTS
+  MOVEQ #9,D0
+  TRAP #15
   END START
 `;
 
@@ -668,17 +665,17 @@ _SPUTCH
     expect(terminalMeta.cursorColumn).toBe(1);
   });
 
-  it('blocks on TRAP #15 task 3 until queued input is available', () => {
+  it('blocks on task 5 until queued input is available in D1.B', () => {
     const code = `
 RESULT DC.B 0
 START
   BSR _SGETCH
-  MOVE.B D0,RESULT
-  TRAP #11
-  DC.W 0
-_SGETCH
+  MOVE.B D1,RESULT
+  MOVEQ #9,D0
   TRAP #15
-  DC.W 3
+_SGETCH
+  MOVEQ #5,D0
+  TRAP #15
   RTS
   END START
 `;
@@ -700,20 +697,21 @@ _SGETCH
     expect(emulator.getQueuedInputLength()).toBe(0);
   });
 
-  it('updates the zero flag for TRAP #15 task 4 keyboard polling', () => {
+  it('returns keyboard availability in D1.B for task 7', () => {
     const code = `
 RESULT DC.B 0
 START
+  MOVEQ #7,D0
   TRAP #15
-  DC.W 4
+  TST.B D1
   BEQ NO_INPUT
   MOVE.B #1,RESULT
   BRA EXIT
 NO_INPUT
   MOVE.B #2,RESULT
 EXIT
-  TRAP #11
-  DC.W 0
+  MOVEQ #9,D0
+  TRAP #15
   END START
 `;
 
@@ -751,8 +749,8 @@ NEXT
 GREATER_THAN
   MOVE.B #4,RESULT
 DONE
-  TRAP #11
-  DC.W 0
+  MOVEQ #9,D0
+  TRAP #15
   END START
 `;
 
@@ -769,8 +767,8 @@ DONE
 FLAG DC.B 0
 START
   BSR WAIT_FOR_TOUCH
-  TRAP #11
-  DC.W 0
+  MOVEQ #9,D0
+  TRAP #15
 HANDLER
   MOVE.B #1,FLAG
   RTS
@@ -778,8 +776,8 @@ WAIT_FOR_TOUCH
   BSR _SGETCH
   RTS
 _SGETCH
+  MOVEQ #5,D0
   TRAP #15
-  DC.W 3
   RTS
   END START
 `);

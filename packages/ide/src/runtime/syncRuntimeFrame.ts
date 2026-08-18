@@ -17,6 +17,9 @@ import {
 } from '@/runtime/runtimeFramePayload';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { hardwareSurfaceStore } from '@/runtime/hardwareSurfaceStore';
+import { graphicsSurfaceStore } from '@/runtime/graphicsSurfaceStore';
+import { soundSurfaceStore } from '@/runtime/soundSurfaceStore';
+import { easy68kAudioHost } from '@/runtime/easy68kAudioHost';
 
 function memoryMetaEquals(left: MemoryMeta, right: MemoryMeta): boolean {
   return (
@@ -246,6 +249,18 @@ export function applyRuntimeFrameToIde(
     emulator.getHardwareSnapshot
   ) {
     hardwareSurfaceStore.publish(emulator.getHardwareSnapshot());
+  }
+
+  if (emulator.getRuntimeTransport?.() !== 'worker') {
+    const graphicsState = emulator.getGraphicsState?.();
+    if (graphicsState) {
+      graphicsSurfaceStore.publish(graphicsState, emulator.consumeGraphicsPatch?.());
+    }
+    const soundSnapshot = emulator.getSoundSnapshot?.(true);
+    if (soundSnapshot) {
+      soundSurfaceStore.publishDevice(soundSnapshot);
+      void easy68kAudioHost.handleCommands(soundSnapshot.pendingCommands);
+    }
   }
 
   if (cache) {

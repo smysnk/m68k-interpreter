@@ -9,10 +9,15 @@ const MEMORY_VIEWPORT_COLUMNS = 16;
 const MEMORY_VIEWPORT_ROWS = 16;
 const MEMORY_VIEWPORT_LENGTH = MEMORY_VIEWPORT_COLUMNS * MEMORY_VIEWPORT_ROWS;
 
-const Memory: React.FC<{ instanceId?: string }> = ({ instanceId }) => {
+const Memory: React.FC<{ instanceId?: string; initialStartAddress?: number }> = ({
+  instanceId,
+  initialStartAddress = 0x1000,
+}) => {
   useIdeRenderTelemetry('Memory');
   const { meta } = useMemorySurface();
-  const [startAddress, setStartAddress] = useState<number>(0x1000);
+  const [startAddress, setStartAddress] = useState<number>(initialStartAddress);
+
+  React.useEffect(() => setStartAddress(initialStartAddress), [initialStartAddress]);
 
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const value = parseInt(e.target.value, 16);
@@ -38,7 +43,8 @@ const Memory: React.FC<{ instanceId?: string }> = ({ instanceId }) => {
 
   const visibleBytes = memorySurfaceStore.readRange(startAddress, MEMORY_VIEWPORT_LENGTH);
 
-  const getValue = (offset: number): string => (visibleBytes[offset] ?? 0).toString(16).padStart(2, '0');
+  const getValue = (offset: number): string =>
+    (visibleBytes[offset] ?? 0).toString(16).padStart(2, '0');
   const formatAddress = (address: number | null): string =>
     address === null ? 'n/a' : `0x${address.toString(16).padStart(8, '0')}`;
 
@@ -87,9 +93,7 @@ const Memory: React.FC<{ instanceId?: string }> = ({ instanceId }) => {
               const rowStart = startAddress + row * MEMORY_VIEWPORT_COLUMNS;
               return (
                 <tr key={row}>
-                  <td className="addr-cell">
-                    {`0x${rowStart.toString(16).padStart(8, '0')}`}
-                  </td>
+                  <td className="addr-cell">{`0x${rowStart.toString(16).padStart(8, '0')}`}</td>
                   {Array.from({ length: MEMORY_VIEWPORT_COLUMNS }).map((_, col) => {
                     const offset = row * MEMORY_VIEWPORT_COLUMNS + col;
                     return (
@@ -107,7 +111,9 @@ const Memory: React.FC<{ instanceId?: string }> = ({ instanceId }) => {
 
       <div className="memory-stats">
         <p>Used bytes: {meta.usedBytes}</p>
-        <p>Address range: {formatAddress(meta.minAddress)} - {formatAddress(meta.maxAddress)}</p>
+        <p>
+          Address range: {formatAddress(meta.minAddress)} - {formatAddress(meta.maxAddress)}
+        </p>
       </div>
     </div>
   );

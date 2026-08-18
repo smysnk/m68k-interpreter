@@ -48,6 +48,9 @@ import type {
   TerminalTouchProtocolSymbols,
 } from '@/runtime/terminalTouchProtocol';
 import { hardwareSurfaceStore } from '@/runtime/hardwareSurfaceStore';
+import { graphicsSurfaceStore } from '@/runtime/graphicsSurfaceStore';
+import { soundSurfaceStore } from '@/runtime/soundSurfaceStore';
+import { easy68kAudioHost } from '@/runtime/easy68kAudioHost';
 
 interface WorkerMessageEventLike<T> {
   data: T;
@@ -342,12 +345,20 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
 
     this.worker.removeEventListener('message', this.handleMessage);
     this.rejectPendingCommands(new Error('Interpreter worker client disposed'));
+    easy68kAudioHost.dispose();
+    graphicsSurfaceStore.reset();
     this.worker.terminate();
   }
 
   requestLoadProgram(
     request: import('./interpreterWorkerProtocol').RuntimeLoadRequest
   ): Promise<void> {
+    graphicsSurfaceStore.reset();
+    soundSurfaceStore.reset();
+    easy68kAudioHost.configureAssets(request.soundAssets ?? []);
+    easy68kAudioHost.setVoiceEndedHandler((voiceId) => {
+      void this.requestCompleteSoundVoice(voiceId);
+    });
     return this.postCommand<void>({ type: 'loadProgram', request });
   }
 
@@ -556,6 +567,32 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
   async requestSymbolAddress(symbol: string): Promise<number | undefined> {
     const payload = await this.postCommand<number | null>({ type: 'getSymbolAddress', symbol });
     return payload === null || payload === undefined ? undefined : payload;
+  }
+
+  requestCompleteSoundVoice(voiceId: number): Promise<void> {
+    return this.postCommand<void>({ type: 'completeSoundVoice', voiceId });
+  }
+
+  requestStopAllSounds(): Promise<void> {
+    return this.postCommand<void>({ type: 'stopAllSounds' });
+  }
+
+  requestStopSoundReference(
+    player: 'standard' | 'polyphonic',
+    reference: number
+  ): Promise<boolean> {
+    return this.postCommand<boolean>({ type: 'stopSoundReference', player, reference }).then(
+      (stopped) => stopped ?? false
+    );
+  }
+
+  requestRegisterSoundAssets(
+    assets: readonly import('@m68k/interpreter').Easy68kSoundAsset[]
+  ): Promise<import('@m68k/interpreter').Easy68kSoundAsset[]> {
+    return this.postCommand<import('@m68k/interpreter').Easy68kSoundAsset[]>({
+      type: 'registerSoundAssets',
+      assets: assets.map((asset) => ({ ...asset, bytes: new Uint8Array(asset.bytes) })),
+    }).then((accepted) => accepted ?? []);
   }
 
   getCFlag(): number {
@@ -868,6 +905,13 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
       for (const startedAtMs of this.pendingHardwareVisibleStartedAtMs.splice(0)) {
         recordHardwareCommandVisibleLatency(Math.max(0, visibleAtMs - startedAtMs));
       }
+    }
+    if (snapshot.graphicsState) {
+      graphicsSurfaceStore.publish(snapshot.graphicsState, snapshot.graphicsPatch);
+    }
+    if (snapshot.soundSnapshot) {
+      soundSurfaceStore.publishDevice(snapshot.soundSnapshot);
+      void easy68kAudioHost.handleCommands(snapshot.soundSnapshot.pendingCommands);
     }
   }
 

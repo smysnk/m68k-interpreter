@@ -1,3 +1,4 @@
+; @m68k-ide/v1 layout=hardware-lab machine=easy68k cpu=m68000 focus=hardware-display speed=1 run=auto
 ; Write recognizable patterns to all eight seven-segment positions.
 ORG $1000
 START

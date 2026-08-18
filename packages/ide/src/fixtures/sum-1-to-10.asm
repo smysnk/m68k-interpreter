@@ -1,3 +1,4 @@
+; @m68k-ide/v1 layout=debug machine=easy68k cpu=m68000 focus=registers speed=1 run=auto
         ORG     $1000
 
 TOTAL    DC.L    0
@@ -13,7 +14,7 @@ LOOP
         BNE     LOOP
 
         MOVE.L  D0,TOTAL
-        TRAP    #11
-        DC.W    0
+        MOVEQ   #9,D0
+        TRAP    #15
 
         END     START

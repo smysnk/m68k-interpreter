@@ -163,6 +163,20 @@ const panelLayoutSlice = createSlice({
       }
       markDirty(state);
     },
+    commitMultimediaPanelConfiguration(
+      state,
+      action: PayloadAction<{
+        panelId: string;
+        config:
+          | Extract<PanelLayoutDocument['instances'][string]['config'], { kind: 'graphics' }>
+          | Extract<PanelLayoutDocument['instances'][string]['config'], { kind: 'sound' }>;
+      }>
+    ) {
+      const panel = state.activeLayout.instances[action.payload.panelId];
+      if (!panel || panel.kind !== action.payload.config.kind) return;
+      panel.config = { ...action.payload.config };
+      markDirty(state);
+    },
     closePanel(state, action: PayloadAction<PanelInstanceId>) {
       const id = action.payload;
       if (!state.activeLayout.instances[id]) return;
@@ -296,6 +310,16 @@ const panelLayoutSlice = createSlice({
       state.activeSourceViewId = `preset:${action.payload}`;
       state.activeLayoutDirty = false;
     },
+    restoreSourceIdeBaseline(
+      state,
+      action: PayloadAction<
+        Pick<PanelLayoutState, 'activeLayout' | 'activeSourceViewId' | 'activeLayoutDirty'>
+      >
+    ) {
+      state.activeLayout = normalizePanelLayoutDocument(action.payload.activeLayout);
+      state.activeSourceViewId = action.payload.activeSourceViewId;
+      state.activeLayoutDirty = action.payload.activeLayoutDirty;
+    },
     replaceActiveLayout(state, action: PayloadAction<unknown>) {
       state.activeLayout = normalizePanelLayoutDocument(action.payload);
       state.activeLayoutDirty = true;
@@ -349,6 +373,7 @@ export const {
   togglePanelMinimized,
   focusPanel,
   commitHardwarePanelConfiguration,
+  commitMultimediaPanelConfiguration,
   setTerminalOwner,
   revealPanelKind,
   setColumnCount,
@@ -358,6 +383,7 @@ export const {
   moveFloatingPanel,
   bringFloatingPanelToFront,
   resetToPreset,
+  restoreSourceIdeBaseline,
   replaceActiveLayout,
   saveView,
   restoreView,

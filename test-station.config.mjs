@@ -162,6 +162,20 @@ export default {
       coverage: {
         enabled: false
       }
+    },
+    {
+      id: "easy68k-multimedia-benchmark",
+      label: "Easy68K Multimedia Performance",
+      adapter: "shell",
+      package: "benchmark",
+      cwd: rootDir,
+      command: ["yarn", "test:performance:multimedia:test-station"],
+      resultFormat: "suite-json-v1",
+      module: "runtime",
+      theme: "benchmark",
+      coverage: {
+        enabled: false
+      }
     }
   ],
   adapters: []

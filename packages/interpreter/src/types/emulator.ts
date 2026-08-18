@@ -62,6 +62,8 @@ export interface RuntimeSyncVersions {
   terminal: number;
   terminalGeometry: number;
   hardware?: number;
+  graphics?: number;
+  sound?: number;
 }
 
 export interface ExecutionState {
@@ -138,6 +140,19 @@ export interface Emulator {
   writeMemoryWord(address: number, value: number): void;
   writeMemoryLong(address: number, value: number): void;
   getHardwareSnapshot(): import('../devices/easy68kHardware').Easy68kHardwareSnapshot;
+  getGraphicsState(): import('../devices/easy68kGraphics').Easy68kGraphicsState | undefined;
+  consumeGraphicsPatch(
+    forceFull?: boolean
+  ): import('../devices/easy68kGraphics').Easy68kGraphicsPatch | undefined;
+  getSoundSnapshot(
+    includeCommands?: boolean
+  ): import('../devices/easy68kSound').Easy68kSoundSnapshot | undefined;
+  registerSoundAssets(
+    assets: readonly import('../devices/easy68kSound').Easy68kSoundAsset[]
+  ): import('../devices/easy68kSound').Easy68kSoundAsset[];
+  completeSoundVoice(voiceId: number): void;
+  stopAllSounds(): void;
+  stopSoundReference(player: 'standard' | 'polyphonic', reference: number): boolean;
   configureHardware(
     config: import('../devices/easy68kHardware').Easy68kHardwareConfig
   ): import('../devices/easy68kHardware').Easy68kHardwareValidationResult;

@@ -45,7 +45,8 @@ function buildPreset(
       panelIds,
     };
   });
-  const terminalOwnerPanelId = Object.values(instances).find((panel) => panel.kind === 'terminal')?.id ?? null;
+  const terminalOwnerPanelId =
+    Object.values(instances).find((panel) => panel.kind === 'terminal')?.id ?? null;
 
   return {
     schemaVersion: PANEL_LAYOUT_SCHEMA_VERSION,
@@ -66,14 +67,18 @@ export const PANEL_PRESETS: readonly PanelPresetDefinition[] = [
     id: 'classic',
     name: 'Classic IDE',
     description: 'Screen and registers in the familiar two-column layout.',
-    create: () => buildPreset('Classic IDE', [[{ kind: 'terminal' }], [{ kind: 'registers' }]], [61, 39]),
+    create: () =>
+      buildPreset('Classic IDE', [[{ kind: 'terminal' }], [{ kind: 'registers' }]], [61, 39]),
   },
   {
     id: 'code-run',
     name: 'Code and Run',
     description: 'Editor beside the screen with registers ready below it.',
     create: () =>
-      buildPreset('Code and Run', [[{ kind: 'code' }], [{ kind: 'terminal' }, { kind: 'registers', minimized: true }]]),
+      buildPreset('Code and Run', [
+        [{ kind: 'code' }],
+        [{ kind: 'terminal' }, { kind: 'registers', minimized: true }],
+      ]),
   },
   {
     id: 'hardware-lab',
@@ -82,12 +87,23 @@ export const PANEL_PRESETS: readonly PanelPresetDefinition[] = [
     create: () =>
       buildPreset(
         'Hardware Lab',
-        [
-          [{ kind: 'terminal' }],
-          [{ kind: 'hardware-display' }],
-          [{ kind: 'hardware-digital-io' }],
-        ],
+        [[{ kind: 'terminal' }], [{ kind: 'hardware-display' }], [{ kind: 'hardware-digital-io' }]],
         [42, 26, 32]
+      ),
+  },
+  {
+    id: 'multimedia',
+    name: 'Easy68K Multimedia',
+    description: 'Code, graphics, sound, terminal, and registers for multimedia programs.',
+    create: () =>
+      buildPreset(
+        'Easy68K Multimedia',
+        [
+          [{ kind: 'code' }, { kind: 'terminal', minimized: true }],
+          [{ kind: 'graphics' }],
+          [{ kind: 'sound' }, { kind: 'registers', minimized: true }],
+        ],
+        [28, 46, 26]
       ),
   },
   {
@@ -95,7 +111,11 @@ export const PANEL_PRESETS: readonly PanelPresetDefinition[] = [
     name: 'Debug',
     description: 'Code, screen, registers, and memory across three columns.',
     create: () =>
-      buildPreset('Debug', [[{ kind: 'code' }], [{ kind: 'terminal' }], [{ kind: 'registers' }, { kind: 'memory' }]]),
+      buildPreset('Debug', [
+        [{ kind: 'code' }],
+        [{ kind: 'terminal' }],
+        [{ kind: 'registers' }, { kind: 'memory' }],
+      ]),
   },
   {
     id: 'terminal-focus',

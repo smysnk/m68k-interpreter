@@ -25,6 +25,7 @@ import settingsReducer, {
 import uiShellReducer, { initialUiShellState } from '@/store/uiShellSlice';
 import hardwareReducer from '@/store/hardwareSlice';
 import panelLayoutReducer, { initialPanelLayoutState } from '@/store/panelLayoutSlice';
+import sourceIdeReducer from '@/store/sourceIdeSlice';
 import { migrateLegacyPanelLayout, normalizePanelLayoutState } from '@/store/panelLayoutValidation';
 import { resetEmulatorState, setEditorCode } from '@/store/emulatorSlice';
 import {
@@ -39,6 +40,7 @@ const combinedReducer = combineReducers({
   uiShell: uiShellReducer,
   hardware: hardwareReducer,
   panelLayout: panelLayoutReducer,
+  sourceIde: sourceIdeReducer,
 });
 
 const SOURCE_PREVIEW_LENGTH = 80;
@@ -267,6 +269,7 @@ export function createIdeStore() {
   const persist = (): void => {
     pendingLayoutWrite = null;
     const state = store.getState();
+    const sourceBaseline = state.sourceIde.baseline;
     const persistableState: PersistedIdeState = {
       schemaVersion: 3,
       files: state.files,
@@ -276,8 +279,8 @@ export function createIdeStore() {
         lineNumbers: state.settings.lineNumbers,
         registerEditRadix: state.settings.registerEditRadix,
         terminalInputMode: state.settings.terminalInputMode,
-        cpuModel: state.settings.cpuModel,
-        machineProfile: state.settings.machineProfile,
+        cpuModel: sourceBaseline?.cpuModel ?? state.settings.cpuModel,
+        machineProfile: sourceBaseline?.machineProfile ?? state.settings.machineProfile,
       },
       uiShell: {
         workspaceTab: state.uiShell.workspaceTab,
@@ -291,7 +294,14 @@ export function createIdeStore() {
         automaticInterruptLevels: state.hardware.automaticInterruptLevels,
         automaticInterruptIntervalMs: state.hardware.automaticInterruptIntervalMs,
       },
-      panelLayout: state.panelLayout,
+      panelLayout: sourceBaseline
+        ? {
+            ...state.panelLayout,
+            activeLayout: sourceBaseline.panelLayout.activeLayout,
+            activeSourceViewId: sourceBaseline.panelLayout.activeSourceViewId,
+            activeLayoutDirty: sourceBaseline.panelLayout.activeLayoutDirty,
+          }
+        : state.panelLayout,
     };
     const serialized = JSON.stringify(persistableState);
     if (serialized === lastPersistedState) return;
@@ -367,3 +377,4 @@ export * from '@/store/panelLayoutTypes';
 export * from '@/store/panelLayoutSlice';
 export * from '@/store/panelLayoutSelectors';
 export * from '@/store/panelLayoutValidation';
+export * from '@/store/sourceIdeSlice';

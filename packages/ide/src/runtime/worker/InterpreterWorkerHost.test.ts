@@ -78,31 +78,25 @@ TOUCH_COL DC.B 0
 TOUCH_FLAGS DC.B 0
 TOUCH_ISR BRA TOUCH_HANDLER
 START
-  TRAP #11
-  DC.W 0
+  MOVEQ #9,D0
+  TRAP #15
 TOUCH_HANDLER
   RTS
   END START`;
 
 const HALT_SOURCE = `START
-  MOVE.B #'A',D0
-  BSR _SPUTCH
-  TRAP #11
-  DC.W 0
-_SPUTCH
+  MOVE.B #'A',D1
+  MOVEQ #6,D0
   TRAP #15
-  DC.W 1
-  RTS
+  MOVEQ #9,D0
+  TRAP #15
   END START`;
 
 const LOOPING_OUTPUT_SOURCE = `START
-  MOVE.B #'A',D0
-  BSR _SPUTCH
-  BRA START
-_SPUTCH
+  MOVE.B #'A',D1
+  MOVEQ #6,D0
   TRAP #15
-  DC.W 1
-  RTS
+  BRA START
   END START`;
 
 const LOOPING_NO_OUTPUT_SOURCE = `START
@@ -112,12 +106,12 @@ const LOOPING_NO_OUTPUT_SOURCE = `START
 const WAIT_FOR_INPUT_SOURCE = `RESULT DC.B 0
 START
   BSR _SGETCH
-  MOVE.B D0,RESULT
-  TRAP #11
-  DC.W 0
-_SGETCH
+  MOVE.B D1,RESULT
+  MOVEQ #9,D0
   TRAP #15
-  DC.W 3
+_SGETCH
+  MOVEQ #5,D0
+  TRAP #15
   RTS
   END START`;
 
@@ -603,5 +597,68 @@ describe('InterpreterWorkerHost', () => {
       ok: true,
       payload: true,
     });
+  });
+
+  it('publishes graphics patches and ordered sound commands without memory images', async () => {
+    const events: InterpreterWorkerEvent[] = [];
+    const host = new InterpreterWorkerHost((event) => events.push(event));
+    const command = loadProgramCommand(
+      1,
+      `PATH DC.B 'tone.wav',0
+START
+  MOVE.L #$000000FF,D1
+  MOVEQ #80,D0
+  TRAP #15
+  MOVE.W #2,D1
+  MOVE.W #3,D2
+  MOVEQ #82,D0
+  TRAP #15
+  LEA PATH,A1
+  MOVEQ #70,D0
+  TRAP #15
+  MOVEQ #9,D0
+  TRAP #15
+  END START`
+    );
+    const wav = new Uint8Array(44);
+    wav.set(
+      [...'RIFF'].map((character) => character.charCodeAt(0)),
+      0
+    );
+    new DataView(wav.buffer).setUint32(4, 36, true);
+    wav.set(
+      [...'WAVE'].map((character) => character.charCodeAt(0)),
+      8
+    );
+    wav.set(
+      [...'fmt '].map((character) => character.charCodeAt(0)),
+      12
+    );
+    new DataView(wav.buffer).setUint32(16, 16, true);
+    wav.set(
+      [...'data'].map((character) => character.charCodeAt(0)),
+      36
+    );
+    if (command.type !== 'loadProgram') throw new Error('Expected load command');
+    command.request.soundAssets = [{ id: 'tone', path: 'tone.wav', bytes: wav }];
+    await host.handleCommand(command);
+    events.length = 0;
+    await host.handleCommand({
+      id: 2,
+      type: 'run',
+      config: { delayMs: 0, speedMultiplier: 1, frameBudgetMs: 8 },
+    });
+    await vi.runAllTimersAsync();
+    const multimediaFrames = events.filter(
+      (event) =>
+        event.type === 'frame' && (event.snapshot.graphicsPatch || event.snapshot.soundSnapshot)
+    );
+    expect(multimediaFrames.length).toBeGreaterThan(0);
+    const latestEvent = multimediaFrames.at(-1);
+    if (!latestEvent || latestEvent.type !== 'frame') throw new Error('Expected multimedia frame');
+    const latest = latestEvent.snapshot;
+    expect(latest.graphicsPatch?.pixels).toBeInstanceOf(Uint32Array);
+    expect(latest.soundSnapshot?.pendingCommands.map((entry) => entry.type)).toContain('play');
+    expect(latest.memoryImage).toBeUndefined();
   });
 });

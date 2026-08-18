@@ -57,6 +57,13 @@ export interface IdeRuntimeCachedReadApi {
   isWaitingForInput(): boolean;
   getRuntimeSyncVersions?(): RuntimeSyncVersions | undefined;
   getHardwareSnapshot?(): Easy68kHardwareSnapshot;
+  getGraphicsState?(): import('@m68k/interpreter').Easy68kGraphicsState | undefined;
+  consumeGraphicsPatch?(
+    forceFull?: boolean
+  ): import('@m68k/interpreter').Easy68kGraphicsPatch | undefined;
+  getSoundSnapshot?(
+    includeCommands?: boolean
+  ): import('@m68k/interpreter').Easy68kSoundSnapshot | undefined;
   getRuntimeTransport?(): IdeRuntimeTransport;
 }
 
@@ -99,6 +106,15 @@ export interface IdeRuntimeController {
   requestSnapshot(): Promise<void>;
   requestReadMemoryRange(address: number, length: number): Promise<Uint8Array>;
   requestSymbolAddress(symbol: string): Promise<number | undefined>;
+  requestCompleteSoundVoice?(voiceId: number): Promise<void>;
+  requestStopAllSounds?(): Promise<void>;
+  requestStopSoundReference?(
+    player: 'standard' | 'polyphonic',
+    reference: number
+  ): Promise<boolean>;
+  requestRegisterSoundAssets?(
+    assets: readonly import('@m68k/interpreter').Easy68kSoundAsset[]
+  ): Promise<import('@m68k/interpreter').Easy68kSoundAsset[]>;
   subscribeEvents?(
     listener: (
       event: Exclude<InterpreterWorkerEvent, { type: 'ready' } | { type: 'reply' }>
@@ -128,6 +144,12 @@ export interface IdeRuntimeSession extends IdeRuntimeCachedReadApi {
   ): Easy68kHardwareValidationResult;
   setHardwareToggle?(bit: number, enabled: boolean, deviceId?: string): void;
   setHardwareButton?(bit: number, pressed: boolean, deviceId?: string): void;
+  stopAllSounds?(): void;
+  stopSoundReference?(player: 'standard' | 'polyphonic', reference: number): boolean;
+  completeSoundVoice?(voiceId: number): void;
+  registerSoundAssets?(
+    assets: readonly import('@m68k/interpreter').Easy68kSoundAsset[]
+  ): import('@m68k/interpreter').Easy68kSoundAsset[];
   requestInterruptLevel?(level: number): InterruptRequestResult;
   controller?: IdeRuntimeController;
 }

@@ -6,7 +6,7 @@
       "id": "workspace",
       "title": "Panel Workspace",
       "items": [
-        "Choose one to four columns, then add Screen, Code, Registers, Memory, Seven-segment, combined Digital I/O and IRQ, or Help panels from the View menu.",
+        "Choose one to four columns, then add Screen, Code, Registers, Memory, Graphics, Sound, Seven-segment, combined Digital I/O and IRQ, or Help panels from the View menu.",
         "Drag a panel by its header to reorder it or move it between columns.",
         "Minimize retains a compact header, and close removes the panel from the current layout.",
         "Only the Screen marked Interactive owns keyboard, touch, focus, and terminal geometry. Click a passive Screen mirror to transfer ownership.",
@@ -30,20 +30,21 @@
         "Assembler compatibility includes standalone labels, END with an entry label, EQU, DC.B/W/L, DS.B/W/L, and character immediates.",
         "The strict core implements all 116 tracked MC68000 forms and all seven tracked MC68010-specific forms. Select either CPU independently of the machine profile.",
         "MC68010 mode exposes VBR, SFC, and DFC, VBR-relative vectors, format-aware exception frames, and restartable bus and address faults.",
-        "Easy68K compatibility includes TRAP #15 tasks 1, 3, and 4, plus TRAP #11 task 0 for halt.",
+        "Canonical Easy68K compatibility includes terminal tasks 5, 6, 7, 9, and 11; graphics tasks 80 through 96; sound tasks 70 through 77; and environment task 33.",
         "Terminal rendering supports clear screen, cursor motion, carriage return, line feed, and ANSI SGR color and style sequences used by Nibbles.",
         "Memory-mapped Easy68K hardware includes independently addressable eight-byte seven-segment displays and digital I/O boards with shared switch and LED bytes, active-low buttons, and configurable 24-bit addresses.",
-        "Level 1 through 7 autovector interrupts include SR masking, supervisor stack frames, automatic scheduling, and RTE."
+        "Level 1 through 7 autovector interrupts include SR masking, supervisor stack frames, automatic scheduling, and RTE.",
+        "Graphics and Sound are first-class, duplicable workspace panels backed by worker-safe external surface stores."
       ]
     },
     {
       "id": "limitations",
       "title": "Known Limitations",
       "items": [
-        "Easy68K terminal and device services are a targeted compatibility subset; this does not limit strict MC68000 instruction coverage.",
-        "Trainer board DUART routines and generic graphics or framebuffer devices beyond the Hardware I/O Board are not implemented.",
+        "Easy68K sound file tasks operate on registered browser-safe assets rather than arbitrary host filesystem paths.",
+        "Trainer board DUART routines are not implemented.",
         "Pin-level bus timing, arbitration, prefetch-stage attribution, and transparent loop-mode fetch suppression are outside the functionally complete CPU contract.",
-        "The IDE currently uses the internal fixed-grid terminal adapter surface; broader display integration remains a future swap."
+        "Audio completion follows the browser audio backend and is not modeled in CPU cycles."
       ]
     }
   ]

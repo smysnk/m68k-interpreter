@@ -550,7 +550,8 @@ export const M68000_ISA_MANIFEST: readonly InstructionForm[] = [
   form('TRAP', 'vector', {
     source: ['trap-vector'],
     support: STRICT_CORE_PARTIAL,
-    notes: 'Currently intercepted using Easy68K task semantics and requires strict-profile audit.',
+    notes:
+      'Architectural traps remain CPU-owned; the Easy68K machine profile intercepts only TRAP #15 services.',
   }),
   form('TRAPV', 'implied', { support: STRICT_CORE_PARTIAL }),
   form('TST', 'data-source', {
@@ -625,6 +626,30 @@ export const MACHINE_COMPATIBILITY_EVIDENCE: readonly MachineCompatibilityEviden
     capability: 'MODE source directive compatibility',
     support: 'compatibility-only',
     notes: 'Assembler evidence kept separate from CPU instruction coverage.',
+  },
+  {
+    id: 'easy68k.terminal-services',
+    machineProfile: 'easy68k',
+    capability: 'Canonical TRAP #15 terminal tasks 5, 6, 7, 9, and 11',
+    support: 'compatibility-only',
+  },
+  {
+    id: 'easy68k.graphics-services',
+    machineProfile: 'easy68k',
+    capability: 'Deterministic graphics tasks 80 through 96 and task 33 geometry',
+    support: 'compatibility-only',
+  },
+  {
+    id: 'easy68k.sound-services',
+    machineProfile: 'easy68k',
+    capability: 'Manifest-backed WAV sound tasks 70 through 77',
+    support: 'compatibility-only',
+  },
+  {
+    id: 'easy68k.trainer-board',
+    machineProfile: 'easy68k',
+    capability: 'Memory-mapped trainer board and level 1-7 autovector interrupts',
+    support: 'compatibility-only',
   },
 ];
 

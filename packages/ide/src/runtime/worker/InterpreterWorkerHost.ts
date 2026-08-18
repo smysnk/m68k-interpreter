@@ -67,6 +67,8 @@ interface WorkerPublicationPlan {
   memoryChanged: boolean;
   terminalChanged: boolean;
   hardwareChanged: boolean;
+  graphicsChanged: boolean;
+  soundChanged: boolean;
   includeSymbols: boolean;
 }
 
@@ -159,6 +161,7 @@ export class InterpreterWorkerHost {
             rows: command.request.terminal.rows,
             emulation: command.request.emulation,
             hardwareDevices: command.request.hardwareDevices,
+            soundAssets: command.request.soundAssets,
             undoMode: command.request.undo.mode,
             undoCheckpointInterval: command.request.undo.checkpointInterval,
           });
@@ -216,6 +219,7 @@ export class InterpreterWorkerHost {
               rows: request.terminal.rows,
               emulation: request.emulation,
               hardwareDevices: request.hardwareDevices,
+              soundAssets: request.soundAssets,
               undoMode: request.undo.mode,
               undoCheckpointInterval: request.undo.checkpointInterval,
             });
@@ -447,6 +451,63 @@ export class InterpreterWorkerHost {
           this.emitEvent(createReplyEvent(command.id, true, address ?? null));
           return;
         }
+        case 'completeSoundVoice':
+          this.requireEmulator().completeSoundVoice(command.voiceId);
+          this.publishFrame(
+            {
+              lastFrameInstructions: 0,
+              lastFrameDurationMs: 0,
+              lastStopReason: 'sound_voice_completed',
+            },
+            undefined,
+            'sound'
+          );
+          this.emitEvent(createReplyEvent(command.id, true));
+          return;
+        case 'stopAllSounds':
+          this.requireEmulator().stopAllSounds();
+          this.publishFrame(
+            {
+              lastFrameInstructions: 0,
+              lastFrameDurationMs: 0,
+              lastStopReason: 'sound_stopped',
+            },
+            undefined,
+            'sound'
+          );
+          this.emitEvent(createReplyEvent(command.id, true));
+          return;
+        case 'stopSoundReference': {
+          const stopped = this.requireEmulator().stopSoundReference(
+            command.player,
+            command.reference
+          );
+          this.publishFrame(
+            {
+              lastFrameInstructions: 0,
+              lastFrameDurationMs: 0,
+              lastStopReason: 'sound_reference_stopped',
+            },
+            undefined,
+            'sound'
+          );
+          this.emitEvent(createReplyEvent(command.id, true, stopped));
+          return;
+        }
+        case 'registerSoundAssets': {
+          const accepted = this.requireEmulator().registerSoundAssets(command.assets);
+          this.publishFrame(
+            {
+              lastFrameInstructions: 0,
+              lastFrameDurationMs: 0,
+              lastStopReason: 'sound_assets_registered',
+            },
+            undefined,
+            'sound'
+          );
+          this.emitEvent(createReplyEvent(command.id, true, accepted));
+          return;
+        }
         default:
           command satisfies never;
       }
@@ -635,6 +696,14 @@ export class InterpreterWorkerHost {
         plan.terminalChanged || forceFullSections ? terminalFrameBufferSnapshot : undefined,
       hardwareSnapshot:
         plan.hardwareChanged || forceFullSections ? runtime.getHardwareSnapshot() : undefined,
+      graphicsState:
+        plan.graphicsChanged || forceFullSections ? runtime.getGraphicsState() : undefined,
+      graphicsPatch:
+        plan.graphicsChanged || forceFullSections
+          ? runtime.consumeGraphicsPatch(forceFullSections)
+          : undefined,
+      soundSnapshot:
+        plan.soundChanged || forceFullSections ? runtime.getSoundSnapshot(true) : undefined,
       lastInstruction: includeRuntimeState ? runtime.getLastInstruction() : undefined,
       errors: includeRuntimeState ? [...runtime.getErrors()] : undefined,
       exception: includeRuntimeState ? (runtime.getException() ?? null) : undefined,
@@ -673,6 +742,10 @@ export class InterpreterWorkerHost {
         previousSyncVersions.terminalGeometry !== syncVersions.terminalGeometry,
       hardwareChanged:
         previousSyncVersions === null || previousSyncVersions.hardware !== syncVersions.hardware,
+      graphicsChanged:
+        previousSyncVersions === null || previousSyncVersions.graphics !== syncVersions.graphics,
+      soundChanged:
+        previousSyncVersions === null || previousSyncVersions.sound !== syncVersions.sound,
       includeSymbols:
         snapshotOptions.includeSymbols === true || !this.publishedSymbolsForCurrentProgram,
     };
@@ -709,6 +782,14 @@ export class InterpreterWorkerHost {
 
     if (plan.hardwareChanged) {
       return 'hardware';
+    }
+
+    if (plan.graphicsChanged) {
+      return 'graphics';
+    }
+
+    if (plan.soundChanged) {
+      return 'sound';
     }
 
     if (

@@ -1,3 +1,4 @@
+; @m68k-ide/v1 layout=debug machine=easy68k cpu=m68000 focus=registers speed=0.25 run=manual
         ORG     $1000
 
 RESULT   DC.B    0
@@ -14,7 +15,7 @@ VALUES_MATCH
         MOVE.B  #1,RESULT
 
 DONE
-        TRAP    #11
-        DC.W    0
+        MOVEQ   #9,D0
+        TRAP    #15
 
         END     START

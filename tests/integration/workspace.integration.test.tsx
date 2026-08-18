@@ -10,6 +10,7 @@ import {
   requestReset,
   requestRun,
   resetFilesState,
+  resetSourceIdeState,
   resetSettingsState,
   setActiveFileContent,
 } from '@/store';
@@ -35,6 +36,7 @@ describe('workspace integration', () => {
     terminalSurfaceStore.reset();
     useEmulatorStore.getState().reset();
     ideStore.dispatch(resetFilesState());
+    ideStore.dispatch(resetSourceIdeState());
     ideStore.dispatch(resetSettingsState());
     useEmulatorStore.getState().setSpeedMultiplier(64);
     window.editorCode = '';
@@ -61,11 +63,11 @@ describe('workspace integration', () => {
     act(() => {
       ideStore.dispatch(
         setActiveFileContent(`START
-  MOVE.B #'H',D0
+  MOVE.B #'H',D1
+  MOVEQ #6,D0
   TRAP #15
-  DC.W 1
-  TRAP #11
-  DC.W 0
+  MOVEQ #9,D0
+  TRAP #15
   END START`)
       );
     });
@@ -83,120 +85,134 @@ describe('workspace integration', () => {
     });
   });
 
-  it('loads Nibbles from the file explorer, renders the splash screen, and forwards gameplay input', async () => {
-    render(<App />);
+  it(
+    'loads Nibbles from the file explorer, renders the splash screen, and forwards gameplay input',
+    async () => {
+      render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
-    fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
-    expect(window.editorCode).toContain('END NIBBLES');
+      fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
+      fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
+      expect(window.editorCode).toContain('END NIBBLES');
 
-    act(() => {
-      ideStore.dispatch(requestRun());
-    });
+      act(() => {
+        ideStore.dispatch(requestRun());
+      });
 
-    await waitFor(
-      () => {
-        expect(getEmulatorTerminalText()).toContain('SELECT DIFFICULTY');
-        expect(getEmulatorTerminalText()).toContain('Joshua Bellamy');
-        expect(getEmulatorTerminalText()).toContain('smysnk.com');
-        expect(document.querySelector('.terminal-container')).toHaveAttribute('data-terminal-theme', 'light');
-        expect(document.querySelector('.retro-screen')).toHaveAttribute('data-display-surface-mode', 'light');
-      },
-      { timeout: 30000 }
-    );
+      await waitFor(
+        () => {
+          expect(getEmulatorTerminalText()).toContain('SELECT DIFFICULTY');
+          expect(getEmulatorTerminalText()).toContain('Joshua Bellamy');
+          expect(getEmulatorTerminalText()).toContain('smysnk.com');
+          expect(document.querySelector('.terminal-container')).toHaveAttribute(
+            'data-terminal-theme',
+            'light'
+          );
+          expect(document.querySelector('.retro-screen')).toHaveAttribute(
+            'data-display-surface-mode',
+            'light'
+          );
+        },
+        { timeout: 30000 }
+      );
 
-    await waitFor(
-      () => {
-        expect(getWindowEmulator().isWaitingForInput()).toBe(true);
-      },
-      { timeout: 7000 }
-    );
+      await waitFor(
+        () => {
+          expect(getWindowEmulator().isWaitingForInput()).toBe(true);
+        },
+        { timeout: 7000 }
+      );
 
-    fireEvent.keyDown(window, { key: 's' });
+      fireEvent.keyDown(window, { key: 's' });
 
-    await waitFor(
-      () => {
-        const emulator = getWindowEmulator();
-        const difficultyAddress = emulator.getSymbolAddress('DIFFICULTY') ?? -1;
-        expect(difficultyAddress).toBeGreaterThanOrEqual(0);
-        expect(emulator.getMemory()[difficultyAddress]).toBe(1);
-      },
-      { timeout: 7000 }
-    );
+      await waitFor(
+        () => {
+          const emulator = getWindowEmulator();
+          const difficultyAddress = emulator.getSymbolAddress('DIFFICULTY') ?? -1;
+          expect(difficultyAddress).toBeGreaterThanOrEqual(0);
+          expect(emulator.getMemory()[difficultyAddress]).toBe(1);
+        },
+        { timeout: 7000 }
+      );
 
-    fireEvent.keyDown(window, { key: 'Enter' });
+      fireEvent.keyDown(window, { key: 'Enter' });
 
-    await waitFor(
-      () => {
-        expect(getEmulatorTerminalText()).toContain('SCORE:');
-        expect(getEmulatorTerminalText()).toContain('LIVES:');
-        expect(getEmulatorTerminalText()).toContain('LEVEL:');
-      },
-      { timeout: 30000 }
-    );
+      await waitFor(
+        () => {
+          expect(getEmulatorTerminalText()).toContain('SCORE:');
+          expect(getEmulatorTerminalText()).toContain('LIVES:');
+          expect(getEmulatorTerminalText()).toContain('LEVEL:');
+        },
+        { timeout: 30000 }
+      );
 
-    fireEvent.keyDown(window, { key: 'd' });
+      fireEvent.keyDown(window, { key: 'd' });
 
-    await waitFor(
-      () => {
-        const emulator = getWindowEmulator();
-        const directionAddress = emulator.getSymbolAddress('DIRECTION') ?? -1;
-        const movingAddress = emulator.getSymbolAddress('MOVING') ?? -1;
+      await waitFor(
+        () => {
+          const emulator = getWindowEmulator();
+          const directionAddress = emulator.getSymbolAddress('DIRECTION') ?? -1;
+          const movingAddress = emulator.getSymbolAddress('MOVING') ?? -1;
 
-        expect(directionAddress).toBeGreaterThanOrEqual(0);
-        expect(movingAddress).toBeGreaterThanOrEqual(0);
-        expect(emulator.getMemory()[movingAddress]).toBe(1);
-        expect(emulator.getMemory()[directionAddress]).toBe(1);
-      },
-      { timeout: 7000 }
-    );
-  }, NIBBLES_BOOT_TEST_TIMEOUT_MS);
+          expect(directionAddress).toBeGreaterThanOrEqual(0);
+          expect(movingAddress).toBeGreaterThanOrEqual(0);
+          expect(emulator.getMemory()[movingAddress]).toBe(1);
+          expect(emulator.getMemory()[directionAddress]).toBe(1);
+        },
+        { timeout: 7000 }
+      );
+    },
+    NIBBLES_BOOT_TEST_TIMEOUT_MS
+  );
 
-  it('can reset and relaunch Nibbles from a clean state', async () => {
-    render(<App />);
+  it(
+    'can reset and relaunch Nibbles from a clean state',
+    async () => {
+      render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
-    fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
+      fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
+      fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
 
-    act(() => {
-      ideStore.dispatch(requestRun());
-    });
+      act(() => {
+        ideStore.dispatch(requestRun());
+      });
 
-    await waitFor(
-      () => {
-        expect(getEmulatorTerminalText()).toContain('SELECT DIFFICULTY');
-      },
-      { timeout: 30000 }
-    );
+      await waitFor(
+        () => {
+          expect(getEmulatorTerminalText()).toContain('SELECT DIFFICULTY');
+        },
+        { timeout: 30000 }
+      );
 
-    await waitFor(
-      () => {
-        expect(getWindowEmulator().isWaitingForInput()).toBe(true);
-      },
-      { timeout: 7000 }
-    );
+      await waitFor(
+        () => {
+          expect(getWindowEmulator().isWaitingForInput()).toBe(true);
+        },
+        { timeout: 7000 }
+      );
 
-    act(() => {
-      ideStore.dispatch(requestReset());
-    });
+      act(() => {
+        ideStore.dispatch(requestReset());
+      });
 
-    await waitFor(() => {
-      expect(window.emulatorInstance).toBeNull();
-      expect(useEmulatorStore.getState().executionState.lastInstruction).toBe('Ready');
-      expect(terminalSurfaceStore.getText().trim()).toBe('');
-    });
+      await waitFor(() => {
+        expect(window.emulatorInstance).toBeNull();
+        expect(useEmulatorStore.getState().executionState.lastInstruction).toBe('Ready');
+        expect(terminalSurfaceStore.getText().trim()).toBe('');
+      });
 
-    act(() => {
-      ideStore.dispatch(requestRun());
-    });
+      act(() => {
+        ideStore.dispatch(requestRun());
+      });
 
-    await waitFor(
-      () => {
-        expect(getEmulatorTerminalText()).toContain('SELECT DIFFICULTY');
-        expect(getEmulatorTerminalText()).toContain('Joshua Bellamy');
-        expect(getEmulatorTerminalText()).toContain('smysnk.com');
-      },
-      { timeout: 30000 }
-    );
-  }, NIBBLES_RESET_TEST_TIMEOUT_MS);
+      await waitFor(
+        () => {
+          expect(getEmulatorTerminalText()).toContain('SELECT DIFFICULTY');
+          expect(getEmulatorTerminalText()).toContain('Joshua Bellamy');
+          expect(getEmulatorTerminalText()).toContain('smysnk.com');
+        },
+        { timeout: 30000 }
+      );
+    },
+    NIBBLES_RESET_TEST_TIMEOUT_MS
+  );
 });

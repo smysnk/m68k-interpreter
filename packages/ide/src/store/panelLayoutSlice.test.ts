@@ -247,7 +247,7 @@ describe('panelLayoutSlice', () => {
       nextColumnSequence: 2,
     });
 
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(4);
     expect(Object.values(migrated.instances).map((panel) => panel.kind)).toEqual([
       'hardware-display',
       'hardware-digital-io',
@@ -297,7 +297,7 @@ describe('panelLayoutSlice', () => {
       nextColumnSequence: 2,
     });
 
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(4);
     expect(Object.keys(migrated.instances)).toEqual(['digital']);
     expect(migrated.instances.digital?.title).toBe('LEDs / Switches / Buttons / IRQs');
     expect(migrated.focusedPanelId).toBe('digital');

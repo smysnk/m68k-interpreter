@@ -1,3 +1,4 @@
+; @m68k-ide/v1 layout=hardware-lab machine=easy68k cpu=m68000 focus=hardware-digital-io speed=1 run=auto
 ; EASy68K autovectors. Enable Auto IRQ 1 in the Hardware panel or press IRQ 1.
 ORG $64
 IRQ1_VECTOR DC.L IRQ1_HANDLER

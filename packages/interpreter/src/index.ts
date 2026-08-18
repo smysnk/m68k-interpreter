@@ -190,6 +190,8 @@ export type {
 } from './isa/types';
 export * from './devices/deviceAddressMap';
 export * from './devices/easy68kHardware';
+export * from './devices/easy68kGraphics';
+export * from './devices/easy68kSound';
 export type { MemorySnapshot, MemoryUndoPageEntry } from './core/memory';
 export type {
   MemoryBuffer,

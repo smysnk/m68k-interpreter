@@ -35,6 +35,7 @@
     "test:performance:test-station": "tsx ./tests/benchmarks/emitEngineBenchmarkSuite.ts",
     "test:performance:nibbles-intro": "vitest run --config vitest.performance.config.ts tests/benchmarks/nibblesIntroProfiling.test.ts --execArgv=--expose-gc",
     "test:performance:nibbles-intro:test-station": "tsx ./tests/benchmarks/emitNibblesIntroBenchmarkSuite.ts",
+    "test:performance:multimedia:test-station": "tsx ./tests/benchmarks/emitEasy68kMultimediaBenchmarkSuite.ts",
     "test:performance:browser:test-station": "tsx ./tests/benchmarks/emitNibblesBrowserBenchmarkSuite.ts",
     "profile:ide-runtime": "tsx ./scripts/profile-ide-runtime-summary.ts",
     "profile:ide-runtime:json": "tsx ./scripts/profile-ide-runtime-summary.ts --json",

@@ -12,6 +12,7 @@ import hardwareButtonsSource from '@/fixtures/hardware-buttons.asm';
 import hardwareSevenSegmentSource from '@/fixtures/hardware-seven-segment.asm';
 import hardwareInterruptsSource from '@/fixtures/hardware-interrupts.asm';
 import hardwareMultiDeviceSource from '@/fixtures/hardware-multi-device.asm';
+import graphicsSoundDemoSource from '@/fixtures/graphics-sound-demo.asm';
 
 interface BundledExampleFile {
   id: string;
@@ -22,6 +23,13 @@ interface BundledExampleFile {
 }
 
 export const bundledExampleFiles: BundledExampleFile[] = [
+  {
+    id: 'example:graphics-sound-demo.asm',
+    name: 'graphics-sound-demo.asm',
+    path: 'fixtures/graphics-sound-demo.asm',
+    kind: 'example',
+    content: graphicsSoundDemoSource,
+  },
   {
     id: 'example:hardware-multi-device.asm',
     name: 'hardware-multi-device.asm',

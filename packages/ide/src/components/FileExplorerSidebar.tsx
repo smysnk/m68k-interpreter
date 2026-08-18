@@ -3,7 +3,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFileCode, faFolderTree } from '@fortawesome/free-solid-svg-icons';
 import {
-  requestReset,
   selectFileExplorerModel,
   setActiveFile,
   setEditorCode,
@@ -69,7 +68,6 @@ const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({ open, onClose
     dispatch(revealPanelKind('code'));
 
     window.editorCode = file.content;
-    dispatch(requestReset());
   };
 
   return (
@@ -120,7 +118,6 @@ const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({ open, onClose
                     <FontAwesomeIcon icon={faFileCode} size="sm" />
                     <span className="file-explorer-item-copy">
                       <span className="file-explorer-item-name">{file.name}</span>
-                      <span className="file-explorer-item-path">{file.path}</span>
                     </span>
                   </button>
                 ))}

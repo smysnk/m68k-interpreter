@@ -558,6 +558,51 @@ pre {
   color: var(--text-color);
 }
 
+.source-ide-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 24px;
+  padding: 2px 4px 2px 9px;
+  border: 1px solid color-mix(in srgb, var(--ide-accent) 28%, var(--ide-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ide-accent) 9%, var(--ide-surface));
+  color: var(--text-color);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.source-ide-status-invalid {
+  border-color: color-mix(in srgb, var(--ide-status-warn) 36%, var(--ide-border));
+  color: var(--ide-status-warn);
+}
+
+.source-ide-status-ignored {
+  color: var(--ide-text-muted);
+}
+
+.source-ide-status button {
+  min-height: 18px;
+  padding: 1px 6px;
+  border: 1px solid var(--ide-border);
+  border-radius: 999px;
+  background: var(--ide-surface);
+  color: inherit;
+  font: inherit;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.source-ide-status button:hover,
+.source-ide-status button:focus-visible {
+  border-color: var(--ide-accent);
+  outline: none;
+}
+
 .status-bar-link {
   display: inline-flex;
   align-items: center;
@@ -881,11 +926,6 @@ pre {
 .file-explorer-item-name {
   font-size: 12px;
   font-weight: 700;
-}
-
-.file-explorer-item-path {
-  color: var(--ide-text-muted);
-  font-size: 11px;
 }
 
 .inspector-panel {

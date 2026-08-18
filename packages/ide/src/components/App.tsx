@@ -106,8 +106,6 @@ function IdePerformanceProbe(): React.ReactElement | null {
         ideStore.dispatch(requestFocusTerminal());
       },
       runProgram: () => {
-        ideStore.dispatch(revealPanelKind('terminal'));
-        ideStore.dispatch(requestFocusTerminal());
         ideStore.dispatch(requestRun());
       },
       setSpeedMultiplier: (value: number) => {

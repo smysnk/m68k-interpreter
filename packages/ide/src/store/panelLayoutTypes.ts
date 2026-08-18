@@ -4,7 +4,7 @@ import {
   type Easy68kHardwareDeviceConfig,
 } from '@m68k/interpreter';
 
-export const PANEL_LAYOUT_SCHEMA_VERSION = 3 as const;
+export const PANEL_LAYOUT_SCHEMA_VERSION = 4 as const;
 export const MIN_PANEL_COLUMNS = 1;
 export const MAX_PANEL_COLUMNS = 4;
 export const MAX_PANEL_INSTANCES = 32;
@@ -17,11 +17,14 @@ export type PanelKind =
   | 'memory'
   | 'hardware-display'
   | 'hardware-digital-io'
+  | 'graphics'
+  | 'sound'
   | 'help';
 export type PanelInstanceId = string;
 export type PanelColumnId = string;
 export type PanelViewId = string;
-export type PanelPresetId = 'classic' | 'code-run' | 'hardware-lab' | 'debug' | 'terminal-focus';
+export type PanelPresetId =
+  'classic' | 'code-run' | 'hardware-lab' | 'multimedia' | 'debug' | 'terminal-focus';
 
 export interface PanelKindDefinition {
   kind: PanelKind;
@@ -95,6 +98,26 @@ export const PANEL_KIND_DEFINITIONS: Record<PanelKind, PanelKindDefinition> = {
     minimumFloatingSize: { width: 720, height: 360 },
     addMenuOrder: 5,
   },
+  graphics: {
+    kind: 'graphics',
+    title: 'Graphics',
+    icon: '▧',
+    canDuplicate: true,
+    canFloat: true,
+    minimumWidth: 360,
+    minimumFloatingSize: { width: 680, height: 560 },
+    addMenuOrder: 6,
+  },
+  sound: {
+    kind: 'sound',
+    title: 'Sound',
+    icon: '♪',
+    canDuplicate: true,
+    canFloat: true,
+    minimumWidth: 320,
+    minimumFloatingSize: { width: 480, height: 380 },
+    addMenuOrder: 7,
+  },
   help: {
     kind: 'help',
     title: 'Help',
@@ -103,7 +126,7 @@ export const PANEL_KIND_DEFINITIONS: Record<PanelKind, PanelKindDefinition> = {
     canFloat: true,
     minimumWidth: 280,
     minimumFloatingSize: { width: 380, height: 300 },
-    addMenuOrder: 6,
+    addMenuOrder: 8,
   },
 };
 
@@ -132,6 +155,16 @@ export type PanelConfiguration =
       ledAddress: number;
       switchAddress: number;
       buttonAddress: number;
+    }
+  | {
+      kind: 'graphics';
+      scaleMode: 'fit' | 'one-to-one' | 'integer';
+      smoothing: boolean;
+    }
+  | {
+      kind: 'sound';
+      showAssets: boolean;
+      showVoices: boolean;
     }
   | { kind: 'help' };
 
@@ -257,6 +290,12 @@ export function createPanelConfiguration(
       switchAddress: allocation.switchAddress,
       buttonAddress: allocation.buttonAddress,
     };
+  }
+  if (kind === 'graphics') {
+    return { kind, scaleMode: 'fit', smoothing: false };
+  }
+  if (kind === 'sound') {
+    return { kind, showAssets: true, showVoices: true };
   }
   return { kind } as PanelConfiguration;
 }
