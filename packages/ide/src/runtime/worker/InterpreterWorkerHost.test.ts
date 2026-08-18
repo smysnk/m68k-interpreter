@@ -442,7 +442,7 @@ describe('InterpreterWorkerHost', () => {
       id: 3,
       type: 'run',
       config: {
-        delayMs: 10,
+        delayMs: 100,
         speedMultiplier: 1,
         frameBudgetMs: 20,
         terminalFocusedContinuousFrames: true,
