@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { ignoreBootSourceConfiguration, openBaselineIde } from './sourceIdeE2eHelpers';
 
 const MULTI_DEVICE_SOURCE = readFileSync(
   resolve(process.cwd(), 'packages/ide/src/fixtures/hardware-multi-device.asm'),
@@ -19,7 +20,7 @@ interface IdeTestControls {
 }
 
 async function openHardwareLab(page: Page, compact = false): Promise<void> {
-  await page.goto('/?ide_perf=1');
+  await openBaselineIde(page, '/?ide_perf=1');
   await page.waitForFunction(
     () =>
       typeof (
@@ -59,8 +60,16 @@ async function loadAndRun(page: Page, source: string, expectedSymbol = 'LOOP'): 
       }
     ).__M68K_IDE_TEST_CONTROLS__;
     controls?.loadSource?.(program);
-    controls?.runProgram?.();
   }, source);
+  await expect(page.getByTestId('assembly-editor')).toContainText(expectedSymbol);
+  await page.evaluate(() => {
+    const controls = (
+      window as typeof window & {
+        __M68K_IDE_TEST_CONTROLS__?: IdeTestControls;
+      }
+    ).__M68K_IDE_TEST_CONTROLS__;
+    controls?.runProgram?.();
+  });
   await page.waitForFunction(
     (symbol) =>
       Object.keys(
@@ -271,6 +280,7 @@ test.describe('live EASy68K hardware panels', () => {
 
     await page.waitForTimeout(300);
     await page.reload();
+    await ignoreBootSourceConfiguration(page);
     await expect(page.locator('[data-panel-kind="hardware-display"]')).toHaveCount(2);
     await expect(page.locator('[data-panel-kind="hardware-digital-io"]')).toHaveCount(2);
     await expect

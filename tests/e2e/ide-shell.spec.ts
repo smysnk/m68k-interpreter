@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { ignoreBootSourceConfiguration, openBaselineIde } from './sourceIdeE2eHelpers';
 
 const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v3';
 
@@ -11,7 +12,7 @@ test.describe('browser e2e ide shell', () => {
   test('selects all CPU and machine combinations independently and persists them', async ({
     page,
   }) => {
-    await page.goto('/');
+    await openBaselineIde(page);
 
     const selectMode = async (
       currentLabel: string,
@@ -50,6 +51,7 @@ test.describe('browser e2e ide shell', () => {
       return value.includes('"cpuModel":"m68010"') && value.includes('"machineProfile":"bare"');
     }, IDE_PERSISTENCE_KEY);
     await page.reload();
+    await ignoreBootSourceConfiguration(page);
     await expect(
       page.getByRole('button', { name: 'Emulation mode: MC68010 · Bare' })
     ).toBeVisible();
@@ -61,7 +63,7 @@ test.describe('browser e2e ide shell', () => {
   test('uses a minimal workspace gutter and keeps panel content flush with its frame', async ({
     page,
   }) => {
-    await page.goto('/');
+    await openBaselineIde(page);
 
     await expect(page.locator('.panel-workspace-toolbar')).toHaveCount(0);
     const mainContent = page.locator('.main-content');
@@ -138,7 +140,7 @@ test.describe('browser e2e ide shell', () => {
   });
 
   test('keeps View compact and reveals one contextual submenu at a time', async ({ page }) => {
-    await page.goto('/');
+    await openBaselineIde(page);
 
     await openViewMenu(page);
     const viewMenu = page.getByRole('menu', { name: 'View options' });
@@ -156,25 +158,25 @@ test.describe('browser e2e ide shell', () => {
   });
 
   test('keeps the panel layout unchanged when execution starts', async ({ page }) => {
-    await page.goto('/');
+    await openBaselineIde(page);
 
     const terminalPanels = page.locator('[data-panel-kind="terminal"]');
     await expect(terminalPanels).toHaveCount(1);
     await terminalPanels.getByRole('button', { name: 'Close Screen' }).click();
     await expect(terminalPanels).toHaveCount(0);
 
-    const panelKindsBeforeRun = await page.locator('.panel-frame').evaluateAll((panels) =>
-      panels.map((panel) => (panel as HTMLElement).dataset.panelKind)
-    );
+    const panelKindsBeforeRun = await page
+      .locator('.panel-frame')
+      .evaluateAll((panels) => panels.map((panel) => (panel as HTMLElement).dataset.panelKind));
 
     await page.getByRole('button', { name: /run program/i }).click();
 
     await expect(terminalPanels).toHaveCount(0);
     await expect
       .poll(() =>
-        page.locator('.panel-frame').evaluateAll((panels) =>
-          panels.map((panel) => (panel as HTMLElement).dataset.panelKind)
-        )
+        page
+          .locator('.panel-frame')
+          .evaluateAll((panels) => panels.map((panel) => (panel as HTMLElement).dataset.panelKind))
       )
       .toEqual(panelKindsBeforeRun);
   });
@@ -182,7 +184,7 @@ test.describe('browser e2e ide shell', () => {
   test('sizes docked hardware cards to their content instead of stretching them', async ({
     page,
   }) => {
-    await page.goto('/');
+    await openBaselineIde(page);
 
     await openViewMenu(page);
     await page.getByRole('menuitem', { name: /layouts/i }).click();
@@ -258,7 +260,7 @@ test.describe('browser e2e ide shell', () => {
   });
 
   test('persists theme and shell layout state across reload', async ({ page }) => {
-    await page.goto('/');
+    await openBaselineIde(page);
 
     const appContainer = page.getByTestId('app-container');
     const appMenuButton = page.getByRole('button', { name: /open app menu/i });
@@ -324,6 +326,7 @@ test.describe('browser e2e ide shell', () => {
     );
 
     await page.reload();
+    await ignoreBootSourceConfiguration(page);
 
     await expect(appContainer).toHaveAttribute('data-theme', expectedTheme);
     await expect(page.getByRole('tablist', { name: 'Workspace views' })).toHaveCount(0);
@@ -333,7 +336,7 @@ test.describe('browser e2e ide shell', () => {
   test('shows terminal focus glow state and keeps the register identity column separate from controls', async ({
     page,
   }) => {
-    await page.goto('/');
+    await openBaselineIde(page);
 
     const terminalScreen = page.getByTestId('terminal-screen');
     await terminalScreen.click();

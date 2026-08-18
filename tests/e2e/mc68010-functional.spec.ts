@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openBaselineIde } from './sourceIdeE2eHelpers';
 
 const MC68010_BROWSER_PROGRAM = `ORG $80
 DC.L TRAP_HANDLER
@@ -71,8 +72,14 @@ async function loadProgramThroughTestControls(page: Page): Promise<void> {
       .__M68K_IDE_TEST_CONTROLS__;
     if (!controls) throw new Error('IDE test controls are unavailable');
     controls.loadSource(source);
-    controls.runProgram();
   }, MC68010_BROWSER_PROGRAM);
+  await expect(page.getByTestId('assembly-editor')).toContainText('TRAP_HANDLER');
+  await page.evaluate(() => {
+    const controls = (window as typeof window & { __M68K_IDE_TEST_CONTROLS__?: TestControls })
+      .__M68K_IDE_TEST_CONTROLS__;
+    if (!controls) throw new Error('IDE test controls are unavailable');
+    controls.runProgram();
+  });
   await page.waitForFunction(() => {
     const runtime = (window as typeof window & { emulatorInstance?: BrowserRuntime })
       .emulatorInstance;
@@ -135,7 +142,7 @@ test.describe('MC68010 functional browser conformance', () => {
   test('runs MOVEC, MOVES, VBR interrupts, and control-register UI under both machines', async ({
     page,
   }) => {
-    await page.goto('/?ide_perf=1');
+    await openBaselineIde(page, '/?ide_perf=1');
     await page.waitForFunction(
       () =>
         typeof (window as typeof window & { __M68K_IDE_TEST_CONTROLS__?: TestControls })

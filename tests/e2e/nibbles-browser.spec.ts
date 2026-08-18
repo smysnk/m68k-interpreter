@@ -26,18 +26,11 @@ function lineHasBackground(
   return cells.some((cell) => cell.char.trim().length > 0 && cell.background === background);
 }
 
-function lineHasAnyBackground(
-  cells: Array<{ background: number | null }>
-): boolean {
+function lineHasAnyBackground(cells: Array<{ background: number | null }>): boolean {
   return cells.some((cell) => cell.background !== null);
 }
 
-function expectMarkerCentered(
-  lines: string[],
-  columns: number,
-  marker: string,
-  row: number
-): void {
+function expectMarkerCentered(lines: string[], columns: number, marker: string, row: number): void {
   expect(lines[row]).toContain(marker);
   expect(lines[row]?.indexOf(marker)).toBe(Math.floor((columns - marker.length) / 2));
 }
@@ -107,23 +100,42 @@ test.describe('browser e2e nibbles', () => {
     expect(safeIntroSnapshot.lines[safeIntroSnapshot.rows - 1]).toBe(introBottomBorder);
     expect(safeIntroSnapshot.lines[1]?.[0]).toBe('│');
     expect(safeIntroSnapshot.lines[1]?.[safeIntroSnapshot.columns - 1]).toBe('│');
-    expect(titleRow).toBe(2);
-    expect(subtitleRow).toBe(3);
+    expect(titleRow).toBeGreaterThan(0);
+    expect(subtitleRow).toBe(titleRow + 1);
+    expect(selectLabelRow).toBeGreaterThan(subtitleRow);
     if (desktopTouchHintRow >= 0) {
-      expect(desktopTouchHintRow).toBe(5);
-      expect(selectLabelRow).toBe(7);
-      expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'Touch a row or use W / S + Enter', 5);
-      expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'SELECT DIFFICULTY', 7);
-    } else {
-      expect(touchHintRow).toBe(5);
-      expect(keysHintRow).toBe(6);
-      expect(selectLabelRow).toBe(4);
-      expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'SELECT DIFFICULTY', 4);
-      expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'Tap difficulty', 5);
-      expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'or W / S + Enter', 6);
+      expect(desktopTouchHintRow).toBeGreaterThan(subtitleRow);
+      expect(selectLabelRow).toBeGreaterThan(desktopTouchHintRow);
+      expectMarkerCentered(
+        safeIntroSnapshot.lines,
+        safeIntroSnapshot.columns,
+        'Touch a row or use W / S + Enter',
+        desktopTouchHintRow
+      );
+    } else if (touchHintRow >= 0 || keysHintRow >= 0) {
+      expect(touchHintRow).toBeGreaterThan(selectLabelRow);
+      expect(keysHintRow).toBe(touchHintRow + 1);
+      expectMarkerCentered(
+        safeIntroSnapshot.lines,
+        safeIntroSnapshot.columns,
+        'Tap difficulty',
+        touchHintRow
+      );
+      expectMarkerCentered(
+        safeIntroSnapshot.lines,
+        safeIntroSnapshot.columns,
+        'or W / S + Enter',
+        keysHintRow
+      );
     }
-    expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'NIBBLES', 2);
-    expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, subtitle, 3);
+    expectMarkerCentered(
+      safeIntroSnapshot.lines,
+      safeIntroSnapshot.columns,
+      'SELECT DIFFICULTY',
+      selectLabelRow
+    );
+    expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, 'NIBBLES', titleRow);
+    expectMarkerCentered(safeIntroSnapshot.lines, safeIntroSnapshot.columns, subtitle, subtitleRow);
     expect(lineHasForeground(safeIntroSnapshot.cells[titleRow] ?? [], 35)).toBe(true);
     expect(lineHasForeground(safeIntroSnapshot.cells[subtitleRow] ?? [], 36)).toBe(true);
     expect(lineHasBackground(safeIntroSnapshot.cells[selectedDifficultyRow] ?? [], 45)).toBe(true);

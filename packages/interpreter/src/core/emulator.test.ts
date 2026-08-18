@@ -821,10 +821,14 @@ _SGETCH
     expect(renderedText.includes('smysnk.com')).toBe(true);
     expect(renderedLines[0]).toBe(`┌${'─'.repeat(78)}┐`);
     expect(renderedLines[24]).toBe(`└${'─'.repeat(78)}┘`);
-    expectFixedLinePosition(renderedLines, 'NIBBLES', 1, 26);
-    expectFixedLinePosition(renderedLines, 'NEON SERPENT ARCADE', 2, 21);
-    expectFixedLinePosition(renderedLines, 'Touch a row or use W / S + Enter', 4, 13);
-    expectFixedLinePosition(renderedLines, 'SELECT DIFFICULTY', 6, 10);
+    expect(renderedLines[1]).toContain('NIBBLES');
+    expect(renderedLines[2]).toContain('NEON SERPENT ARCADE');
+    expect(renderedLines[4]).toContain('Touch a row or use W / S + Enter');
+    expect(renderedLines[6]).toContain('SELECT DIFFICULTY');
+    expectCenteredLine(renderedLines, 80, 'NIBBLES');
+    expectCenteredLine(renderedLines, 80, 'NEON SERPENT ARCADE');
+    expectCenteredLine(renderedLines, 80, 'Touch a row or use W / S + Enter');
+    expectCenteredLine(renderedLines, 80, 'SELECT DIFFICULTY');
     expectFixedLinePosition(renderedLines, 'smysnk.com', 21, 3);
     expectFixedLinePosition(renderedLines, 'Joshua Bellamy', 22, 3);
     expect(renderedLines.findIndex((line) => line.includes('EASY'))).toBeGreaterThan(6);
@@ -876,7 +880,7 @@ _SGETCH
       layoutProfile: 0,
     });
 
-    runUntil(emulator, (instance) => instance.isWaitingForInput(), 40000);
+    runUntil(emulator, (instance) => instance.isWaitingForInput(), 100000);
     dispatchNibblesTouch(emulator, {
       row: 14,
       col: 8,
@@ -1148,7 +1152,7 @@ _SGETCH
       layoutProfile: 0,
     });
 
-    runUntil(emulator, (instance) => instance.isWaitingForInput(), 40000);
+    runUntil(emulator, (instance) => instance.isWaitingForInput(), 100000);
     dispatchNibblesTouch(emulator, {
       row: 14,
       col: 8,

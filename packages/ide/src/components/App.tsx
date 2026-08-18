@@ -19,6 +19,7 @@ import {
 import { IdeProviders } from '@/theme/IdeProviders';
 import {
   NIBBLES_FILE_ID,
+  requestSourceIdeIgnore,
   requestFocusTerminal,
   requestRun,
   setEditorCode,
@@ -35,12 +36,17 @@ declare global {
   interface Window {
     __M68K_IDE_TEST_CONTROLS__?: {
       activateNibblesSource: () => void;
+      getSourceIdeStatus: () => RootState['sourceIde']['current']['status'];
+      getTerminalGeometryVersion: () => number;
+      ignoreSourceConfiguration: () => void;
       loadSource: (source: string) => void;
       focusTerminal: () => void;
       runProgram: () => void;
       setSpeedMultiplier: (value: number) => void;
       setWorkspaceTab: (value: 'terminal' | 'code' | 'registers' | 'memory' | 'hardware') => void;
-      setPanelPreset: (value: 'classic' | 'code-run' | 'hardware-lab' | 'debug' | 'terminal-focus') => void;
+      setPanelPreset: (
+        value: 'classic' | 'code-run' | 'hardware-lab' | 'debug' | 'terminal-focus'
+      ) => void;
     };
   }
 }
@@ -90,12 +96,17 @@ function IdePerformanceProbe(): React.ReactElement | null {
       activateNibblesSource: () => {
         const state = ideStore.getState();
         const nibblesFile = state.files.items.find((item) => item.id === NIBBLES_FILE_ID);
-        ideStore.dispatch(revealPanelKind('code'));
         ideStore.dispatch(setActiveFile(NIBBLES_FILE_ID));
         if (nibblesFile) {
           ideStore.dispatch(setEditorCode(nibblesFile.content));
           window.editorCode = nibblesFile.content;
         }
+      },
+      getSourceIdeStatus: () => ideStore.getState().sourceIde.current.status,
+      getTerminalGeometryVersion: () => ideStore.getState().emulator.terminal.geometryVersion,
+      ignoreSourceConfiguration: () => {
+        const activeFileId = ideStore.getState().files.activeFileId;
+        ideStore.dispatch(requestSourceIdeIgnore(activeFileId));
       },
       loadSource: (source: string) => {
         ideStore.dispatch(revealPanelKind('code'));
@@ -112,9 +123,7 @@ function IdePerformanceProbe(): React.ReactElement | null {
         ideStore.dispatch(setSpeedMultiplier(value));
       },
       setWorkspaceTab: (value) => {
-        ideStore.dispatch(
-          revealPanelKind(value === 'hardware' ? 'hardware-display' : value)
-        );
+        ideStore.dispatch(revealPanelKind(value === 'hardware' ? 'hardware-display' : value));
       },
       setPanelPreset: (value) => {
         ideStore.dispatch(resetToPreset(value));
@@ -189,16 +198,16 @@ function AppShell(): React.ReactElement {
       }
     >
       <div className="app-chrome-top" ref={navbarShellRef}>
-        <Navbar
-          fileExplorerOpen={isFileExplorerOpen}
-          onToggleFileExplorer={toggleFileExplorer}
-        />
+        <Navbar fileExplorerOpen={isFileExplorerOpen} onToggleFileExplorer={toggleFileExplorer} />
       </div>
       {!isFocusedMobileTerminal ? (
         <FileExplorerSidebar open={isFileExplorerOpen} onClose={closeFileExplorer} />
       ) : null}
       <main className={`main-content ${isCompactShell ? 'main-content-mobile' : ''}`.trim()}>
-        <div className={isCompactShell ? 'mobile-workspace-shell' : 'main-shell'} data-testid={isCompactShell ? 'mobile-workspace-shell' : 'desktop-workspace-shell'}>
+        <div
+          className={isCompactShell ? 'mobile-workspace-shell' : 'main-shell'}
+          data-testid={isCompactShell ? 'mobile-workspace-shell' : 'desktop-workspace-shell'}
+        >
           <PanelWorkspace />
         </div>
       </main>

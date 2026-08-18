@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { ignoreBootSourceConfiguration, openBaselineIde } from './sourceIdeE2eHelpers';
 
 async function beginPointerDrag(page: Page, activator: Locator): Promise<void> {
   const box = await activator.boundingBox();
@@ -23,12 +24,14 @@ async function moveToCenter(page: Page, target: Locator): Promise<void> {
 
 test.describe('explicit panel drag and dock', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/?ide_perf=1');
+    await openBaselineIde(page, '/?ide_perf=1');
     await page.waitForFunction(() => Boolean(window.__M68K_IDE_PERF__?.reset));
     await page.evaluate(() => window.__M68K_IDE_PERF__?.reset());
   });
 
-  test('uses the safe header, inert overlay, and only explicit insertion zones', async ({ page }) => {
+  test('uses the safe header, inert overlay, and only explicit insertion zones', async ({
+    page,
+  }) => {
     const screenPanel = page.getByTestId('panel-instance-panel-terminal-1');
     const screenHeader = screenPanel.locator('.panel-frame-header');
     const screenTitle = screenHeader.getByRole('heading', { name: 'Screen' });
@@ -36,14 +39,19 @@ test.describe('explicit panel drag and dock', () => {
 
     await expect(screenHeader).toHaveCSS('cursor', 'grab');
     await page.getByRole('button', { name: 'Minimize Screen' }).click();
-    expect(await page.evaluate(() => window.__M68K_IDE_PERF__?.snapshot().panelWorkspace.dragStarts)).toBe(0);
+    expect(
+      await page.evaluate(() => window.__M68K_IDE_PERF__?.snapshot().panelWorkspace.dragStarts)
+    ).toBe(0);
     await page.getByRole('button', { name: 'Restore Screen' }).click();
     const layoutCommitsBeforeDrag = await page.evaluate(
-      () => window.__M68K_IDE_PERF__!.snapshot().panelWorkspace.layoutCommits,
+      () => window.__M68K_IDE_PERF__!.snapshot().panelWorkspace.layoutCommits
     );
 
     await beginPointerDrag(page, screenTitle);
-    await expect(page.getByTestId('panel-workspace')).toHaveAttribute('data-panel-drag-active', 'true');
+    await expect(page.getByTestId('panel-workspace')).toHaveAttribute(
+      'data-panel-drag-active',
+      'true'
+    );
     await expect(page.getByTestId('panel-workspace')).toHaveCSS('cursor', 'grabbing');
     await expect(screenPanel).toHaveAttribute('data-panel-dragging', 'true');
     await expect(page.locator('.panel-drag-overlay .panel-body')).toHaveCount(0);
@@ -52,14 +60,16 @@ test.describe('explicit panel drag and dock', () => {
     await expect(page.locator('[data-panel-dock-active="true"]')).toHaveCount(0);
 
     const columnTwoEnd = page.locator(
-      '[data-panel-dock-target][data-panel-column-index="1"][data-panel-dock-relation="after"]',
+      '[data-panel-dock-target][data-panel-column-index="1"][data-panel-dock-relation="after"]'
     );
     await expect(columnTwoEnd).toHaveCount(1);
     await moveToCenter(page, columnTwoEnd);
     await expect(columnTwoEnd).toHaveAttribute('data-panel-dock-active', 'true');
     await page.mouse.up();
 
-    await expect(page.locator('[data-panel-column-id="column-2"] [data-panel-instance-id="panel-terminal-1"]')).toBeVisible();
+    await expect(
+      page.locator('[data-panel-column-id="column-2"] [data-panel-instance-id="panel-terminal-1"]')
+    ).toBeVisible();
     await expect(page.locator('.panel-drag-overlay')).toHaveCount(0);
     const telemetry = await page.evaluate(() => window.__M68K_IDE_PERF__!.snapshot());
     expect(telemetry.panelWorkspace.dragStarts).toBe(1);
@@ -68,7 +78,9 @@ test.describe('explicit panel drag and dock', () => {
     expect(telemetry.workerTransport.commandsSent).toBe(0);
   });
 
-  test('floats outside targets, moves freely, deliberately re-docks, and persists', async ({ page }) => {
+  test('floats outside targets, moves freely, deliberately re-docks, and persists', async ({
+    page,
+  }) => {
     const screenPanel = page.getByTestId('panel-instance-panel-terminal-1');
     await beginPointerDrag(page, screenPanel.getByRole('heading', { name: 'Screen' }));
     const navbar = page.locator('.navbar');
@@ -76,7 +88,9 @@ test.describe('explicit panel drag and dock', () => {
     await expect(page.locator('[data-panel-dock-active="true"]')).toHaveCount(0);
     await page.mouse.up();
 
-    const floatingWindow = page.locator('.floating-panel-window', { has: page.getByTestId('panel-instance-panel-terminal-1') });
+    const floatingWindow = page.locator('.floating-panel-window', {
+      has: page.getByTestId('panel-instance-panel-terminal-1'),
+    });
     await expect(floatingWindow).toBeVisible();
     const beforeMove = await floatingWindow.boundingBox();
     await beginPointerDrag(page, floatingWindow.getByRole('heading', { name: 'Screen' }));
@@ -89,7 +103,7 @@ test.describe('explicit panel drag and dock', () => {
 
     await beginPointerDrag(page, floatingWindow.getByRole('heading', { name: 'Screen' }));
     const columnOneEmpty = page.locator(
-      '[data-panel-dock-target][data-panel-column-index="0"][data-panel-dock-relation="empty"]',
+      '[data-panel-dock-target][data-panel-column-index="0"][data-panel-dock-relation="empty"]'
     );
     await expect(columnOneEmpty).toHaveCount(1);
     await moveToCenter(page, columnOneEmpty);
@@ -97,16 +111,23 @@ test.describe('explicit panel drag and dock', () => {
     await page.mouse.up();
 
     await expect(floatingWindow).toHaveCount(0);
-    await expect(page.locator('[data-panel-column-id="column-1"] [data-panel-instance-id="panel-terminal-1"]')).toBeVisible();
+    await expect(
+      page.locator('[data-panel-column-id="column-1"] [data-panel-instance-id="panel-terminal-1"]')
+    ).toBeVisible();
     await page.waitForFunction(() =>
-      window.localStorage.getItem('m68k.ide.preferences.v3')?.includes('"panel-terminal-1"'),
+      window.localStorage.getItem('m68k.ide.preferences.v3')?.includes('"panel-terminal-1"')
     );
     await page.reload();
-    await expect(page.locator('[data-panel-column-id="column-1"] [data-panel-instance-id="panel-terminal-1"]')).toBeVisible();
+    await ignoreBootSourceConfiguration(page);
+    await expect(
+      page.locator('[data-panel-column-id="column-1"] [data-panel-instance-id="panel-terminal-1"]')
+    ).toBeVisible();
     await expect(page.locator('.floating-panel-window')).toHaveCount(0);
   });
 
-  test('supports semantic keyboard docking, cancellation, and focus restoration', async ({ page }) => {
+  test('supports semantic keyboard docking, cancellation, and focus restoration', async ({
+    page,
+  }) => {
     const handle = page.getByRole('button', { name: 'Drag Screen panel' });
     await handle.focus();
     await handle.press('Space');
@@ -115,20 +136,31 @@ test.describe('explicit panel drag and dock', () => {
     await handle.press('ArrowRight');
     await handle.press('Enter');
 
-    await expect(page.locator('[data-panel-column-id="column-2"] [data-panel-instance-id="panel-terminal-1"]')).toBeVisible();
+    await expect(
+      page.locator('[data-panel-column-id="column-2"] [data-panel-instance-id="panel-terminal-1"]')
+    ).toBeVisible();
     await expect(handle).toBeFocused();
 
     await handle.press('Space');
     await expect(page.locator('.panel-drag-overlay')).toBeVisible();
     await handle.press('Escape');
     await expect(page.locator('.panel-drag-overlay')).toHaveCount(0);
-    await expect(page.locator('[data-panel-column-id="column-2"] [data-panel-instance-id="panel-terminal-1"]')).toBeVisible();
-    expect(await page.evaluate(() => window.__M68K_IDE_PERF__!.snapshot().panelWorkspace.dragCancels)).toBe(1);
+    await expect(
+      page.locator('[data-panel-column-id="column-2"] [data-panel-instance-id="panel-terminal-1"]')
+    ).toBeVisible();
+    expect(
+      await page.evaluate(() => window.__M68K_IDE_PERF__!.snapshot().panelWorkspace.dragCancels)
+    ).toBe(1);
   });
 
   test('removes drag motion and preserves a forced-colors target outline', async ({ page }) => {
-    await page.emulateMedia({ colorScheme: 'light', forcedColors: 'active', reducedMotion: 'reduce' });
+    await page.emulateMedia({
+      colorScheme: 'light',
+      forcedColors: 'active',
+      reducedMotion: 'reduce',
+    });
     await page.reload();
+    await ignoreBootSourceConfiguration(page);
     const handle = page.getByRole('button', { name: 'Drag Screen panel' });
     await handle.press('Space');
     const activeTarget = page.locator('[data-panel-dock-active="true"]');

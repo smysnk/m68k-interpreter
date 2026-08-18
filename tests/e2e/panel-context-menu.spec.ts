@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { ignoreBootSourceConfiguration, openBaselineIde } from './sourceIdeE2eHelpers';
 
 const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v3';
 
@@ -76,7 +77,7 @@ test.describe('panel workspace context menu', () => {
   test('inserts at the clicked panel location and preserves the exact order after reload', async ({
     page,
   }) => {
-    await page.goto('/');
+    await openBaselineIde(page);
     const firstColumn = page.getByTestId('panel-column-1');
     const screenPanel = page.getByTestId('panel-instance-panel-terminal-1');
     const screenBox = await screenPanel.boundingBox();
@@ -93,13 +94,14 @@ test.describe('panel workspace context menu', () => {
       IDE_PERSISTENCE_KEY
     );
     await page.reload();
+    await ignoreBootSourceConfiguration(page);
     await expect.poll(() => dockedKinds(firstColumn)).toEqual(['memory', 'terminal']);
   });
 
   test('keeps root and nested menus inside every viewport edge across one to four columns', async ({
     page,
   }) => {
-    await page.goto('/');
+    await openBaselineIde(page);
     for (const count of [1, 2, 3, 4]) {
       await setColumnCount(page, count);
       const column = page.getByTestId(`panel-column-${count}`);
@@ -132,7 +134,7 @@ test.describe('panel workspace context menu', () => {
   test('creates every registered panel type from the shared catalogue and every surface reopens it', async ({
     page,
   }) => {
-    await page.goto('/');
+    await openBaselineIde(page);
     const column = page.getByTestId('panel-column-1');
     for (const entry of PANEL_CATALOGUE) {
       const existing = page.locator(`[data-panel-kind="${entry.kind}"]`);
@@ -150,7 +152,7 @@ test.describe('panel workspace context menu', () => {
 
   test('uses the focused panel location in compact mode', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/');
+    await openBaselineIde(page, '/?ide_perf=1');
     await page.getByRole('tab', { name: /registers/i }).click();
     const registers = page.locator('[data-panel-kind="registers"]');
     await addPanelAt(page, registers, 'Help', { x: 20, y: 20 });
@@ -161,7 +163,7 @@ test.describe('panel workspace context menu', () => {
   test('creates and resizes a floating panel near a floating invocation point', async ({
     page,
   }) => {
-    await page.goto('/?ide_perf=1');
+    await openBaselineIde(page, '/?ide_perf=1');
     const screenPanel = page.getByTestId('panel-instance-panel-terminal-1');
     await beginPointerDrag(page, screenPanel.getByRole('heading', { name: 'Screen' }));
     const navbarBox = await page.locator('.navbar').boundingBox();

@@ -96,7 +96,10 @@ async function withNodeTimeout<T>(
   return Promise.race([
     operation,
     new Promise<T>((_, reject) => {
-      setTimeout(() => reject(new Error(`Timed out waiting for ${label} after ${timeoutMs}ms`)), timeoutMs);
+      setTimeout(
+        () => reject(new Error(`Timed out waiting for ${label} after ${timeoutMs}ms`)),
+        timeoutMs
+      );
     }),
   ]);
 }
@@ -165,10 +168,7 @@ async function waitForTestControls(page: Page, timeoutMs = 5_000): Promise<boole
   }
 }
 
-async function setInputValueDirect(
-  locator: Locator,
-  value: string
-): Promise<void> {
+async function setInputValueDirect(locator: Locator, value: string): Promise<void> {
   await locator.waitFor({ state: 'attached', timeout: 30_000 });
   await locator.evaluate((element, nextValue) => {
     const input = element as HTMLInputElement;
@@ -243,9 +243,7 @@ async function setWorkspaceTabFromTestControls(
     const controls = (
       window as typeof window & {
         __M68K_IDE_TEST_CONTROLS__?: {
-          setWorkspaceTab?: (
-            value: 'terminal' | 'code' | 'registers' | 'memory'
-          ) => void;
+          setWorkspaceTab?: (value: 'terminal' | 'code' | 'registers' | 'memory') => void;
         };
       }
     ).__M68K_IDE_TEST_CONTROLS__;
@@ -335,12 +333,14 @@ async function queueRuntimeInputSequence(page: Page, keys: string[]): Promise<vo
   await page.evaluate(async (queuedInputs) => {
     const runtime = (window as typeof window & { emulatorInstance?: any }).emulatorInstance;
     const controller = runtime?.controller;
-    const telemetry = (window as typeof window & {
-      __M68K_IDE_PERF__?: {
-        markInputAccepted?: () => void;
-        markInputRequest?: (metric?: { startedAtMs?: number }) => void;
-      };
-    }).__M68K_IDE_PERF__;
+    const telemetry = (
+      window as typeof window & {
+        __M68K_IDE_PERF__?: {
+          markInputAccepted?: () => void;
+          markInputRequest?: (metric?: { startedAtMs?: number }) => void;
+        };
+      }
+    ).__M68K_IDE_PERF__;
     if (!controller) {
       return;
     }
@@ -548,7 +548,9 @@ export async function dispatchRuntimeTouchDirection(
       typeof touchFlags !== 'number' ||
       typeof touchIsr !== 'number'
     ) {
-      throw new Error('Missing terminal touch protocol symbols for runtime touch direction dispatch');
+      throw new Error(
+        'Missing terminal touch protocol symbols for runtime touch direction dispatch'
+      );
     }
 
     void controller.requestDispatchTouchPacket(
@@ -603,23 +605,31 @@ export async function loadNibbles(
 
   if (controlsReady) {
     await activateNibblesSourceFromTestControls(page);
-    await setWorkspaceTabFromTestControls(page, 'code');
-    await page
-      .waitForFunction(
-        () =>
-          document
-            .querySelector<HTMLElement>('[data-testid="app-container"]')
-            ?.getAttribute('data-terminal-view-mode') === 'standard',
-        undefined,
-        { timeout: 5_000 }
-      )
-      .catch(() => undefined);
+    await page.waitForFunction(
+      () =>
+        (
+          window as typeof window & {
+            __M68K_IDE_TEST_CONTROLS__?: { getSourceIdeStatus?: () => string };
+          }
+        ).__M68K_IDE_TEST_CONTROLS__?.getSourceIdeStatus?.() === 'applied',
+      undefined,
+      { timeout: 5_000 }
+    );
+    await page.getByTestId('terminal-screen').waitFor({ state: 'visible', timeout: 30_000 });
+    await page.waitForFunction(
+      () =>
+        ((
+          window as typeof window & {
+            __M68K_IDE_TEST_CONTROLS__?: { getTerminalGeometryVersion?: () => number };
+          }
+        ).__M68K_IDE_TEST_CONTROLS__?.getTerminalGeometryVersion?.() ?? 0) > 1,
+      undefined,
+      { timeout: 5_000 }
+    );
 
     const desiredSpeed = options.speed ?? '8';
     await setSpeedMultiplierFromTestControls(page, desiredSpeed);
     await runProgramFromTestControls(page);
-    await setWorkspaceTabFromTestControls(page, 'terminal');
-    await page.getByTestId('terminal-screen').waitFor({ state: 'visible', timeout: 30_000 });
     await page.waitForFunction(
       () => Boolean((window as typeof window & { emulatorInstance?: unknown }).emulatorInstance),
       undefined,
@@ -664,20 +674,24 @@ export async function loadNibbles(
       await switchToCodeWorkspace(page, codeTab);
     } else {
       await setWorkspaceTabFromTestControls(page, 'code');
-      await page.waitForFunction(
-        () =>
-          document
-            .querySelector<HTMLElement>('[data-testid="app-container"]')
-            ?.getAttribute('data-terminal-view-mode') === 'standard',
-        undefined,
-        { timeout: 5_000 }
-      ).catch(() => undefined);
+      await page
+        .waitForFunction(
+          () =>
+            document
+              .querySelector<HTMLElement>('[data-testid="app-container"]')
+              ?.getAttribute('data-terminal-view-mode') === 'standard',
+          undefined,
+          { timeout: 5_000 }
+        )
+        .catch(() => undefined);
     }
   }
 
   if (await speedInput.isVisible().catch(() => false)) {
     const desiredSpeed = options.speed ?? '8';
-    const currentSpeed = await speedInput.evaluate((element) => (element as HTMLInputElement).value);
+    const currentSpeed = await speedInput.evaluate(
+      (element) => (element as HTMLInputElement).value
+    );
     if (currentSpeed !== desiredSpeed) {
       await setInputValueDirect(speedInput, desiredSpeed);
     }
@@ -692,14 +706,16 @@ export async function loadNibbles(
       await runButton.waitFor({ state: 'attached', timeout: 5_000 }).catch(() => undefined);
     } else {
       await setWorkspaceTabFromTestControls(page, 'code');
-      await page.waitForFunction(
-        () =>
-          document
-            .querySelector<HTMLElement>('[data-testid="app-container"]')
-            ?.getAttribute('data-terminal-view-mode') === 'standard',
-        undefined,
-        { timeout: 5_000 }
-      ).catch(() => undefined);
+      await page
+        .waitForFunction(
+          () =>
+            document
+              .querySelector<HTMLElement>('[data-testid="app-container"]')
+              ?.getAttribute('data-terminal-view-mode') === 'standard',
+          undefined,
+          { timeout: 5_000 }
+        )
+        .catch(() => undefined);
     }
   }
 
@@ -803,7 +819,7 @@ export async function readRuntimeState(page: Page): Promise<NibblesRuntimeState>
     const runtimeText =
       Array.isArray(runtimeLines) && runtimeLines.length > 0
         ? runtimeLines.join('\n')
-        : runtime.getTerminalText?.() ?? null;
+        : (runtime.getTerminalText?.() ?? null);
     const screenElement = document.querySelector<HTMLElement>('[data-testid="terminal-screen"]');
     const lines = Array.from(screenElement?.querySelectorAll('.retro-screen__line') ?? []);
     const startIndex = Math.max(lines.length - Math.max(terminalMeta?.rows ?? 1, 1), 0);
@@ -813,9 +829,7 @@ export async function readRuntimeState(page: Page): Promise<NibblesRuntimeState>
     }
     const text =
       runtimeText ??
-      (renderedLines.length > 0
-        ? renderedLines.join('\n')
-        : (screenElement?.textContent ?? null));
+      (renderedLines.length > 0 ? renderedLines.join('\n') : (screenElement?.textContent ?? null));
     const symbolValues: Record<string, number | null> = {};
     const symbolNames = [
       'LAYOUT_PROFILE',
@@ -832,7 +846,10 @@ export async function readRuntimeState(page: Page): Promise<NibblesRuntimeState>
 
     for (const symbol of symbolNames) {
       let address = runtime.getSymbolAddress?.(symbol);
-      if (typeof address !== 'number' && typeof runtime.controller?.requestSymbolAddress === 'function') {
+      if (
+        typeof address !== 'number' &&
+        typeof runtime.controller?.requestSymbolAddress === 'function'
+      ) {
         try {
           const resolved = await Promise.race([
             runtime.controller.requestSymbolAddress(symbol),
@@ -914,10 +931,8 @@ export async function readTerminalSnapshot(page: Page): Promise<TerminalBrowserS
         ? snapshot.cells.map((row: Array<any>) =>
             row.map((cell) => ({
               char: typeof cell?.char === 'string' ? cell.char : ' ',
-              foreground:
-                typeof cell?.foreground === 'number' ? cell.foreground : null,
-              background:
-                typeof cell?.background === 'number' ? cell.background : null,
+              foreground: typeof cell?.foreground === 'number' ? cell.foreground : null,
+              background: typeof cell?.background === 'number' ? cell.background : null,
               bold: cell?.bold === true,
               inverse: cell?.inverse === true,
             }))
@@ -999,7 +1014,7 @@ async function readRuntimeSurfaceState(page: Page): Promise<NibblesRuntimeSurfac
     const runtimeText =
       Array.isArray(runtimeLines) && runtimeLines.length > 0
         ? runtimeLines.join('\n')
-        : runtime?.getTerminalText?.() ?? null;
+        : (runtime?.getTerminalText?.() ?? null);
     const screenElement = document.querySelector<HTMLElement>('[data-testid="terminal-screen"]');
     const lines = Array.from(screenElement?.querySelectorAll('.retro-screen__line') ?? []);
     const startIndex = Math.max(lines.length - Math.max(terminalMeta?.rows ?? 1, 1), 0);
@@ -1229,9 +1244,9 @@ export async function touchTerminalRelativeDirection(
   const targetCell = await resolveDirectionalTouchCell(page, direction);
 
   if (dispatchStrategy !== 'dom') {
-    const inputMode = dispatchStrategy === 'runtime' ? 'text-input' : await resolveTerminalInputMode(page);
-    const shouldUseRuntimeDispatch =
-      dispatchStrategy === 'runtime' || inputMode !== 'touch-only';
+    const inputMode =
+      dispatchStrategy === 'runtime' ? 'text-input' : await resolveTerminalInputMode(page);
+    const shouldUseRuntimeDispatch = dispatchStrategy === 'runtime' || inputMode !== 'touch-only';
 
     if (shouldUseRuntimeDispatch) {
       const dispatched = await dispatchRuntimeTouchPacket(page, {
@@ -1299,7 +1314,10 @@ export async function startGameplayFromIntroKeyboard(
   const startedAt = Date.now();
   await focusTerminalViewport(page);
   for (const key of options.keys) {
-    await page.locator('[data-testid="terminal-screen"] .retro-screen__viewport').first().press(key);
+    await page
+      .locator('[data-testid="terminal-screen"] .retro-screen__viewport')
+      .first()
+      .press(key);
     await delay(50);
   }
 
@@ -1475,13 +1493,11 @@ export async function captureTerminalTelemetryAfterInput(
 
     const acceptedAdvanced =
       snapshot.inputProgressAck.acceptedCount > baseline.inputProgressAck.acceptedCount;
-    const ackAdvanced =
-      snapshot.inputProgressAck.ackCount > baseline.inputProgressAck.ackCount;
+    const ackAdvanced = snapshot.inputProgressAck.ackCount > baseline.inputProgressAck.ackCount;
     const repaintAdvanced =
       snapshot.terminalRepaint.repaintCount > baseline.terminalRepaint.repaintCount;
     const frameAdvanced =
-      snapshot.workerTransport.frameEventsReceived >
-      baseline.workerTransport.frameEventsReceived;
+      snapshot.workerTransport.frameEventsReceived > baseline.workerTransport.frameEventsReceived;
     const touchDispatchAdvanced =
       !options.requireTouchDispatch ||
       snapshot.touchLatency.dispatchCount > baseline.touchLatency.dispatchCount;
