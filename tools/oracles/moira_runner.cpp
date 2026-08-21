@@ -62,6 +62,28 @@ static u32 parseEnvU32(const char *name) {
     return value == nullptr ? 0 : parseU32(value);
 }
 
+static void printState(const RunnerCpu &cpu) {
+    std::printf("{\"d\":[");
+    for (int index = 0; index < 8; index += 1) {
+        if (index != 0) std::printf(",");
+        std::printf("%u", cpu.getD(index));
+    }
+    std::printf("],\"a\":[");
+    for (int index = 0; index < 8; index += 1) {
+        if (index != 0) std::printf(",");
+        std::printf("%u", cpu.getA(index));
+    }
+    std::printf("],\"pc\":%u,\"sr\":%u,\"vbr\":%u,\"sfc\":%u,\"dfc\":%u,\"cycles\":%lld,\"writes\":[",
+                cpu.getPC(), cpu.getSR(), cpu.getVBR(), cpu.getSFC(), cpu.getDFC(),
+                static_cast<long long>(cpu.getClock()));
+    for (size_t index = 0; index < cpu.writes.size(); index += 1) {
+        if (index != 0) std::printf(",");
+        const auto &write = cpu.writes[index];
+        std::printf("[%u,%u,%u]", write.address, write.size, write.value);
+    }
+    std::printf("]}");
+}
+
 static void write32(std::array<u8, 0x01000000> &memory, u32 address, u32 value) {
     const u32 normalized = address & 0x00ffffff;
     memory[normalized] = u8(value >> 24);
@@ -114,29 +136,27 @@ int main(int argc, char **argv) {
     cpu.setDFC(parseEnvU32("M68K_DFC"));
     cpu.setClock(0);
     cpu.writes.clear();
-    cpu.execute();
 
-    std::printf("{\"d\":[");
-    for (int index = 0; index < 8; index += 1) {
-        if (index != 0) std::printf(",");
-        std::printf("%u", cpu.getD(index));
+    if (std::getenv("M68K_TRACE_STEPS") != nullptr) {
+        const u32 steps = parseEnvU32("M68K_TRACE_STEPS");
+        std::printf("{\"version\":1,\"rows\":[");
+        for (u32 index = 0; index < steps; index += 1) {
+            const u32 pcBefore = cpu.getPC();
+            const u16 word = cpu.read16(pcBefore);
+            cpu.setClock(0);
+            cpu.writes.clear();
+            cpu.execute();
+            if (index != 0) std::printf(",");
+            std::printf("{\"sequence\":%u,\"pcBefore\":%u,\"instructionBytes\":[%u,%u],\"state\":",
+                        index, pcBefore, u8(word >> 8), u8(word));
+            printState(cpu);
+            std::printf("}");
+        }
+        std::printf("]}\n");
+        return 0;
     }
-    std::printf("],\"a\":[");
-    for (int index = 0; index < 8; index += 1) {
-        if (index != 0) std::printf(",");
-        std::printf("%u", cpu.getA(index));
-    }
-    std::printf("],\"pc\":%u,\"sr\":%u,\"vbr\":%u,\"sfc\":%u,\"dfc\":%u,\"cycles\":%lld,\"writes\":[",
-                cpu.getPC(),
-                cpu.getSR(),
-                cpu.getVBR(),
-                cpu.getSFC(),
-                cpu.getDFC(),
-                static_cast<long long>(cpu.getClock()));
-    for (size_t index = 0; index < cpu.writes.size(); index += 1) {
-        if (index != 0) std::printf(",");
-        const auto &write = cpu.writes[index];
-        std::printf("[%u,%u,%u]", write.address, write.size, write.value);
-    }
-    std::printf("]}\n");
+
+    cpu.execute();
+    printState(cpu);
+    std::printf("\n");
 }

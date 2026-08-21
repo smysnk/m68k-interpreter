@@ -164,6 +164,18 @@ export default {
       }
     },
     {
+      id: "debugger-performance",
+      label: "Recursive Debugger Performance",
+      adapter: "shell",
+      package: "benchmark",
+      cwd: rootDir,
+      command: ["yarn", "test:performance:debugger:test-station"],
+      resultFormat: "suite-json-v1",
+      module: "debugger",
+      theme: "benchmark",
+      coverage: { enabled: false }
+    },
+    {
       id: "easy68k-multimedia-benchmark",
       label: "Easy68K Multimedia Performance",
       adapter: "shell",

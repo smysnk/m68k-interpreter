@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import panelLayoutReducer, {
   closePanel,
+  commitDigitalIoBitLabel,
   createPanel,
   duplicatePanel,
   floatPanel,
@@ -160,6 +161,38 @@ describe('panelLayoutSlice', () => {
     expect(getPanelLayoutInvariantErrors(state.activeLayout)).toEqual([]);
   });
 
+  it('stores normalized bit labels as panel metadata without changing device addresses', () => {
+    let state = panelLayoutReducer(
+      structuredClone(initialPanelLayoutState),
+      resetToPreset('hardware-lab')
+    );
+    const digital = Object.values(state.activeLayout.instances).find(
+      (panel) => panel.kind === 'hardware-digital-io'
+    )!;
+    const addresses =
+      digital.config.kind === 'hardware-digital-io'
+        ? {
+            ledAddress: digital.config.ledAddress,
+            switchAddress: digital.config.switchAddress,
+            buttonAddress: digital.config.buttonAddress,
+          }
+        : null;
+
+    state = panelLayoutReducer(
+      state,
+      commitDigitalIoBitLabel({ panelId: digital.id, bit: 7, label: `  ${'M'.repeat(40)}  ` })
+    );
+    const updated = state.activeLayout.instances[digital.id]!.config;
+    expect(updated.kind).toBe('hardware-digital-io');
+    if (updated.kind !== 'hardware-digital-io') return;
+    expect(updated.bitLabels[7]).toBe('M'.repeat(32));
+    expect(updated).toMatchObject(addresses!);
+
+    state = panelLayoutReducer(state, saveView({ name: 'Labeled lab' }));
+    const saved = state.userViews[state.userViewOrder[0]!]!.document.instances[digital.id]!.config;
+    expect(saved.kind === 'hardware-digital-io' ? saved.bitLabels[7] : null).toBe('M'.repeat(32));
+  });
+
   it('creates every registered panel kind through the shared targeted action', () => {
     let state = panelLayoutReducer(
       structuredClone(initialPanelLayoutState),
@@ -225,7 +258,7 @@ describe('panelLayoutSlice', () => {
     }
   });
 
-  it('migrates a legacy composite hardware panel into two combined panel kinds', () => {
+  it('migrates a legacy composite hardware panel into three focused panel kinds', () => {
     const migrated = normalizePanelLayoutDocument({
       schemaVersion: 1,
       name: 'Legacy lab',
@@ -247,16 +280,17 @@ describe('panelLayoutSlice', () => {
       nextColumnSequence: 2,
     });
 
-    expect(migrated.schemaVersion).toBe(4);
+    expect(migrated.schemaVersion).toBe(6);
     expect(Object.values(migrated.instances).map((panel) => panel.kind)).toEqual([
       'hardware-display',
       'hardware-digital-io',
+      'hardware-interrupts',
     ]);
-    expect(migrated.columns[0]?.panelIds).toHaveLength(2);
+    expect(migrated.columns[0]?.panelIds).toHaveLength(3);
     expect(normalizePanelLayoutDocument(migrated)).toEqual(migrated);
   });
 
-  it('folds version-two interrupt panels into digital I/O', () => {
+  it('migrates version-two hardware into separate digital I/O and IRQ panels', () => {
     const migrated = normalizePanelLayoutDocument({
       schemaVersion: 2,
       name: 'Split hardware lab',
@@ -297,10 +331,106 @@ describe('panelLayoutSlice', () => {
       nextColumnSequence: 2,
     });
 
-    expect(migrated.schemaVersion).toBe(4);
-    expect(Object.keys(migrated.instances)).toEqual(['digital']);
-    expect(migrated.instances.digital?.title).toBe('LEDs / Switches / Buttons / IRQs');
+    expect(migrated.schemaVersion).toBe(6);
+    expect(Object.keys(migrated.instances)).toEqual(['digital', 'digital-interrupts']);
+    expect(migrated.instances.digital?.title).toBe('LEDs / Switches / Buttons');
+    expect(migrated.instances['digital-interrupts']?.kind).toBe('hardware-interrupts');
     expect(migrated.focusedPanelId).toBe('digital');
     expect(getPanelLayoutInvariantErrors(migrated)).toEqual([]);
+  });
+
+  it('normalizes version-four labels and adds one idempotent IRQ panel', () => {
+    const migrated = normalizePanelLayoutDocument({
+      schemaVersion: 4,
+      name: 'Labeled hardware',
+      columnCount: 1,
+      columns: [{ id: 'column-1', width: 100, panelIds: ['digital'] }],
+      floatingPanelIds: [],
+      instances: {
+        digital: {
+          id: 'digital',
+          kind: 'hardware-digital-io',
+          title: 'LEDs / Switches / Buttons / IRQs',
+          minimized: false,
+          config: {
+            kind: 'hardware-digital-io',
+            deviceId: 'device-digital',
+            ledAddress: 0xe00010,
+            switchAddress: 0xe00010,
+            buttonAddress: 0xe00012,
+            bitLabels: ['  Zero  ', 3, '', '', '', '', '', 'X'.repeat(40)],
+          },
+        },
+      },
+      focusedPanelId: 'digital',
+      terminalOwnerPanelId: null,
+      nextInstanceSequence: 2,
+      nextColumnSequence: 2,
+    });
+
+    expect(migrated.instances.digital?.title).toBe('LEDs / Switches / Buttons');
+    const digital = migrated.instances.digital?.config;
+    expect(digital?.kind === 'hardware-digital-io' ? digital.bitLabels : null).toEqual([
+      'Zero',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      'X'.repeat(32),
+    ]);
+    expect(
+      Object.values(migrated.instances).filter((panel) => panel.kind === 'hardware-interrupts')
+    ).toHaveLength(1);
+    expect(normalizePanelLayoutDocument(migrated)).toEqual(migrated);
+  });
+
+  it('does not add an IRQ panel when a version-four layout is at the panel limit', () => {
+    const helpIds = Array.from(
+      { length: MAX_PANEL_INSTANCES - 1 },
+      (_, index) => `help-${index + 1}`
+    );
+    const instances = Object.fromEntries([
+      [
+        'digital',
+        {
+          id: 'digital',
+          kind: 'hardware-digital-io',
+          title: 'LEDs / Switches / Buttons / IRQs',
+          minimized: false,
+          config: {
+            kind: 'hardware-digital-io',
+            deviceId: 'device-digital',
+            ledAddress: 0xe00010,
+            switchAddress: 0xe00010,
+            buttonAddress: 0xe00012,
+          },
+        },
+      ],
+      ...helpIds.map((id) => [
+        id,
+        { id, kind: 'help', title: 'Help', minimized: false, config: { kind: 'help' } },
+      ]),
+    ]);
+
+    const migrated = normalizePanelLayoutDocument({
+      schemaVersion: 4,
+      name: 'Full hardware layout',
+      columnCount: 1,
+      columns: [{ id: 'column-1', width: 100, panelIds: ['digital', ...helpIds] }],
+      floatingPanelIds: [],
+      instances,
+      focusedPanelId: 'digital',
+      terminalOwnerPanelId: null,
+      nextInstanceSequence: MAX_PANEL_INSTANCES + 1,
+      nextColumnSequence: 2,
+    });
+
+    expect(Object.keys(migrated.instances)).toHaveLength(MAX_PANEL_INSTANCES);
+    expect(
+      Object.values(migrated.instances).filter((panel) => panel.kind === 'hardware-interrupts')
+    ).toHaveLength(0);
+    expect(migrated.instances.digital?.title).toBe('LEDs / Switches / Buttons');
   });
 });

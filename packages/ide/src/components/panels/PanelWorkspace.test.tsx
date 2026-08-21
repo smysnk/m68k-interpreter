@@ -245,6 +245,7 @@ describe('PanelWorkspace', () => {
   it('integrates the hardware title and window controls into one header', () => {
     store.dispatch(revealPanelKind('hardware-display'));
     store.dispatch(revealPanelKind('hardware-digital-io'));
+    store.dispatch(revealPanelKind('hardware-interrupts'));
     renderWithIdeProviders(<PanelWorkspace />, { store });
 
     const hardwareFrame = screen.getByTestId(/panel-instance-panel-hardware-display/);
@@ -277,10 +278,14 @@ describe('PanelWorkspace', () => {
       within(digitalBody as HTMLElement).getByRole('button', { name: 'Configure switch address' })
     ).toBeInTheDocument();
     expect(
-      within(digitalBody as HTMLElement).getByRole('button', { name: 'Request interrupt level 7' })
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByTestId(/panel-instance-panel-hardware-interrupts/)
+      within(digitalBody as HTMLElement).queryByRole('button', {
+        name: 'Request interrupt level 7',
+      })
     ).not.toBeInTheDocument();
+
+    const interruptFrame = screen.getByTestId(/panel-instance-panel-hardware-interrupts/);
+    expect(
+      within(interruptFrame).getByRole('button', { name: 'Request interrupt level 7' })
+    ).toBeInTheDocument();
   });
 });

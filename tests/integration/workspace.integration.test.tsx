@@ -3,12 +3,12 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { App } from '@m68k/ide';
 import { Emulator } from '@m68k/interpreter';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
+import { executionCoordinator } from '@/runtime/executionCoordinator';
 import { terminalSurfaceStore } from '@/runtime/terminalSurfaceStore';
 import { useEmulatorStore } from '@/stores/emulatorStore';
 import {
+  getActiveFile,
   ideStore,
-  requestReset,
-  requestRun,
   resetFilesState,
   resetSourceIdeState,
   resetSettingsState,
@@ -39,7 +39,6 @@ describe('workspace integration', () => {
     ideStore.dispatch(resetSourceIdeState());
     ideStore.dispatch(resetSettingsState());
     useEmulatorStore.getState().setSpeedMultiplier(64);
-    window.editorCode = '';
     window.emulatorInstance = null;
   });
 
@@ -71,14 +70,15 @@ describe('workspace integration', () => {
   END START`)
       );
     });
+    const focusedPanelBeforeRun = ideStore.getState().panelLayout.activeLayout.focusedPanelId;
 
     act(() => {
-      ideStore.dispatch(requestRun());
+      executionCoordinator.execute('run');
     });
 
     await waitFor(() => {
       const layout = ideStore.getState().panelLayout.activeLayout;
-      expect(layout.instances[layout.focusedPanelId ?? '']?.kind).toBe('terminal');
+      expect(layout.focusedPanelId).toBe(focusedPanelBeforeRun);
       expect(window.emulatorInstance).not.toBeNull();
       expect(getEmulatorTerminalText()).toContain('H');
       expect(terminalSurfaceStore.getText()).toContain('H');
@@ -92,10 +92,10 @@ describe('workspace integration', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
       fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
-      expect(window.editorCode).toContain('END NIBBLES');
+      expect(getActiveFile(ideStore.getState().files).content).toContain('END NIBBLES');
 
       act(() => {
-        ideStore.dispatch(requestRun());
+        executionCoordinator.execute('run');
       });
 
       await waitFor(
@@ -173,7 +173,7 @@ describe('workspace integration', () => {
       fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
 
       act(() => {
-        ideStore.dispatch(requestRun());
+        executionCoordinator.execute('run');
       });
 
       await waitFor(
@@ -191,7 +191,7 @@ describe('workspace integration', () => {
       );
 
       act(() => {
-        ideStore.dispatch(requestReset());
+        executionCoordinator.execute('reset');
       });
 
       await waitFor(() => {
@@ -201,7 +201,7 @@ describe('workspace integration', () => {
       });
 
       act(() => {
-        ideStore.dispatch(requestRun());
+        executionCoordinator.execute('run');
       });
 
       await waitFor(

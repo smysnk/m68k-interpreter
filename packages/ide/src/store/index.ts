@@ -26,6 +26,7 @@ import uiShellReducer, { initialUiShellState } from '@/store/uiShellSlice';
 import hardwareReducer from '@/store/hardwareSlice';
 import panelLayoutReducer, { initialPanelLayoutState } from '@/store/panelLayoutSlice';
 import sourceIdeReducer from '@/store/sourceIdeSlice';
+import debuggerReducer, { initialDebuggerState, markDebugSourceStale } from '@/store/debuggerSlice';
 import { migrateLegacyPanelLayout, normalizePanelLayoutState } from '@/store/panelLayoutValidation';
 import { resetEmulatorState, setEditorCode } from '@/store/emulatorSlice';
 import {
@@ -41,6 +42,7 @@ const combinedReducer = combineReducers({
   hardware: hardwareReducer,
   panelLayout: panelLayoutReducer,
   sourceIde: sourceIdeReducer,
+  debugger: debuggerReducer,
 });
 
 const SOURCE_PREVIEW_LENGTH = 80;
@@ -178,6 +180,7 @@ const rootReducer = (
     return combinedReducer(
       {
         ...state,
+        debugger: debuggerReducer(state.debugger, markDebugSourceStale()),
         files: filesReducer(
           state.files,
           setActiveFileContent((action as ReturnType<typeof setEditorCode>).payload)
@@ -223,6 +226,12 @@ export function createIdeStore() {
       editorCode: activeFile.content,
     },
     files,
+    debugger: persisted?.debugger
+      ? {
+          ...initialDebuggerState,
+          configuration: structuredClone(persisted.debugger),
+        }
+      : initialDebuggerState,
     settings: hydratedSettings,
     hardware: hydratedHardware ?? initialState.hardware,
     uiShell: persisted?.uiShell
@@ -264,6 +273,7 @@ export function createIdeStore() {
     uiShell: store.getState().uiShell,
     hardware: store.getState().hardware,
     panelLayout: store.getState().panelLayout,
+    debugger: store.getState().debugger.configuration,
   };
 
   const persist = (): void => {
@@ -302,6 +312,7 @@ export function createIdeStore() {
             activeLayoutDirty: sourceBaseline.panelLayout.activeLayoutDirty,
           }
         : state.panelLayout,
+      debugger: state.debugger.configuration,
     };
     const serialized = JSON.stringify(persistableState);
     if (serialized === lastPersistedState) return;
@@ -322,15 +333,17 @@ export function createIdeStore() {
       previousPersistentSlices.uiShell !== state.uiShell ||
       previousPersistentSlices.hardware !== state.hardware;
     const layoutChanged = previousPersistentSlices.panelLayout !== state.panelLayout;
+    const debuggerChanged = previousPersistentSlices.debugger !== state.debugger.configuration;
     previousPersistentSlices = {
       files: state.files,
       settings: state.settings,
       uiShell: state.uiShell,
       hardware: state.hardware,
       panelLayout: state.panelLayout,
+      debugger: state.debugger.configuration,
     };
-    if (!nonLayoutChanged && !layoutChanged) return;
-    if (nonLayoutChanged) {
+    if (!nonLayoutChanged && !layoutChanged && !debuggerChanged) return;
+    if (nonLayoutChanged || debuggerChanged) {
       if (pendingLayoutWrite !== null && typeof window !== 'undefined')
         window.clearTimeout(pendingLayoutWrite);
       persist();
@@ -378,3 +391,5 @@ export * from '@/store/panelLayoutSlice';
 export * from '@/store/panelLayoutSelectors';
 export * from '@/store/panelLayoutValidation';
 export * from '@/store/sourceIdeSlice';
+export * from '@/store/debuggerSlice';
+export * from '@/store/codeDebuggerSelectors';

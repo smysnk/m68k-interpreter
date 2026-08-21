@@ -87,7 +87,11 @@ export const PANEL_PRESETS: readonly PanelPresetDefinition[] = [
     create: () =>
       buildPreset(
         'Hardware Lab',
-        [[{ kind: 'terminal' }], [{ kind: 'hardware-display' }], [{ kind: 'hardware-digital-io' }]],
+        [
+          [{ kind: 'terminal' }],
+          [{ kind: 'hardware-display' }],
+          [{ kind: 'hardware-digital-io' }, { kind: 'hardware-interrupts' }],
+        ],
         [42, 26, 32]
       ),
   },
@@ -109,11 +113,11 @@ export const PANEL_PRESETS: readonly PanelPresetDefinition[] = [
   {
     id: 'debug',
     name: 'Debug',
-    description: 'Code, screen, registers, and memory across three columns.',
+    description: 'Code, screen, debugger, registers, and memory across three columns.',
     create: () =>
       buildPreset('Debug', [
         [{ kind: 'code' }],
-        [{ kind: 'terminal' }],
+        [{ kind: 'terminal' }, { kind: 'debugger' }],
         [{ kind: 'registers' }, { kind: 'memory' }],
       ]),
   },

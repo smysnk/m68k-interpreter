@@ -14,6 +14,7 @@ import {
   type WorkerRuntimeMetricsSnapshot,
   type WorkerRuntimeSnapshot,
   type RuntimeLoadRequest,
+  type WorkerStoppedReason,
 } from '@/runtime/worker/interpreterWorkerProtocol';
 import { buildRuntimeFrameSyncPayload } from '@/runtime/runtimeFramePayload';
 import {
@@ -164,6 +165,7 @@ export class InterpreterWorkerHost {
             soundAssets: command.request.soundAssets,
             undoMode: command.request.undo.mode,
             undoCheckpointInterval: command.request.undo.checkpointInterval,
+            debugFileId: command.request.debugFileId,
           });
           this.applyGeometryBridge();
           this.publishFrame({
@@ -175,28 +177,71 @@ export class InterpreterWorkerHost {
           return;
         case 'run':
           this.configureExecution(command.config);
+          this.requireEmulator().beginDebugContinue();
           this.startExecutionLoop();
           this.emitEvent(createReplyEvent(command.id, true));
           return;
         case 'resume':
           this.configureExecution(command.config);
+          this.requireEmulator().beginDebugContinue();
           this.startExecutionLoop();
           this.emitEvent(createReplyEvent(command.id, true));
           return;
         case 'pause':
+          this.requireEmulator().pauseDebugger();
           this.stopExecutionLoop('paused');
           this.emitEvent(createReplyEvent(command.id, true));
           return;
         case 'step':
           this.stopExecutionLoop();
+          this.requireEmulator().beginDebugStepInto();
           this.executeManualStep();
           this.emitEvent(
             createReplyEvent(command.id, true, {
               halted: this.requireEmulator().isHalted(),
               waitingForInput: this.requireEmulator().isWaitingForInput(),
               exception: this.requireEmulator().getException() ?? null,
+              debugStop: this.requireEmulator().getDebugStop(),
             })
           );
+          return;
+        case 'stepOver': {
+          this.stopExecutionLoop();
+          const continuous = this.requireEmulator().beginDebugStepOver();
+          if (continuous) this.startExecutionLoop();
+          else this.executeManualStep();
+          this.emitEvent(
+            createReplyEvent(command.id, true, {
+              halted: this.requireEmulator().isHalted(),
+              waitingForInput: this.requireEmulator().isWaitingForInput(),
+              exception: this.requireEmulator().getException() ?? null,
+              debugStop: this.requireEmulator().getDebugStop(),
+            })
+          );
+          return;
+        }
+        case 'stepOut': {
+          this.stopExecutionLoop();
+          const accepted = this.requireEmulator().beginDebugStepOut();
+          if (accepted) this.startExecutionLoop();
+          this.emitEvent(createReplyEvent(command.id, true, accepted));
+          return;
+        }
+        case 'runToAddress':
+          this.stopExecutionLoop();
+          this.configureExecution(command.config);
+          this.requireEmulator().beginDebugRunTo(command.address);
+          this.startExecutionLoop();
+          this.emitEvent(createReplyEvent(command.id, true));
+          return;
+        case 'configureDebugger':
+          this.requireEmulator().configureDebugger(command.configuration);
+          this.publishFrame({
+            lastFrameInstructions: 0,
+            lastFrameDurationMs: 0,
+            lastStopReason: 'debugger_configured',
+          });
+          this.emitEvent(createReplyEvent(command.id, true));
           return;
         case 'undo':
           this.stopExecutionLoop();
@@ -222,6 +267,7 @@ export class InterpreterWorkerHost {
               soundAssets: request.soundAssets,
               undoMode: request.undo.mode,
               undoCheckpointInterval: request.undo.checkpointInterval,
+              debugFileId: request.debugFileId,
             });
           } else {
             this.requireEmulator().reset();
@@ -713,6 +759,7 @@ export class InterpreterWorkerHost {
       symbols: plan.includeSymbols ? runtime.getSymbols() : undefined,
       syncVersions: plan.syncVersions,
       runtimeMetrics,
+      debugSnapshot: includeRuntimeState ? runtime.getDebugSnapshot() : undefined,
     };
   }
 
@@ -764,6 +811,8 @@ export class InterpreterWorkerHost {
       runtime.isWaitingForInput() ? 1 : 0,
       runtime.getQueuedInputLength(),
       runtime.getException() ?? '',
+      runtime.getDebugStop()?.reason ?? '',
+      runtime.getDebugStop()?.pc ?? '',
     ].join(':');
   }
 
@@ -843,20 +892,20 @@ export class InterpreterWorkerHost {
     const hasException = Boolean(emulator.getException());
     const halted = emulator.isHalted() || finished;
     const waitingForInput = emulator.isWaitingForInput();
-    const stopReason = waitingForInput
-      ? 'waiting_for_input'
+    const stopReason = emulator.getDebugStop()?.reason ?? (waitingForInput
+      ? 'waiting-for-input'
       : hasException
         ? 'exception'
         : halted
           ? 'halted'
-          : 'manual_step';
+          : 'manual_step');
 
     this.publishFrame({
       lastFrameInstructions: 1,
       lastFrameDurationMs: this.getNow() - startedAt,
       lastStopReason: stopReason,
     });
-    this.emitEvent({ type: 'stopped', reason: stopReason });
+    this.emitEvent({ type: 'stopped', reason: stopReason, stop: emulator.getDebugStop() });
   }
 
   private startExecutionLoop(): void {
@@ -868,7 +917,7 @@ export class InterpreterWorkerHost {
     this.scheduleNextExecutionFrame(this.executionLoopGeneration, 0);
   }
 
-  private stopExecutionLoop(reason?: string): void {
+  private stopExecutionLoop(reason?: WorkerStoppedReason): void {
     this.executionLoopActive = false;
     this.executionLoopGeneration += 1;
     this.nextFrameBudgetOverrideMs = undefined;
@@ -878,7 +927,7 @@ export class InterpreterWorkerHost {
     }
 
     if (reason) {
-      this.emitEvent({ type: 'stopped', reason });
+      this.emitEvent({ type: 'stopped', reason, stop: this.emulator?.getDebugStop() });
     }
   }
 
@@ -949,7 +998,11 @@ export class InterpreterWorkerHost {
     }
 
     this.executionLoopActive = false;
-    this.emitEvent({ type: 'stopped', reason: frameResult.stopReason });
+    this.emitEvent({
+      type: 'stopped',
+      reason: frameResult.stopReason,
+      stop: emulator.getDebugStop(),
+    });
   }
 
   private requestExecutionPulse(frameBudgetMs?: number): boolean {

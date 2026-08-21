@@ -169,7 +169,7 @@ test.describe('browser e2e ide shell', () => {
       .locator('.panel-frame')
       .evaluateAll((panels) => panels.map((panel) => (panel as HTMLElement).dataset.panelKind));
 
-    await page.getByRole('button', { name: /run program/i }).click();
+    await page.getByRole('button', { name: /^start program$/i }).click();
 
     await expect(terminalPanels).toHaveCount(0);
     await expect
@@ -191,7 +191,7 @@ test.describe('browser e2e ide shell', () => {
     await page.getByRole('menuitem', { name: 'Apply Hardware Lab layout' }).click();
 
     const frames = page.locator('.panel-column > .panel-frame[data-panel-kind^="hardware-"]');
-    await expect(frames).toHaveCount(2);
+    await expect(frames).toHaveCount(3);
     const measurements = await frames.evaluateAll((elements) =>
       elements.map((frame) => {
         const header = frame.querySelector('.panel-frame-header');
@@ -264,7 +264,7 @@ test.describe('browser e2e ide shell', () => {
 
     const appContainer = page.getByTestId('app-container');
     const appMenuButton = page.getByRole('button', { name: /open app menu/i });
-    const runButton = page.getByRole('button', { name: /run program/i });
+    const runButton = page.getByRole('button', { name: /^start program$/i });
     const fileExplorerButton = page.getByRole('button', { name: /open file explorer/i });
     const initialTheme = await appContainer.getAttribute('data-theme');
     const expectedTheme = initialTheme === 'dark' ? 'light' : 'dark';

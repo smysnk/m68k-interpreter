@@ -11,7 +11,6 @@ import { setCpuModel, setMachineProfile, type AppDispatch, type RootState } from
 import { useCompactShell } from '@/hooks/useCompactShell';
 import ContextMenu from '@/components/menus/ContextMenu';
 import MenuItem from '@/components/menus/MenuItem';
-import SourceIdeStatusControl from '@/components/SourceIdeStatusControl';
 
 const PERSONAL_WEBSITE_URL = 'https://smysnk.com';
 const BUY_ME_A_COFFEE_URL = 'https://buymeacoffee.com/josh1g';
@@ -183,7 +182,6 @@ const StatusBar: React.FC<StatusBarProps> = ({
             {model.runtime.label}
           </span>
           {modeControl}
-          <SourceIdeStatusControl />
           {showAboutButton ? aboutButton : null}
           {websiteLink}
           {coffeeLink}
@@ -195,9 +193,6 @@ const StatusBar: React.FC<StatusBarProps> = ({
               {model.runtime.label}
             </span>
             {modeControl}
-          </div>
-          <div className="status-bar-section status-bar-section-center">
-            <SourceIdeStatusControl />
           </div>
           <div className="status-bar-section status-bar-section-right">
             {showAboutButton ? aboutButton : null}

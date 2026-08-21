@@ -10,6 +10,9 @@ import type {
   Easy68kHardwareSnapshot,
   Easy68kHardwareValidationResult,
   InterruptRequestResult,
+  DebuggerConfiguration,
+  DebugSnapshot,
+  DebugStop,
 } from '@m68k/interpreter';
 import type {
   InterpreterWorkerEvent,
@@ -65,6 +68,8 @@ export interface IdeRuntimeCachedReadApi {
     includeCommands?: boolean
   ): import('@m68k/interpreter').Easy68kSoundSnapshot | undefined;
   getRuntimeTransport?(): IdeRuntimeTransport;
+  getDebugSnapshot?(): DebugSnapshot | undefined;
+  getDebugStop?(): DebugStop | undefined;
 }
 
 export interface IdeRuntimeController {
@@ -76,6 +81,10 @@ export interface IdeRuntimeController {
   requestResume(config?: WorkerExecutionConfig): Promise<void>;
   requestPause(): Promise<void>;
   requestStep(): Promise<WorkerStepResult | undefined>;
+  requestStepOver(): Promise<WorkerStepResult | undefined>;
+  requestStepOut(): Promise<boolean>;
+  requestRunToAddress(address: number, config?: WorkerExecutionConfig): Promise<void>;
+  requestConfigureDebugger(configuration: DebuggerConfiguration): Promise<void>;
   requestUndo(): Promise<void>;
   requestReset(): Promise<void>;
   requestQueueInput(input: string | number | number[]): Promise<void>;
@@ -151,6 +160,13 @@ export interface IdeRuntimeSession extends IdeRuntimeCachedReadApi {
     assets: readonly import('@m68k/interpreter').Easy68kSoundAsset[]
   ): import('@m68k/interpreter').Easy68kSoundAsset[];
   requestInterruptLevel?(level: number): InterruptRequestResult;
+  configureDebugger?(configuration: DebuggerConfiguration): void;
+  beginDebugContinue?(): void;
+  beginDebugStepInto?(): void;
+  beginDebugStepOver?(): boolean;
+  beginDebugStepOut?(): boolean;
+  beginDebugRunTo?(address: number): void;
+  pauseDebugger?(): DebugStop;
   controller?: IdeRuntimeController;
 }
 

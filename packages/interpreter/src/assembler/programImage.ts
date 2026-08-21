@@ -3,6 +3,7 @@ export interface ProgramSourceMapEntry {
   length: number;
   line: number;
   column?: number;
+  kind: 'instruction' | 'data';
 }
 
 export interface ProgramImage {
@@ -17,6 +18,7 @@ export interface ProgramImageChunk {
   bytes: Uint8Array;
   line: number;
   column?: number;
+  kind?: 'instruction' | 'data';
 }
 
 export function createProgramImage(
@@ -39,6 +41,7 @@ export function createProgramImage(
       length: chunk.bytes.length,
       line: chunk.line,
       column: chunk.column,
+      kind: chunk.kind ?? 'instruction',
     });
     offset += chunk.bytes.length;
   }

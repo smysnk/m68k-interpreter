@@ -21,7 +21,6 @@ import {
   NIBBLES_FILE_ID,
   requestSourceIdeIgnore,
   requestFocusTerminal,
-  requestRun,
   setEditorCode,
   setActiveFile,
   setSpeedMultiplier,
@@ -31,6 +30,7 @@ import {
   ideStore,
   type RootState,
 } from '@/store';
+import { executionCoordinator } from '@/runtime/executionCoordinator';
 
 declare global {
   interface Window {
@@ -99,7 +99,6 @@ function IdePerformanceProbe(): React.ReactElement | null {
         ideStore.dispatch(setActiveFile(NIBBLES_FILE_ID));
         if (nibblesFile) {
           ideStore.dispatch(setEditorCode(nibblesFile.content));
-          window.editorCode = nibblesFile.content;
         }
       },
       getSourceIdeStatus: () => ideStore.getState().sourceIde.current.status,
@@ -111,13 +110,12 @@ function IdePerformanceProbe(): React.ReactElement | null {
       loadSource: (source: string) => {
         ideStore.dispatch(revealPanelKind('code'));
         ideStore.dispatch(setEditorCode(source));
-        window.editorCode = source;
       },
       focusTerminal: () => {
         ideStore.dispatch(requestFocusTerminal());
       },
       runProgram: () => {
-        ideStore.dispatch(requestRun());
+        executionCoordinator.execute('run');
       },
       setSpeedMultiplier: (value: number) => {
         ideStore.dispatch(setSpeedMultiplier(value));

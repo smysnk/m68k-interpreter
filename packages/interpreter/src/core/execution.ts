@@ -28,6 +28,7 @@ export type StepResult =
       pcBefore: number;
       pcAfter: number;
       cycles?: number;
+      transition?: 'instruction' | 'interrupt';
     }
   | {
       kind: 'waiting';

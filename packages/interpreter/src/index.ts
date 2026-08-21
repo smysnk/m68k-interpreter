@@ -213,6 +213,28 @@ export type {
   EmulatorConfig,
 } from './types/emulator';
 export type { EmulatorOptions, UndoCaptureMode } from './core/emulator';
+export { DebugSession } from './debugger/debugSession';
+export { evaluateDebuggerExpression } from './debugger/expression';
+export type {
+  DebugBreakpointKind,
+  DebugBreakpointSpec,
+  DebugCallFrame,
+  DebugFrameKind,
+  DebuggerConfiguration,
+  DebuggerExpressionContext,
+  DebugHitCondition,
+  DebugProgramDescriptor,
+  DebugRunMode,
+  DebugSnapshot,
+  DebugSourceLocation,
+  DebugStop,
+  DebugStopReason,
+  DebugWatchExpression,
+  DebugWatchValue,
+  DebugWatchpointAccess,
+  DebugWatchpointSpec,
+  ResolvedDebugBreakpoint,
+} from './debugger/types';
 export type {
   TerminalCell,
   TerminalDeviceConfig,

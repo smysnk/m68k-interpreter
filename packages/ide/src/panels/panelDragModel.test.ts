@@ -199,6 +199,6 @@ describe('panelDragModel', () => {
         workspaceHeight: 640,
         workspaceWidth: 1000,
       })
-    ).toEqual({ floatingRect: { x: 280, y: 220, width: 720, height: 420 } });
+    ).toEqual({ floatingRect: { x: 280, y: 200, width: 720, height: 440 } });
   });
 });

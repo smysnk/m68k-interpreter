@@ -19,7 +19,7 @@ Write, step through, and debug m68k assembly — no installation needed.
 
 ## Features
 
-- Step-by-step execution with full undo/redo history
+- Source/address/label breakpoints, conditional stops, hit counts, logpoints, watches, data breakpoints, call stacks, run-to-cursor, and forward/reverse stepping
 - Live register viewer and memory inspector
 - Detailed error reporting with line context
 - Preloaded examples covering common patterns
@@ -28,6 +28,24 @@ Write, step through, and debug m68k assembly — no installation needed.
 - Independently addressable EASy68K panels for seven-segment displays, aligned switches/LEDs/active-low buttons, and CPU interrupt requests
 - Canonical Easy68K graphics and WAV sound services with duplicable Graphics and Sound panels
 - Level 1–7 autovector interrupts, SR masking, automatic IRQ scheduling, and `RTE`
+
+## Debugging
+
+Click a Code line number or the dedicated debugger gutter—or press `F9`—to toggle a source
+breakpoint. The global toolbar provides Continue (`F5`), Pause (`F6`), Stop (`Shift+F5`), and
+Restart. The Code panel header provides Step Over (`F10`), Step Into (`F11`), Step Out
+(`Shift+F11`), Step Back (`Alt+F11`), and Run to Cursor (`Ctrl/Cmd+F10`), with secondary actions in
+an overflow menu when the panel is narrow. Breakpoints stop before their instruction, and Continue
+suppresses that exact boundary once so loops can progress.
+
+Choose the **Debug** layout or add a **Debugger** panel explicitly to manage conditions, watches,
+write data breakpoints, the logical call stack, and structured stop details. Running, stepping, or
+hitting a breakpoint never opens, focuses, or reorders panels. Breakpoints and watches persist,
+while source edits leave unresolved locations visibly unbound until the next successful assembly.
+
+Step Back restores the bounded logical machine history (CPU, RAM, devices, diagnostics, graphics,
+and sound state). Physical output already emitted by the browser—most notably audio already
+heard—cannot be retracted. The bundled `debugger-loop.asm` example is a compact guided exercise.
 
 ## Compatibility and instruction coverage
 

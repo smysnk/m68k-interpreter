@@ -8,6 +8,8 @@ import {
   MAX_PANEL_COLUMNS,
   MAX_PANEL_INSTANCES,
   MIN_PANEL_COLUMNS,
+  DIGITAL_IO_BIT_LABEL_COUNT,
+  DIGITAL_IO_BIT_LABEL_MAX_LENGTH,
   PANEL_KINDS,
   PANEL_LAYOUT_SCHEMA_VERSION,
   createPanelConfiguration,
@@ -35,6 +37,15 @@ function finite(value: unknown, fallback: number): number {
 
 function address(value: unknown, fallback: number): number {
   return normalizeDeviceAddress(finite(value, fallback));
+}
+
+function bitLabels(value: unknown): string[] {
+  const source = Array.isArray(value) ? value : [];
+  return Array.from({ length: DIGITAL_IO_BIT_LABEL_COUNT }, (_, bit) =>
+    typeof source[bit] === 'string'
+      ? source[bit].trim().slice(0, DIGITAL_IO_BIT_LABEL_MAX_LENGTH)
+      : ''
+  );
 }
 
 export function clampFloatingRect(value: unknown): FloatingPanelRect {
@@ -199,6 +210,92 @@ function migrateV3ToV4(value: Record<string, unknown>): Record<string, unknown> 
   return { ...value, schemaVersion: 4 };
 }
 
+function migrateV4ToV5(value: Record<string, unknown>): Record<string, unknown> {
+  if (finite(value.schemaVersion, 1) >= 5 || !isRecord(value.instances)) {
+    return value;
+  }
+
+  const instances = { ...value.instances };
+  const digitalIoEntry = Object.entries(instances).find(
+    ([, raw]) => isRecord(raw) && raw.kind === 'hardware-digital-io'
+  );
+  const hasInterruptPanel = Object.values(instances).some(
+    (raw) => isRecord(raw) && raw.kind === 'hardware-interrupts'
+  );
+
+  for (const [id, raw] of Object.entries(instances)) {
+    if (!isRecord(raw) || raw.kind !== 'hardware-digital-io') continue;
+    instances[id] = {
+      ...raw,
+      title:
+        raw.title === 'LEDs / Switches / Buttons / IRQs'
+          ? getPanelDefaultTitle('hardware-digital-io')
+          : raw.title,
+    };
+  }
+
+  let columns = value.columns;
+  let floatingPanelIds = value.floatingPanelIds;
+  if (digitalIoEntry && !hasInterruptPanel && Object.keys(instances).length < MAX_PANEL_INSTANCES) {
+    const [digitalIoId, rawDigitalIo] = digitalIoEntry;
+    let interruptId = `${digitalIoId}-interrupts`;
+    for (let sequence = 2; instances[interruptId]; sequence += 1) {
+      interruptId = `${digitalIoId}-interrupts-${sequence}`;
+    }
+    const digitalIoPanel = isRecord(rawDigitalIo) ? rawDigitalIo : {};
+    const floatingRect = digitalIoPanel.floatingRect
+      ? {
+          ...clampFloatingRect(digitalIoPanel.floatingRect),
+          x: clampFloatingRect(digitalIoPanel.floatingRect).x + 28,
+          y: clampFloatingRect(digitalIoPanel.floatingRect).y + 28,
+        }
+      : undefined;
+    instances[interruptId] = {
+      id: interruptId,
+      kind: 'hardware-interrupts',
+      title: getPanelDefaultTitle('hardware-interrupts'),
+      minimized: false,
+      config: { kind: 'hardware-interrupts' },
+      ...(floatingRect ? { floatingRect } : {}),
+    };
+
+    let placed = false;
+    columns = Array.isArray(value.columns)
+      ? value.columns.map((rawColumn) => {
+          if (!isRecord(rawColumn) || !Array.isArray(rawColumn.panelIds)) return rawColumn;
+          const panelIds = [...rawColumn.panelIds];
+          const digitalIndex = panelIds.indexOf(digitalIoId);
+          if (digitalIndex < 0) return rawColumn;
+          panelIds.splice(digitalIndex + 1, 0, interruptId);
+          placed = true;
+          return { ...rawColumn, panelIds };
+        })
+      : value.columns;
+
+    const rawFloatingIds = Array.isArray(value.floatingPanelIds) ? [...value.floatingPanelIds] : [];
+    const floatingIndex = rawFloatingIds.indexOf(digitalIoId);
+    if (!placed && floatingIndex >= 0) {
+      rawFloatingIds.splice(floatingIndex + 1, 0, interruptId);
+      floatingPanelIds = rawFloatingIds;
+      placed = true;
+    }
+    if (!placed && Array.isArray(columns) && isRecord(columns[0])) {
+      columns[0] = {
+        ...columns[0],
+        panelIds: [...(Array.isArray(columns[0].panelIds) ? columns[0].panelIds : []), interruptId],
+      };
+    }
+  }
+
+  return {
+    ...value,
+    schemaVersion: 5,
+    instances,
+    columns,
+    floatingPanelIds,
+  };
+}
+
 function migratePanelLayoutDocument(value: unknown): unknown {
   if (!isRecord(value)) return value;
   let migrated = value;
@@ -210,6 +307,12 @@ function migratePanelLayoutDocument(value: unknown): unknown {
   }
   if (finite(migrated.schemaVersion, 1) < 4) {
     migrated = migrateV3ToV4(migrated);
+  }
+  if (finite(migrated.schemaVersion, 1) < 5) {
+    migrated = migrateV4ToV5(migrated);
+  }
+  if (finite(migrated.schemaVersion, 1) < 6) {
+    migrated = { ...migrated, schemaVersion: 6 };
   }
   return migrated;
 }
@@ -233,6 +336,15 @@ function normalizeConfiguration(
       ...(typeof source.startAddress === 'number'
         ? { startAddress: normalizeDeviceAddress(source.startAddress) }
         : {}),
+    };
+  }
+  if (kind === 'debugger') {
+    return {
+      kind,
+      collapsedSections: Array.isArray(source.collapsedSections)
+        ? source.collapsedSections.filter((item): item is string => typeof item === 'string').slice(0, 8)
+        : [],
+      radix: source.radix === 'decimal' ? 'decimal' : 'hex',
     };
   }
   if (kind === 'graphics') {
@@ -294,6 +406,7 @@ function normalizeConfiguration(
       ledAddress: address(source.ledAddress, fallback.ledAddress),
       switchAddress: address(source.switchAddress, fallback.switchAddress),
       buttonAddress: address(source.buttonAddress, fallback.buttonAddress),
+      bitLabels: bitLabels(source.bitLabels),
     } as const;
     const existing = existingDevices.find((device) => device.id === candidate.deviceId);
     if (existing?.deviceType === 'digital-io') {
@@ -508,7 +621,7 @@ function legacyKindToPanelKinds(
   kind: WorkspaceTab | 'registers' | 'memory' | 'hardware'
 ): PanelKind[] {
   if (kind === 'hardware') {
-    return ['hardware-display', 'hardware-digital-io'];
+    return ['hardware-display', 'hardware-digital-io', 'hardware-interrupts'];
   }
   return [kind];
 }

@@ -1,6 +1,6 @@
 import type { Memory } from '../core/memory';
 import type { StepResult } from '../core/execution';
-import type { MemoryBus, MemoryMappedDevice } from '../cpu/memoryBus';
+import type { BusAccess, MemoryBus, MemoryMappedDevice } from '../cpu/memoryBus';
 import {
   Easy68kHardware,
   getEasy68kInterruptVectorAddress,
@@ -38,6 +38,7 @@ export interface MachineAdapter {
   readonly graphics?: Easy68kGraphicsDevice;
   readonly sound?: Easy68kSoundDevice;
   readonly mappedHardwareConnected: boolean;
+  setBusAccessObserver(observer: ((access: BusAccess) => void) | undefined): void;
   handleTrap(context: MachineTrapContext): StepResult | undefined;
   validateInterruptVector(level: number, vectorBase?: number): string | undefined;
   snapshot(): MachineSnapshot;
@@ -87,12 +88,18 @@ abstract class BaseMachineAdapter implements MachineAdapter {
   readonly terminal: TerminalDevice;
   readonly hardware: Easy68kHardware;
   readonly bus: MemoryBus;
+  private readonly mappedBus: MappedMemoryBus;
 
   protected constructor(memory: Memory, options: MachineAdapterOptions & { mapHardware: boolean }) {
     this.terminal = new TerminalDevice({ columns: options.columns, rows: options.rows });
     this.hardware = new Easy68kHardware(options.hardwareDevices ?? options.hardwareConfig);
     const devices = options.mapHardware ? [new Easy68kHardwareMappedDevice(this.hardware)] : [];
-    this.bus = new MappedMemoryBus(memory, devices, options.beforeRamWrite);
+    this.mappedBus = new MappedMemoryBus(memory, devices, options.beforeRamWrite);
+    this.bus = this.mappedBus;
+  }
+
+  setBusAccessObserver(observer: ((access: BusAccess) => void) | undefined): void {
+    this.mappedBus.setAccessObserver(observer);
   }
 
   handleTrap(_context: MachineTrapContext): StepResult | undefined {

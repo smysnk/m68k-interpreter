@@ -1,7 +1,9 @@
 import type { Memory } from '../core/memory';
 import {
   BusFault,
+  type BusAccess,
   type BusAccessInput,
+  type BusAccessSize,
   type MemoryBus,
   type MemoryMappedDevice,
   busOperation,
@@ -17,8 +19,13 @@ export class MappedMemoryBus implements MemoryBus {
   constructor(
     private readonly memory: Memory,
     private readonly devices: readonly MemoryMappedDevice[] = [],
-    private readonly beforeRamWrite?: (address: number) => void
+    private readonly beforeRamWrite?: (address: number) => void,
+    private accessObserver?: (access: BusAccess) => void
   ) {}
+
+  setAccessObserver(observer: ((access: BusAccess) => void) | undefined): void {
+    this.accessObserver = observer;
+  }
 
   private normalize(address: number, access: BusAccessInput, size: 1 | 2 | 4): number {
     const normalized = address & ADDRESS_MASK;
@@ -47,49 +54,83 @@ export class MappedMemoryBus implements MemoryBus {
     return undefined;
   }
 
+  private record(
+    access: BusAccessInput,
+    address: number,
+    size: BusAccessSize,
+    value: number
+  ): void {
+    if (!this.accessObserver) return;
+    const context = typeof access === 'string' ? undefined : access;
+    this.accessObserver({
+      type: busOperation(access, 'read'),
+      address,
+      size,
+      value: value >>> 0,
+      functionCode: context?.functionCode,
+      cpuSpace: context?.cpuSpace,
+    });
+  }
+
+  private readByte(address: number): number {
+    return this.findDevice(address)?.read8(address) ?? this.memory.getByte(address);
+  }
+
+  private writeByte(address: number, value: number): void {
+    if (this.findDevice(address)?.write8(address, value & 0xff)) return;
+    if (this.activeTransaction !== 0 && !this.transactionBytes.has(address)) {
+      this.transactionBytes.set(address, this.memory.getByte(address));
+    }
+    this.beforeRamWrite?.(address);
+    this.memory.setByte(address, value & 0xff);
+  }
+
   read8(address: number, access: BusAccessInput = 'read'): number {
     const normalized = this.normalize(address, access, 1);
-    return this.findDevice(normalized)?.read8(normalized) ?? this.memory.getByte(normalized);
+    const value = this.readByte(normalized);
+    this.record(access, normalized, 1, value);
+    return value;
   }
 
   read16(address: number, access: BusAccessInput = 'read'): number {
     const normalized = this.normalize(address, access, 2);
-    return ((this.read8(normalized, access) << 8) | this.read8(normalized + 1, access)) >>> 0;
+    const value = ((this.readByte(normalized) << 8) | this.readByte(normalized + 1)) >>> 0;
+    this.record(access, normalized, 2, value);
+    return value;
   }
 
   read32(address: number, access: BusAccessInput = 'read'): number {
     const normalized = this.normalize(address, access, 4);
-    return (
-      ((this.read8(normalized, access) << 24) |
-        (this.read8(normalized + 1, access) << 16) |
-        (this.read8(normalized + 2, access) << 8) |
-        this.read8(normalized + 3, access)) >>>
-      0
-    );
+    const value =
+      ((this.readByte(normalized) << 24) |
+        (this.readByte(normalized + 1) << 16) |
+        (this.readByte(normalized + 2) << 8) |
+        this.readByte(normalized + 3)) >>>
+      0;
+    this.record(access, normalized, 4, value);
+    return value;
   }
 
   write8(address: number, value: number, access: BusAccessInput = 'write'): void {
     const normalized = this.normalize(address, access, 1);
-    if (this.findDevice(normalized)?.write8(normalized, value & 0xff)) return;
-    if (this.activeTransaction !== 0 && !this.transactionBytes.has(normalized)) {
-      this.transactionBytes.set(normalized, this.memory.getByte(normalized));
-    }
-    this.beforeRamWrite?.(normalized);
-    this.memory.setByte(normalized, value & 0xff);
+    this.writeByte(normalized, value);
+    this.record(access, normalized, 1, value & 0xff);
   }
 
   write16(address: number, value: number, access: BusAccessInput = 'write'): void {
     const normalized = this.normalize(address, access, 2);
-    this.write8(normalized, value >>> 8, access);
-    this.write8(normalized + 1, value, access);
+    this.writeByte(normalized, value >>> 8);
+    this.writeByte(normalized + 1, value);
+    this.record(access, normalized, 2, value & 0xffff);
   }
 
   write32(address: number, value: number, access: BusAccessInput = 'write'): void {
     const normalized = this.normalize(address, access, 4);
-    this.write8(normalized, value >>> 24, access);
-    this.write8(normalized + 1, value >>> 16, access);
-    this.write8(normalized + 2, value >>> 8, access);
-    this.write8(normalized + 3, value, access);
+    this.writeByte(normalized, value >>> 24);
+    this.writeByte(normalized + 1, value >>> 16);
+    this.writeByte(normalized + 2, value >>> 8);
+    this.writeByte(normalized + 3, value);
+    this.record(access, normalized, 4, value);
   }
 
   breakpointAcknowledge(): boolean {

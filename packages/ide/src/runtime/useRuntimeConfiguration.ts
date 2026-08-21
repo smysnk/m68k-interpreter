@@ -13,6 +13,7 @@ import { loadPersistedEasy68kSoundAssets } from '@/runtime/easy68kSoundAssetMani
 
 export function buildRuntimeLoadRequest(options: {
   source: string;
+  debugFileId?: string;
   emulation: EmulationConfig;
   columns: number;
   rows: number;
@@ -29,6 +30,7 @@ export function buildRuntimeLoadRequest(options: {
       : []);
   return {
     source: options.source,
+    debugFileId: options.debugFileId ?? 'active',
     emulation: { ...options.emulation },
     terminal: { columns: options.columns, rows: options.rows },
     hardwareDevices: options.hardwareDevices.map((device) => ({ ...device })),

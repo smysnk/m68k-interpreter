@@ -16,6 +16,7 @@ type RegisterCardProps = {
   value: number;
   onCommit: (descriptor: RegisterDescriptor, value: number) => void;
   defaultCompact?: boolean;
+  changed?: boolean;
 };
 
 const RegisterCard: React.FC<RegisterCardProps> = ({
@@ -23,6 +24,7 @@ const RegisterCard: React.FC<RegisterCardProps> = ({
   value,
   onCommit,
   defaultCompact = false,
+  changed = false,
 }) => {
   const formattedDecimalValue = React.useMemo(
     () => formatRegisterDecimal(value, descriptor.bitWidth, descriptor.decimalMode),
@@ -137,7 +139,8 @@ const RegisterCard: React.FC<RegisterCardProps> = ({
   return (
     <div
       aria-label={`${descriptor.label} register. ${descriptor.description ?? ''}`.trim()}
-      className={`register-card ${descriptor.editable ? '' : 'readonly'} ${isCompact ? 'compact' : 'expanded'}`.trim()}
+      className={`register-card ${descriptor.editable ? '' : 'readonly'} ${isCompact ? 'compact' : 'expanded'} ${changed ? 'changed' : ''}`.trim()}
+      data-changed={changed ? 'true' : 'false'}
       data-register-group={descriptor.groupId}
       role="group"
     >

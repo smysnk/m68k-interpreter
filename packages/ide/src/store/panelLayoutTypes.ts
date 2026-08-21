@@ -4,19 +4,27 @@ import {
   type Easy68kHardwareDeviceConfig,
 } from '@m68k/interpreter';
 
-export const PANEL_LAYOUT_SCHEMA_VERSION = 4 as const;
+export const PANEL_LAYOUT_SCHEMA_VERSION = 6 as const;
 export const MIN_PANEL_COLUMNS = 1;
 export const MAX_PANEL_COLUMNS = 4;
 export const MAX_PANEL_INSTANCES = 32;
 export const MAX_SAVED_PANEL_VIEWS = 20;
+export const DIGITAL_IO_BIT_LABEL_COUNT = 8;
+export const DIGITAL_IO_BIT_LABEL_MAX_LENGTH = 32;
+
+export function createDigitalIoBitLabels(): string[] {
+  return new Array<string>(DIGITAL_IO_BIT_LABEL_COUNT).fill('');
+}
 
 export type PanelKind =
   | 'terminal'
   | 'code'
   | 'registers'
   | 'memory'
+  | 'debugger'
   | 'hardware-display'
   | 'hardware-digital-io'
+  | 'hardware-interrupts'
   | 'graphics'
   | 'sound'
   | 'help';
@@ -78,6 +86,16 @@ export const PANEL_KIND_DEFINITIONS: Record<PanelKind, PanelKindDefinition> = {
     minimumFloatingSize: { width: 520, height: 340 },
     addMenuOrder: 3,
   },
+  debugger: {
+    kind: 'debugger',
+    title: 'Debugger',
+    icon: 'DBG',
+    canDuplicate: true,
+    canFloat: true,
+    minimumWidth: 320,
+    minimumFloatingSize: { width: 460, height: 420 },
+    addMenuOrder: 4,
+  },
   'hardware-display': {
     kind: 'hardware-display',
     title: 'Seven-segment display',
@@ -86,17 +104,27 @@ export const PANEL_KIND_DEFINITIONS: Record<PanelKind, PanelKindDefinition> = {
     canFloat: true,
     minimumWidth: 360,
     minimumFloatingSize: { width: 520, height: 260 },
-    addMenuOrder: 4,
+    addMenuOrder: 5,
   },
   'hardware-digital-io': {
     kind: 'hardware-digital-io',
-    title: 'LEDs / Switches / Buttons / IRQs',
+    title: 'LEDs / Switches / Buttons',
     icon: 'I/O',
     canDuplicate: true,
     canFloat: true,
     minimumWidth: 520,
-    minimumFloatingSize: { width: 720, height: 360 },
-    addMenuOrder: 5,
+    minimumFloatingSize: { width: 720, height: 440 },
+    addMenuOrder: 6,
+  },
+  'hardware-interrupts': {
+    kind: 'hardware-interrupts',
+    title: 'CPU Interrupt Lines',
+    icon: 'IRQ',
+    canDuplicate: true,
+    canFloat: true,
+    minimumWidth: 480,
+    minimumFloatingSize: { width: 680, height: 260 },
+    addMenuOrder: 7,
   },
   graphics: {
     kind: 'graphics',
@@ -106,7 +134,7 @@ export const PANEL_KIND_DEFINITIONS: Record<PanelKind, PanelKindDefinition> = {
     canFloat: true,
     minimumWidth: 360,
     minimumFloatingSize: { width: 680, height: 560 },
-    addMenuOrder: 6,
+    addMenuOrder: 8,
   },
   sound: {
     kind: 'sound',
@@ -116,7 +144,7 @@ export const PANEL_KIND_DEFINITIONS: Record<PanelKind, PanelKindDefinition> = {
     canFloat: true,
     minimumWidth: 320,
     minimumFloatingSize: { width: 480, height: 380 },
-    addMenuOrder: 7,
+    addMenuOrder: 9,
   },
   help: {
     kind: 'help',
@@ -126,7 +154,7 @@ export const PANEL_KIND_DEFINITIONS: Record<PanelKind, PanelKindDefinition> = {
     canFloat: true,
     minimumWidth: 280,
     minimumFloatingSize: { width: 380, height: 300 },
-    addMenuOrder: 8,
+    addMenuOrder: 10,
   },
 };
 
@@ -145,6 +173,11 @@ export type PanelConfiguration =
   | { kind: 'registers' }
   | { kind: 'memory'; startAddress?: number }
   | {
+      kind: 'debugger';
+      collapsedSections: string[];
+      radix: 'hex' | 'decimal';
+    }
+  | {
       kind: 'hardware-display';
       deviceId: string;
       displayBase: number;
@@ -155,7 +188,9 @@ export type PanelConfiguration =
       ledAddress: number;
       switchAddress: number;
       buttonAddress: number;
+      bitLabels: string[];
     }
+  | { kind: 'hardware-interrupts' }
   | {
       kind: 'graphics';
       scaleMode: 'fit' | 'one-to-one' | 'integer';
@@ -289,6 +324,7 @@ export function createPanelConfiguration(
       ledAddress: allocation.ledAddress,
       switchAddress: allocation.switchAddress,
       buttonAddress: allocation.buttonAddress,
+      bitLabels: createDigitalIoBitLabels(),
     };
   }
   if (kind === 'graphics') {
@@ -296,6 +332,9 @@ export function createPanelConfiguration(
   }
   if (kind === 'sound') {
     return { kind, showAssets: true, showVoices: true };
+  }
+  if (kind === 'debugger') {
+    return { kind, collapsedSections: [], radix: 'hex' };
   }
   return { kind } as PanelConfiguration;
 }

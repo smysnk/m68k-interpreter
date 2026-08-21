@@ -3,7 +3,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import { parseSourceIdeDirective, resolveSourceIdeLayout } from '@/config/sourceIdeDirective';
 import {
   replaceActiveLayout,
-  requestReset,
   restoreSourceIdeBaseline,
   setEditorCode,
   setEmulationConfig,
@@ -17,6 +16,7 @@ import {
   type SourceIdeBaseline,
 } from '@/store';
 import { getActiveFile } from '@/store/filesSlice';
+import { executionCoordinator } from '@/runtime/executionCoordinator';
 
 function restoreBaseline(dispatch: AppDispatch, baseline: SourceIdeBaseline): void {
   dispatch(
@@ -68,12 +68,12 @@ export function useSourceIdeDirectiveController(): void {
 
     if (parsed.status === 'none') {
       dispatch(sourceIdeCleared());
-      dispatch(requestReset());
+      executionCoordinator.execute('reset');
       return;
     }
     if (sourceIde.ignoredFileIds.includes(activeFile.id)) {
       dispatch(sourceIdeIgnored({ fileId: activeFile.id, raw: parsed.raw }));
-      dispatch(requestReset());
+      executionCoordinator.execute('reset');
       return;
     }
     if (parsed.status === 'invalid') {
@@ -84,7 +84,7 @@ export function useSourceIdeDirectiveController(): void {
           diagnostics: parsed.diagnostics,
         })
       );
-      dispatch(requestReset());
+      executionCoordinator.execute('reset');
       return;
     }
 
@@ -97,7 +97,7 @@ export function useSourceIdeDirectiveController(): void {
           diagnostics: resolved.diagnostics,
         })
       );
-      dispatch(requestReset());
+      executionCoordinator.execute('reset');
       return;
     }
 
@@ -121,8 +121,7 @@ export function useSourceIdeDirectiveController(): void {
     dispatch(setSpeedMultiplier(parsed.directive.speed ?? baseline.speedMultiplier));
     dispatch(replaceActiveLayout(resolved.layout));
     dispatch(setEditorCode(activeFile.content));
-    window.editorCode = activeFile.content;
-    dispatch(requestReset());
+    executionCoordinator.execute('reset');
   }, [
     activeFile,
     dispatch,

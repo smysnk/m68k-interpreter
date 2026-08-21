@@ -10,7 +10,11 @@ import { hardwareSurfaceStore } from '@/runtime/hardwareSurfaceStore';
 let runtime: Emulator;
 
 function renderPanel() {
-  return render(<Provider store={createIdeStore()}><HardwarePanelPreview /></Provider>);
+  return render(
+    <Provider store={createIdeStore()}>
+      <HardwarePanelPreview />
+    </Provider>
+  );
 }
 
 describe('HardwarePanelPreview', () => {
@@ -39,9 +43,18 @@ describe('HardwarePanelPreview', () => {
     renderPanel();
 
     expect(screen.getByText('Base · $00E00000')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Configure switch address' })).toHaveAttribute('data-address', '00E00010');
-    expect(screen.getByRole('button', { name: 'Configure led address' })).toHaveAttribute('data-address', '00E00010');
-    expect(screen.getByRole('button', { name: 'Configure button address' })).toHaveAttribute('data-address', '00E00012');
+    expect(screen.getByRole('button', { name: 'Configure switch address' })).toHaveAttribute(
+      'data-address',
+      '00E00010'
+    );
+    expect(screen.getByRole('button', { name: 'Configure led address' })).toHaveAttribute(
+      'data-address',
+      '00E00010'
+    );
+    expect(screen.getByRole('button', { name: 'Configure button address' })).toHaveAttribute(
+      'data-address',
+      '00E00012'
+    );
     expect(screen.getByRole('img', { name: 'LED output 0xA5' })).toBeInTheDocument();
 
     const matrix = screen.getByTestId('hardware-io-matrix');
@@ -59,7 +72,7 @@ describe('HardwarePanelPreview', () => {
     expect(screen.getByRole('img', { name: 'Display digit 1, pattern 0x7D' })).toBeInTheDocument();
   });
 
-  it('models active-low buttons, interrupt selection, and configuration', async () => {
+  it('models active-low buttons and configuration without embedded IRQ controls', async () => {
     renderPanel();
 
     const buttonRow = screen.getByTestId('hardware-matrix-button-row');
@@ -73,11 +86,10 @@ describe('HardwarePanelPreview', () => {
     fireEvent.pointerUp(pushButton);
     await waitFor(() => expect(buttonRow).toHaveAttribute('aria-label', 'Button input 0xFF'));
 
-    const interruptButton = screen.getByRole('button', { name: 'Request interrupt level 5' });
-    fireEvent.click(interruptButton);
-    expect(interruptButton).toHaveClass('active');
-
     expect(screen.getByTestId('hardware-address-configuration')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Request interrupt level 5' })
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reset simulator' })).not.toBeInTheDocument();
     expect(screen.queryByText('Hardware ready')).not.toBeInTheDocument();
   });

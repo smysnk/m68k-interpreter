@@ -3,8 +3,16 @@ export type FrameStopReason =
   | 'instruction_budget'
   | 'terminal_changed'
   | 'waiting_for_input'
+  | 'waiting-for-input'
   | 'halted'
-  | 'exception';
+  | 'exception'
+  | 'breakpoint'
+  | 'watchpoint'
+  | 'step-complete'
+  | 'run-to-cursor'
+  | 'interrupt'
+  | 'manual-pause'
+  | 'completed';
 
 export interface FrameExecutionOptions {
   frameBudgetMs?: number;
@@ -27,6 +35,7 @@ export interface FrameExecutionEmulator {
   isWaitingForInput(): boolean;
   isHalted(): boolean;
   getException(): string | null | undefined;
+  getDebugStop?(): { reason: string } | undefined;
   getRuntimeSyncVersions?(): {
     terminal: number;
     terminalGeometry: number;
@@ -84,6 +93,15 @@ export function runEmulationFrame(
   let instructionsExecuted = 0;
 
   while (instructionsExecuted < instructionBudget) {
+    const debugStop = emulator.getDebugStop?.();
+    if (debugStop) {
+      return {
+        instructionsExecuted,
+        frameDurationMs: now() - startedAt,
+        stopReason: debugStop.reason as FrameStopReason,
+        shouldContinue: false,
+      };
+    }
     if (emulator.getException()) {
       return {
         instructionsExecuted,
@@ -113,6 +131,16 @@ export function runEmulationFrame(
 
     const finished = emulator.emulationStep();
     instructionsExecuted += 1;
+
+    const stopAfterInstruction = emulator.getDebugStop?.();
+    if (stopAfterInstruction) {
+      return {
+        instructionsExecuted,
+        frameDurationMs: now() - startedAt,
+        stopReason: stopAfterInstruction.reason as FrameStopReason,
+        shouldContinue: false,
+      };
+    }
 
     if (emulator.getException()) {
       return {

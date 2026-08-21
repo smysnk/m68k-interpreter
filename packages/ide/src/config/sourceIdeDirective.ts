@@ -9,6 +9,7 @@ import {
 import { createPanelPreset } from '@/panels/panelPresets';
 import {
   PANEL_KINDS,
+  createDigitalIoBitLabels,
   getPanelDefaultTitle,
   type PanelKind,
   type PanelLayoutDocument,
@@ -281,6 +282,7 @@ export function resolveSourceIdeLayout(
               ledAddress: device.ledAddress,
               switchAddress: device.switchAddress,
               buttonAddress: device.buttonAddress,
+              bitLabels: createDigitalIoBitLabels(),
             },
     };
     layout.columns[targetColumnIndex]?.panelIds.push(id);

@@ -6,7 +6,10 @@ import Registers from '@/components/Registers';
 import Terminal from '@/components/Terminal';
 import GraphicsPanel from '@/components/GraphicsPanel';
 import SoundPanel from '@/components/SoundPanel';
+import DebuggerPanel from '@/components/DebuggerPanel';
+import CodeDebuggerHeaderAccessory from '@/components/code/CodeDebuggerHeaderAccessory';
 import DigitalIoPanel from '@/components/hardware/panels/DigitalIoPanel';
+import InterruptPanel from '@/components/hardware/panels/InterruptPanel';
 import SevenSegmentPanel from '@/components/hardware/panels/SevenSegmentPanel';
 import { SevenSegmentHeaderAccessory } from '@/components/hardware/panels/HardwarePanelHeaderAccessories';
 import {
@@ -60,6 +63,7 @@ export const PANEL_REGISTRY: Record<PanelKind, PanelRegistryEntry> = {
   },
   code: {
     ...metadata('code'),
+    HeaderAccessory: CodeDebuggerHeaderAccessory,
     render: () => <Editor />,
   },
   registers: {
@@ -77,6 +81,10 @@ export const PANEL_REGISTRY: Record<PanelKind, PanelRegistryEntry> = {
       />
     ),
   },
+  debugger: {
+    ...metadata('debugger'),
+    render: ({ instance }) => <DebuggerPanel instance={instance} />,
+  },
   'hardware-display': {
     ...metadata('hardware-display'),
     HeaderAccessory: SevenSegmentHeaderAccessory,
@@ -85,6 +93,10 @@ export const PANEL_REGISTRY: Record<PanelKind, PanelRegistryEntry> = {
   'hardware-digital-io': {
     ...metadata('hardware-digital-io'),
     render: ({ instance }) => <DigitalIoPanel instance={instance} />,
+  },
+  'hardware-interrupts': {
+    ...metadata('hardware-interrupts'),
+    render: () => <InterruptPanel />,
   },
   graphics: {
     ...metadata('graphics'),

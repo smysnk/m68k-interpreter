@@ -49,7 +49,7 @@ async function openHardwareLab(page: Page, compact = false): Promise<void> {
   }
   await expect(page.locator('[data-panel-kind="hardware-display"]')).toHaveCount(1);
   await expect(page.locator('[data-panel-kind="hardware-digital-io"]')).toHaveCount(1);
-  await expect(page.locator('[data-panel-kind="hardware-interrupts"]')).toHaveCount(0);
+  await expect(page.locator('[data-panel-kind="hardware-interrupts"]')).toHaveCount(1);
 }
 
 async function loadAndRun(page: Page, source: string, expectedSymbol = 'LOOP'): Promise<void> {
@@ -151,7 +151,7 @@ async function assertAlignedMatrix(panel: Locator): Promise<void> {
       '.hardware-io-switch-row .hardware-io-cell',
       '.hardware-io-led-row .hardware-io-cell',
       '.hardware-io-button-row .hardware-io-cell',
-      '.hardware-interrupt-grid-aligned > :not(.hardware-interrupt-row-label)',
+      '.hardware-io-label-row .hardware-io-bit-label-cell',
     ];
     return {
       rows: selectors.map((selector) =>
@@ -193,7 +193,7 @@ test.describe('live EASy68K hardware panels', () => {
     const displayPanels = page.locator('[data-panel-kind="hardware-display"]');
     const digitalPanels = page.locator('[data-panel-kind="hardware-digital-io"]');
     await addPanel(page, 'Seven-segment display');
-    await addPanel(page, 'LEDs / Switches / Buttons / IRQs');
+    await addPanel(page, 'LEDs / Switches / Buttons');
     await expect(displayPanels).toHaveCount(2);
     await expect(digitalPanels).toHaveCount(2);
 
@@ -201,6 +201,16 @@ test.describe('live EASy68K hardware panels', () => {
     await commitAddress(displayPanels.nth(1), 'Display base', '00E00020');
     await commitDigitalIoMapping(digitalPanels.nth(0), '00E00040');
     await commitDigitalIoMapping(digitalPanels.nth(1), '00E00050');
+
+    const firstLedAddress = digitalPanels
+      .nth(0)
+      .getByRole('button', { name: 'Configure led address' });
+    await digitalPanels.nth(0).getByRole('button', { name: 'Edit label for bit 7' }).click();
+    const bitSevenLabel = digitalPanels.nth(0).getByRole('textbox', { name: 'Label for bit 7' });
+    await bitSevenLabel.fill('Motor enable');
+    await bitSevenLabel.press('Enter');
+    await expect(digitalPanels.nth(0).getByText('Motor enable')).toBeVisible();
+    await expect(firstLedAddress).toHaveAttribute('data-address', '00E00040');
 
     await assertAlignedMatrix(digitalPanels.nth(0));
     await assertAlignedMatrix(digitalPanels.nth(1));
@@ -229,7 +239,7 @@ test.describe('live EASy68K hardware panels', () => {
     await deviceBButton.dispatchEvent('pointerup');
 
     await loadAndRun(page, INTERRUPT_SOURCE, 'IRQ7_HANDLER');
-    const interruptPanel = digitalPanels.nth(0).getByTestId('hardware-interrupt-requests');
+    const interruptPanel = page.locator('[data-panel-kind="hardware-interrupts"]');
     await interruptPanel.getByRole('button', { name: 'Request interrupt level 7' }).click();
     await expect(digitalPanels.nth(0).getByRole('img', { name: 'LED output 0x07' })).toBeVisible();
     await interruptPanel
@@ -283,6 +293,10 @@ test.describe('live EASy68K hardware panels', () => {
     await ignoreBootSourceConfiguration(page);
     await expect(page.locator('[data-panel-kind="hardware-display"]')).toHaveCount(2);
     await expect(page.locator('[data-panel-kind="hardware-digital-io"]')).toHaveCount(2);
+    await expect(page.locator('[data-panel-kind="hardware-interrupts"]')).toHaveCount(1);
+    await expect(
+      page.locator('[data-panel-kind="hardware-digital-io"]').nth(0).getByText('Motor enable')
+    ).toBeVisible();
     await expect
       .poll(() =>
         page
@@ -326,9 +340,7 @@ test.describe('live EASy68K hardware panels', () => {
     await openHardwareLab(page, true);
     await openViewMenu(page);
     await page.getByRole('menuitem', { name: /^add panel$/i }).click();
-    await page
-      .getByRole('menuitem', { name: /add leds \/ switches \/ buttons \/ irqs panel/i })
-      .click();
+    await page.getByRole('menuitem', { name: /add leds \/ switches \/ buttons panel/i }).click();
     const digitalPanel = page.locator('[data-panel-kind="hardware-digital-io"]');
     await expect(digitalPanel).toBeVisible();
     await assertAlignedMatrix(digitalPanel);

@@ -2,12 +2,12 @@ import { useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   requestFocusTerminal,
-  requestRun,
   revealPanelKind,
   type AppDispatch,
   type RootState,
 } from '@/store';
 import { getIdeBootConfig } from '@/config/ideBootConfig';
+import { executionCoordinator } from '@/runtime/executionCoordinator';
 
 function isJsdomEnvironment(): boolean {
   return typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
@@ -53,6 +53,6 @@ export function useBootProgramController() {
       dispatch(revealPanelKind('terminal'));
       dispatch(requestFocusTerminal());
     }
-    dispatch(requestRun());
+    executionCoordinator.execute('run');
   }, [activeFileId, autoPlay, dispatch, sourceIdeCurrent, terminalGeometryVersion]);
 }

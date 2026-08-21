@@ -12,6 +12,8 @@ import type {
   InterruptRequestResult,
   UndoCaptureMode,
   Easy68kSoundAsset,
+  DebuggerConfiguration,
+  DebugSnapshot,
 } from '@m68k/interpreter';
 import { validateEasy68kHardwareDevices } from '@m68k/interpreter';
 import type { WorkerExecutionConfig } from '@/runtime/worker/interpreterWorkerProtocol';
@@ -104,6 +106,7 @@ export class RuntimeCommandPort {
 
   run(config?: WorkerExecutionConfig): Promise<boolean> {
     return this.enqueue(async (runtime) => {
+      runtime.beginDebugContinue?.();
       if (!runtime.controller) {
         return false;
       }
@@ -114,6 +117,7 @@ export class RuntimeCommandPort {
 
   resume(config?: WorkerExecutionConfig): Promise<boolean> {
     return this.enqueue(async (runtime) => {
+      runtime.beginDebugContinue?.();
       if (!runtime.controller) {
         return false;
       }
@@ -124,6 +128,7 @@ export class RuntimeCommandPort {
 
   pause(): Promise<boolean> {
     return this.enqueue(async (runtime) => {
+      runtime.pauseDebugger?.();
       if (!runtime.controller) {
         return false;
       }
@@ -396,9 +401,63 @@ export class RuntimeCommandPort {
       if (runtime.controller) {
         await runtime.controller.requestStep();
       } else {
+        runtime.beginDebugStepInto?.();
         runtime.emulationStep();
       }
     });
+  }
+
+  configureDebugger(configuration: DebuggerConfiguration): Promise<void> {
+    return this.enqueue(async (runtime) => {
+      if (runtime.controller) await runtime.controller.requestConfigureDebugger(configuration);
+      else runtime.configureDebugger?.(configuration);
+    });
+  }
+
+  getDebuggerSnapshot(): DebugSnapshot | undefined {
+    return this.sessions.getSession()?.getDebugSnapshot?.();
+  }
+
+  stepOver(): Promise<void> {
+    return this.enqueue(async (runtime) => {
+      if (runtime.controller) {
+        await runtime.controller.requestStepOver();
+        return;
+      }
+      const continuous = runtime.beginDebugStepOver?.() ?? false;
+      if (!continuous) runtime.emulationStep();
+      else await this.runLocalUntilDebugStop(runtime);
+    });
+  }
+
+  stepOut(): Promise<boolean> {
+    return this.enqueue(async (runtime) => {
+      if (runtime.controller) return await runtime.controller.requestStepOut();
+      if (!runtime.beginDebugStepOut?.()) return false;
+      await this.runLocalUntilDebugStop(runtime);
+      return true;
+    });
+  }
+
+  runToAddress(address: number, config?: WorkerExecutionConfig): Promise<void> {
+    return this.enqueue(async (runtime) => {
+      if (runtime.controller) {
+        await runtime.controller.requestRunToAddress(address, config);
+        return;
+      }
+      runtime.beginDebugRunTo?.(address);
+      await this.runLocalUntilDebugStop(runtime);
+    });
+  }
+
+  private async runLocalUntilDebugStop(runtime: IdeRuntimeSession): Promise<void> {
+    const maximumInstructions = 1_000_000;
+    for (let index = 0; index < maximumInstructions; index += 1) {
+      const finished = runtime.emulationStep();
+      if (runtime.getDebugStop?.() || finished || runtime.isHalted() || runtime.getException()) return;
+      if (index > 0 && index % 2_000 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+    runtime.pauseDebugger?.();
   }
 
   undo(): Promise<void> {

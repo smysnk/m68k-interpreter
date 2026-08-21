@@ -10,6 +10,7 @@ import {
   MAX_PANEL_INSTANCES,
   MAX_SAVED_PANEL_VIEWS,
   MIN_PANEL_COLUMNS,
+  DIGITAL_IO_BIT_LABEL_MAX_LENGTH,
   createPanelConfiguration,
   getPanelDefaultTitle,
   getPanelHardwareDeviceConfigs,
@@ -126,7 +127,10 @@ const panelLayoutSlice = createSlice({
           source.config.kind !== 'hardware-display' &&
           source.config.kind !== 'hardware-digital-io'
         ) {
-          state.activeLayout.instances[id]!.config = { ...source.config };
+          state.activeLayout.instances[id]!.config =
+            source.config.kind === 'debugger'
+              ? { ...source.config, collapsedSections: [...source.config.collapsedSections] }
+              : { ...source.config };
         }
         markDirty(state);
       }
@@ -163,6 +167,18 @@ const panelLayoutSlice = createSlice({
       }
       markDirty(state);
     },
+    commitDigitalIoBitLabel(
+      state,
+      action: PayloadAction<{ panelId: string; bit: number; label: string }>
+    ) {
+      const panel = state.activeLayout.instances[action.payload.panelId];
+      const bit = Math.trunc(action.payload.bit);
+      if (panel?.config.kind !== 'hardware-digital-io' || bit < 0 || bit > 7) return;
+      panel.config.bitLabels[bit] = action.payload.label
+        .trim()
+        .slice(0, DIGITAL_IO_BIT_LABEL_MAX_LENGTH);
+      markDirty(state);
+    },
     commitMultimediaPanelConfiguration(
       state,
       action: PayloadAction<{
@@ -175,6 +191,24 @@ const panelLayoutSlice = createSlice({
       const panel = state.activeLayout.instances[action.payload.panelId];
       if (!panel || panel.kind !== action.payload.config.kind) return;
       panel.config = { ...action.payload.config };
+      markDirty(state);
+    },
+    commitDebuggerPanelConfiguration(
+      state,
+      action: PayloadAction<{
+        panelId: string;
+        config: Extract<
+          PanelLayoutDocument['instances'][string]['config'],
+          { kind: 'debugger' }
+        >;
+      }>
+    ) {
+      const panel = state.activeLayout.instances[action.payload.panelId];
+      if (panel?.kind !== 'debugger') return;
+      panel.config = {
+        ...action.payload.config,
+        collapsedSections: [...action.payload.config.collapsedSections],
+      };
       markDirty(state);
     },
     closePanel(state, action: PayloadAction<PanelInstanceId>) {
@@ -373,7 +407,9 @@ export const {
   togglePanelMinimized,
   focusPanel,
   commitHardwarePanelConfiguration,
+  commitDigitalIoBitLabel,
   commitMultimediaPanelConfiguration,
+  commitDebuggerPanelConfiguration,
   setTerminalOwner,
   revealPanelKind,
   setColumnCount,

@@ -13,6 +13,7 @@ import hardwareSevenSegmentSource from '@/fixtures/hardware-seven-segment.asm';
 import hardwareInterruptsSource from '@/fixtures/hardware-interrupts.asm';
 import hardwareMultiDeviceSource from '@/fixtures/hardware-multi-device.asm';
 import graphicsSoundDemoSource from '@/fixtures/graphics-sound-demo.asm';
+import debuggerLoopSource from '@/fixtures/debugger-loop.asm';
 
 interface BundledExampleFile {
   id: string;
@@ -23,6 +24,13 @@ interface BundledExampleFile {
 }
 
 export const bundledExampleFiles: BundledExampleFile[] = [
+  {
+    id: 'example:debugger-loop.asm',
+    name: 'debugger-loop.asm',
+    path: 'fixtures/debugger-loop.asm',
+    kind: 'example',
+    content: debuggerLoopSource,
+  },
   {
     id: 'example:graphics-sound-demo.asm',
     name: 'graphics-sound-demo.asm',

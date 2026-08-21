@@ -38,6 +38,18 @@
       ]
     },
     {
+      "id": "debugger",
+      "title": "Breakpoints and Step Debugging",
+      "items": [
+        "Click a Code line number or the dedicated debugger gutter, or press F9, to toggle a file-scoped source breakpoint. Right-click either gutter for breakpoint actions. Grey markers are unbound; yellow markers have a condition, hit count, or log message.",
+        "The global toolbar provides F5 Continue, F6 Pause, Shift+F5 Stop, and Restart. The Code panel header provides F10 Step Over, F11 Step Into, Shift+F11 Step Out, Alt+F11 Step Back, and Ctrl or Command plus F10 Run to Cursor; narrow panels keep secondary actions in an overflow menu.",
+        "The Debugger panel manages source, address, and label breakpoints, conditions, watches, write data breakpoints, call frames, and structured stop details.",
+        "Execution never creates, reveals, focuses, minimizes, or reorders a panel. Add the Debugger panel or apply the Debug layout explicitly.",
+        "Source edits preserve breakpoint definitions but can leave them unbound until a successful reassembly resolves the new instruction addresses.",
+        "Step Back restores bounded logical CPU, memory, device, graphics, sound, and diagnostic history. Audio already heard cannot be reversed."
+      ]
+    },
+    {
       "id": "limitations",
       "title": "Known Limitations",
       "items": [

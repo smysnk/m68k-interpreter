@@ -20,11 +20,16 @@ export const selectRegisterFlagsHeadingModel = createSelector(
 );
 
 export const selectRegisterGroupsModel = createSelector(
-  [(state: RootState) => state.emulator.registers, (state: RootState) => state.settings.cpuModel],
-  (registers, cpuModel) =>
+  [
+    (state: RootState) => state.emulator.registers,
+    (state: RootState) => state.settings.cpuModel,
+    (state: RootState) => state.debugger.previousStopRegisters,
+    (state: RootState) => state.debugger.lastStopRegisters,
+  ],
+  (registers, cpuModel, previousStopRegisters, lastStopRegisters) =>
     REGISTER_GROUPS.map((group) => {
       const descriptors = getRegisterDescriptorsByGroup(group.id).filter(
-        (descriptor) => descriptor.minimumCpuModel === undefined || cpuModel === 'm68010'
+        (descriptor) => descriptor.minimumCpuModel === undefined || cpuModel !== 'm68000'
       );
 
       return {
@@ -33,6 +38,14 @@ export const selectRegisterGroupsModel = createSelector(
         values: Object.fromEntries(
           descriptors.map((descriptor) => [descriptor.key, registers[descriptor.key] ?? 0])
         ) as Record<string, number>,
+        changed: Object.fromEntries(
+          descriptors.map((descriptor) => [
+            descriptor.key,
+            previousStopRegisters !== undefined &&
+              lastStopRegisters !== undefined &&
+              previousStopRegisters[descriptor.key] !== lastStopRegisters[descriptor.key],
+          ])
+        ) as Record<string, boolean>,
       };
     })
 );

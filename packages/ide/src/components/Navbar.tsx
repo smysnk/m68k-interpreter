@@ -7,19 +7,14 @@ import {
   faCheck,
   faGaugeHigh,
   faMoon,
+  faPause,
   faPlay,
   faRedo,
   faStop,
   faSun,
-  faUndo,
 } from '@fortawesome/free-solid-svg-icons';
 import {
   closeAppMenu,
-  requestFocusTerminal,
-  requestReset,
-  requestRun,
-  requestStep,
-  requestUndo,
   setLineNumbers,
   setSpeedMultiplier,
   toggleEditorTheme,
@@ -29,13 +24,12 @@ import {
   type AppDispatch,
   type RootState,
 } from '@/store';
-import {
-  selectNavbarMenuState,
-  selectNavbarPresentationModel,
-} from '@/store/navbarSelectors';
+import { selectNavbarMenuState, selectNavbarPresentationModel } from '@/store/navbarSelectors';
 import { useCompactShell } from '@/hooks/useCompactShell';
 import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
 import NavbarViewMenu from './NavbarViewMenu';
+import { executionCoordinator } from '@/runtime/executionCoordinator';
+import { installExecutionKeyboardShortcuts } from '@/runtime/executionKeyboardCommands';
 
 interface NavbarProps {
   fileExplorerOpen: boolean;
@@ -45,12 +39,12 @@ interface NavbarProps {
 const Navbar: React.FC<NavbarProps> = ({ fileExplorerOpen, onToggleFileExplorer }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { menuOpen } = useSelector((state: RootState) => selectNavbarMenuState(state));
-  const {
-    activeWorkspaceTab,
-    editorTheme,
-    lineNumbers,
-    speedMultiplier,
-  } = useSelector((state: RootState) => selectNavbarPresentationModel(state));
+  const { activeWorkspaceTab, editorTheme, lineNumbers, speedMultiplier } = useSelector(
+    (state: RootState) => selectNavbarPresentationModel(state)
+  );
+  const executionState = useSelector((state: RootState) => state.emulator.executionState);
+  const sourceStale = useSelector((state: RootState) => state.debugger.sourceStale);
+  const shouldStartFresh = !executionState.started || sourceStale;
   const isCompactShell = useCompactShell();
   const isFocusedMobileTerminal = isCompactShell && activeWorkspaceTab === 'terminal';
   const showRuntimeControls = !isCompactShell || activeWorkspaceTab !== 'terminal';
@@ -69,6 +63,10 @@ const Navbar: React.FC<NavbarProps> = ({ fileExplorerOpen, onToggleFileExplorer 
     maxWidth: 280,
     submenuDirection: 'left' as 'left' | 'right',
   });
+  useEffect(() => {
+    return installExecutionKeyboardShortcuts();
+  }, []);
+
   useEffect(() => {
     if (!menuOpen) {
       return;
@@ -142,25 +140,15 @@ const Navbar: React.FC<NavbarProps> = ({ fileExplorerOpen, onToggleFileExplorer 
   };
 
   const handleRun = (): void => {
-    dispatch(requestRun());
-    dispatch(requestFocusTerminal());
+    executionCoordinator.execute(shouldStartFresh ? 'run' : 'resume');
   };
 
   const handleWorkspaceSelection = (tab: (typeof workspaceTabs)[number]['id']): void => {
     dispatch(revealPanelKind(tab === 'hardware' ? 'hardware-display' : tab));
   };
 
-  const handleStep = (): void => {
-    dispatch(requestStep());
-    dispatch(requestFocusTerminal());
-  };
-
-  const handleUndo = (): void => {
-    dispatch(requestUndo());
-  };
-
   const handleReset = (): void => {
-    dispatch(requestReset());
+    executionCoordinator.execute('stop');
   };
 
   return (
@@ -229,40 +217,41 @@ const Navbar: React.FC<NavbarProps> = ({ fileExplorerOpen, onToggleFileExplorer 
           <div className="navbar-runtime-controls" aria-label="Execution controls">
             <div className="navbar-execution-buttons">
               <button
-                aria-label="Run program"
+                aria-label={shouldStartFresh ? 'Start program' : 'Continue program'}
                 className="btn-toolbar btn-toolbar-icon btn-toolbar-accent"
                 onClick={handleRun}
-                title="Run program"
+                title={`${shouldStartFresh ? 'Start' : 'Continue'} (F5)`}
                 type="button"
               >
                 <FontAwesomeIcon icon={faPlay} size="sm" />
               </button>
               <button
-                aria-label="Reset"
+                aria-label="Pause program"
+                className="btn-toolbar btn-toolbar-icon"
+                disabled={!executionState.started || executionState.stopped || executionState.ended}
+                onClick={() => executionCoordinator.execute('pause')}
+                title="Pause (F6)"
+                type="button"
+              >
+                <FontAwesomeIcon icon={faPause} size="sm" />
+              </button>
+              <button
+                aria-label="Stop debugging"
                 className="btn-toolbar btn-toolbar-icon"
                 onClick={handleReset}
-                title="Reset"
+                title="Stop (Shift+F5)"
                 type="button"
               >
                 <FontAwesomeIcon icon={faStop} size="sm" />
               </button>
               <button
-                aria-label="Step"
+                aria-label="Restart program"
                 className="btn-toolbar btn-toolbar-icon"
-                onClick={handleStep}
-                title="Step"
+                onClick={() => executionCoordinator.execute('restart')}
+                title="Restart"
                 type="button"
               >
                 <FontAwesomeIcon icon={faRedo} size="sm" />
-              </button>
-              <button
-                aria-label="Undo"
-                className="btn-toolbar btn-toolbar-icon"
-                onClick={handleUndo}
-                title="Undo"
-                type="button"
-              >
-                <FontAwesomeIcon icon={faUndo} size="sm" />
               </button>
             </div>
 
@@ -335,7 +324,6 @@ const Navbar: React.FC<NavbarProps> = ({ fileExplorerOpen, onToggleFileExplorer 
                   {lineNumbers ? <FontAwesomeIcon icon={faCheck} size="sm" /> : null}
                 </span>
               </button>
-
             </div>,
             document.body
           )

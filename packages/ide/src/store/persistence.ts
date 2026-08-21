@@ -7,6 +7,7 @@ import {
   DEFAULT_EASY68K_HARDWARE_CONFIG,
   validateEasy68kHardwareConfig,
   type CpuProfile,
+  type DebuggerConfiguration,
 } from '@m68k/interpreter';
 
 export const IDE_PERSISTENCE_KEY = 'm68k.ide.preferences.v3';
@@ -35,6 +36,7 @@ export interface PersistedIdeState {
     'config' | 'automaticInterruptLevels' | 'automaticInterruptIntervalMs'
   >;
   panelLayout?: PanelLayoutState;
+  debugger?: DebuggerConfiguration;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

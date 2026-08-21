@@ -97,6 +97,32 @@ static unsigned int parse_env_u32(const char *name) {
   return value == NULL ? 0u : parse_u32(value);
 }
 
+static void print_state(int cycles) {
+  unsigned int index;
+  printf("{\"d\":[");
+  for (index = 0; index < 8; index += 1) {
+    if (index != 0) printf(",");
+    printf("%u", m68k_get_reg(NULL, (m68k_register_t)(M68K_REG_D0 + index)));
+  }
+  printf("],\"a\":[");
+  for (index = 0; index < 8; index += 1) {
+    if (index != 0) printf(",");
+    printf("%u", m68k_get_reg(NULL, (m68k_register_t)(M68K_REG_A0 + index)));
+  }
+  printf("],\"pc\":%u,\"sr\":%u,\"vbr\":%u,\"sfc\":%u,\"dfc\":%u,\"cycles\":%d,\"writes\":[",
+         m68k_get_reg(NULL, M68K_REG_PC),
+         m68k_get_reg(NULL, M68K_REG_SR),
+         m68k_get_reg(NULL, M68K_REG_VBR),
+         m68k_get_reg(NULL, M68K_REG_SFC),
+         m68k_get_reg(NULL, M68K_REG_DFC),
+         cycles);
+  for (index = 0; index < write_count; index += 1) {
+    if (index != 0) printf(",");
+    printf("[%u,%u,%u]", writes[index].address, writes[index].size, writes[index].value);
+  }
+  printf("]}");
+}
+
 static void load_hex(unsigned int address, const char *hex) {
   size_t length = strlen(hex);
   size_t index;
@@ -149,30 +175,27 @@ int main(int argc, char **argv) {
   m68k_set_reg(M68K_REG_DFC, parse_env_u32("M68K_DFC"));
   write_count = 0;
 
-  cycles = m68k_execute(1);
+  if (getenv("M68K_TRACE_STEPS") != NULL) {
+    unsigned int steps = parse_env_u32("M68K_TRACE_STEPS");
+    printf("{\"version\":1,\"rows\":[");
+    for (index = 0; index < steps; index += 1) {
+      unsigned int pc_before = m68k_get_reg(NULL, M68K_REG_PC);
+      unsigned int word = m68k_read_memory_16(pc_before);
+      write_count = 0;
+      cycles = m68k_execute(1);
+      if (index != 0) printf(",");
+      printf("{\"sequence\":%u,\"pcBefore\":%u,\"instructionBytes\":[%u,%u],\"state\":",
+             index, pc_before, (word >> 8) & 0xffu, word & 0xffu);
+      print_state(cycles);
+      printf("}");
+    }
+    printf("]}\n");
+    return 0;
+  }
 
-  printf("{\"d\":[");
-  for (index = 0; index < 8; index += 1) {
-    if (index != 0) printf(",");
-    printf("%u", m68k_get_reg(NULL, (m68k_register_t)(M68K_REG_D0 + index)));
-  }
-  printf("],\"a\":[");
-  for (index = 0; index < 8; index += 1) {
-    if (index != 0) printf(",");
-    printf("%u", m68k_get_reg(NULL, (m68k_register_t)(M68K_REG_A0 + index)));
-  }
-  printf("],\"pc\":%u,\"sr\":%u,\"vbr\":%u,\"sfc\":%u,\"dfc\":%u,\"cycles\":%d,\"writes\":[",
-         m68k_get_reg(NULL, M68K_REG_PC),
-         m68k_get_reg(NULL, M68K_REG_SR),
-         m68k_get_reg(NULL, M68K_REG_VBR),
-         m68k_get_reg(NULL, M68K_REG_SFC),
-         m68k_get_reg(NULL, M68K_REG_DFC),
-         cycles);
-  for (index = 0; index < write_count; index += 1) {
-    if (index != 0) printf(",");
-    printf("[%u,%u,%u]", writes[index].address, writes[index].size, writes[index].value);
-  }
-  printf("]}\n");
+  cycles = m68k_execute(1);
+  print_state(cycles);
+  printf("\n");
 
   return 0;
 }

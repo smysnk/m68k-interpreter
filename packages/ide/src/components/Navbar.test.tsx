@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import Navbar from './Navbar';
-import { createIdeStore } from '@/store';
+import { createIdeStore, setEditorCode, setExecutionState } from '@/store';
 import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
+import { executionCoordinator } from '@/runtime/executionCoordinator';
 
 function setViewportWidth(width: number): void {
   Object.defineProperty(window, 'innerWidth', {
@@ -27,6 +28,7 @@ describe('Navbar', () => {
   });
 
   it('renders shell controls and drives the interface through Redux', () => {
+    const executionSpy = vi.spyOn(executionCoordinator, 'execute');
     const store = createIdeStore();
     const onToggleFileExplorer = vi.fn();
 
@@ -51,10 +53,14 @@ describe('Navbar', () => {
     expect(screen.getByLabelText('Speed (x)')).toHaveValue(1);
 
     fireEvent.change(screen.getByLabelText('Speed (x)'), { target: { value: '2.5' } });
-    fireEvent.click(screen.getByTitle(/run program/i));
-    fireEvent.click(screen.getByTitle(/reset/i));
-    fireEvent.click(screen.getByTitle(/step/i));
-    fireEvent.click(screen.getByTitle(/undo/i));
+    fireEvent.click(
+      screen
+        .getAllByRole('button')
+        .find((button) => button.getAttribute('aria-label') === 'Start program')!
+    );
+    fireEvent.click(screen.getByRole('button', { name: /stop debugging/i }));
+    expect(screen.queryByRole('button', { name: /step into/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /step backward/i })).not.toBeInTheDocument();
     const initialTheme = store.getState().settings.editorTheme;
     const themeToggle = screen.getByTestId('navbar-theme-toggle');
     expect(themeToggle.querySelector('svg')).toHaveAttribute(
@@ -95,13 +101,23 @@ describe('Navbar', () => {
     expect(
       screen.queryByRole('menuitem', { name: /compatibility notes/i })
     ).not.toBeInTheDocument();
-    expect(store.getState().emulator.runtimeIntents).toMatchObject({
-      run: 1,
-      step: 1,
-      undo: 1,
-      reset: 1,
-      focusTerminal: 2,
+    expect(executionSpy.mock.calls.map(([command]) => command)).toEqual(['run', 'stop']);
+    expect(store.getState().emulator.runtimeIntents).toEqual({ focusTerminal: 0 });
+  });
+
+  it('starts a fresh runtime when the editor source changed after execution began', () => {
+    const executionSpy = vi.spyOn(executionCoordinator, 'execute');
+    const store = createIdeStore();
+    store.dispatch(setExecutionState({ started: true, ended: false, stopped: true }));
+    store.dispatch(setEditorCode('START\n  NOP\n  END START'));
+
+    renderWithIdeProviders(<Navbar fileExplorerOpen={false} onToggleFileExplorer={() => {}} />, {
+      store,
     });
+
+    expect(store.getState().debugger.sourceStale).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Start program' }));
+    expect(executionSpy).toHaveBeenCalledWith('run');
   });
 
   it('changes columns and adds panels from the View menu', () => {
@@ -173,7 +189,7 @@ describe('Navbar', () => {
     expect(screen.getByRole('tab', { name: /hardware/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /open app menu/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Speed (x)')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Run program')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Start program')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /code/i }));
 
@@ -184,7 +200,7 @@ describe('Navbar', () => {
     ).toBe('code');
     expect(screen.getByRole('button', { name: /open app menu/i })).toBeInTheDocument();
     expect(screen.getByLabelText('Speed (x)')).toBeInTheDocument();
-    expect(screen.getByLabelText('Run program')).toBeInTheDocument();
+    expect(screen.getByLabelText('Start program')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /open file explorer/i })).toHaveTextContent('68');
   });
 });

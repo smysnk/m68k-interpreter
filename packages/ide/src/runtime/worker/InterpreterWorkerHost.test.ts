@@ -17,6 +17,7 @@ function loadProgramCommand(
     type: 'loadProgram',
     request: {
       source,
+      debugFileId: 'worker-test.asm',
       emulation: { cpuModel: 'm68000', machineProfile: 'easy68k' },
       terminal: { columns, rows },
       hardwareDevices: [
@@ -103,6 +104,13 @@ const LOOPING_NO_OUTPUT_SOURCE = `START
   BRA START
   END START`;
 
+const DEBUG_LOOP_SOURCE = `START
+  MOVEQ #0,D0
+LOOP
+  ADDQ.L #1,D0
+  BRA LOOP
+  END START`;
+
 const WAIT_FOR_INPUT_SOURCE = `RESULT DC.B 0
 START
   BSR _SGETCH
@@ -138,6 +146,50 @@ describe('InterpreterWorkerHost', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('publishes structured breakpoint and step stops with worker parity', async () => {
+    const events: InterpreterWorkerEvent[] = [];
+    const host = new InterpreterWorkerHost((event) => events.push(event));
+    await host.handleCommand(loadProgramCommand(1, DEBUG_LOOP_SOURCE));
+    await host.handleCommand({
+      id: 2,
+      type: 'configureDebugger',
+      configuration: {
+        breakpoints: [
+          {
+            id: 'loop-breakpoint',
+            enabled: true,
+            kind: 'source',
+            fileId: 'worker-test.asm',
+            line: 4,
+          },
+        ],
+      },
+    });
+    await host.handleCommand({
+      id: 3,
+      type: 'run',
+      config: { delayMs: 0, speedMultiplier: 1, frameBudgetMs: 5 },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    const breakpointStop = [...events]
+      .reverse()
+      .find((event) => event.type === 'stopped' && event.stop?.reason === 'breakpoint');
+    expect(breakpointStop).toMatchObject({
+      type: 'stopped',
+      reason: 'breakpoint',
+      stop: { reason: 'breakpoint', breakpointId: 'loop-breakpoint', source: { line: 4 } },
+    });
+    const breakpointPc = breakpointStop?.type === 'stopped' ? breakpointStop.stop?.pc : undefined;
+
+    await host.handleCommand({ id: 4, type: 'step' });
+    const stepStop = [...events]
+      .reverse()
+      .find((event) => event.type === 'stopped' && event.stop?.reason === 'step-complete');
+    expect(stepStop).toMatchObject({ type: 'stopped', stop: { reason: 'step-complete' } });
+    expect(stepStop?.type === 'stopped' ? stepStop.stop?.pc : undefined).not.toBe(breakpointPc);
   });
 
   it('publishes compact hardware-only frames for panel input and configuration commands', async () => {
@@ -324,19 +376,20 @@ describe('InterpreterWorkerHost', () => {
     const snapshot = getLastFrameSnapshot(events);
     const stepReply = events.at(-1);
 
-    expect(stepReply).toEqual({
+    expect(stepReply).toMatchObject({
       type: 'reply',
       id: 6,
       ok: true,
       payload: {
         halted: false,
-        waitingForInput: true,
+      waitingForInput: true,
+      debugStop: { reason: 'waiting-for-input' },
         exception: null,
       },
     });
     expect(snapshot.waitingForInput).toBe(true);
-    expect(snapshot.runtimeMetrics?.lastStopReason).toBe('waiting_for_input');
-    expect(getStoppedReasons(events)).toContain('waiting_for_input');
+    expect(snapshot.runtimeMetrics?.lastStopReason).toBe('waiting-for-input');
+    expect(getStoppedReasons(events)).toContain('waiting-for-input');
   });
 
   it('runs frames inside the worker until the program halts', async () => {
@@ -479,8 +532,8 @@ describe('InterpreterWorkerHost', () => {
 
     const snapshot = getLastFrameSnapshot(events);
     expect(snapshot.waitingForInput).toBe(true);
-    expect(snapshot.runtimeMetrics?.lastStopReason).toBe('waiting_for_input');
-    expect(getStoppedReasons(events)).toContain('waiting_for_input');
+    expect(snapshot.runtimeMetrics?.lastStopReason).toBe('waiting-for-input');
+    expect(getStoppedReasons(events)).toContain('waiting-for-input');
   });
 
   it('propagates runtime exceptions through the committed worker frame', async () => {

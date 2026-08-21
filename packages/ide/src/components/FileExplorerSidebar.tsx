@@ -66,8 +66,6 @@ const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({ open, onClose
     dispatch(setActiveFile(file.id));
     dispatch(setEditorCode(file.content));
     dispatch(revealPanelKind('code'));
-
-    window.editorCode = file.content;
   };
 
   return (

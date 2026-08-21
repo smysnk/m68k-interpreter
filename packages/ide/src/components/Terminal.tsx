@@ -35,11 +35,10 @@ import { useCompactShell } from '@/hooks/useCompactShell';
 import type { IdeRuntimeSession } from '@/runtime/ideRuntimeSession';
 import { useRuntimeSession } from '@/runtime/useRuntimeSession';
 import { runtimeCommandPort } from '@/runtime/runtimeCommandPort';
+import { executionCoordinator } from '@/runtime/executionCoordinator';
 import { NIBBLES_FILE_ID, selectActiveFileId } from '@/store/filesSlice';
 import {
   ideStore,
-  requestResume,
-  requestPulseResume,
   setTerminalState as setTerminalStateAction,
   type AppDispatch,
   type RootState,
@@ -353,7 +352,7 @@ const Terminal: React.FC<TerminalProps> = ({
       executionState,
       event,
       (resumeMode) => {
-        dispatch(resumeMode === 'resume' ? requestResume() : requestPulseResume());
+        executionCoordinator.execute(resumeMode === 'resume' ? 'resume' : 'pulseResume');
       },
       () => event.preventDefault()
     );
@@ -402,7 +401,7 @@ const Terminal: React.FC<TerminalProps> = ({
         executionState,
         event,
         (resumeMode) => {
-          dispatch(resumeMode === 'resume' ? requestResume() : requestPulseResume());
+          executionCoordinator.execute(resumeMode === 'resume' ? 'resume' : 'pulseResume');
         },
         () => event.preventDefault()
       );
@@ -454,10 +453,8 @@ const Terminal: React.FC<TerminalProps> = ({
         recordInputProgressRequest({ startedAtMs: inputStartedAtMs });
 
         if (shouldRequestVisualResume(emulatorInstance, executionState)) {
-          dispatch(
-            shouldRequestFullResume(emulatorInstance, executionState)
-              ? requestResume()
-              : requestPulseResume()
+          executionCoordinator.execute(
+            shouldRequestFullResume(emulatorInstance, executionState) ? 'resume' : 'pulseResume'
           );
         }
       } catch {
@@ -653,10 +650,8 @@ const Terminal: React.FC<TerminalProps> = ({
         }
 
         if (shouldRequestVisualResume(emulatorInstance, executionState)) {
-          dispatch(
-            shouldRequestFullResume(emulatorInstance, executionState)
-              ? requestResume()
-              : requestPulseResume()
+          executionCoordinator.execute(
+            shouldRequestFullResume(emulatorInstance, executionState) ? 'resume' : 'pulseResume'
           );
         }
       }

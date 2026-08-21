@@ -63,7 +63,6 @@ describe('App', () => {
     ideStore.dispatch(resetSourceIdeState());
     ideStore.dispatch(resetSettingsState());
     ideStore.dispatch(resetToPreset('classic'));
-    window.editorCode = '';
     window.emulatorInstance = null;
   });
 
@@ -88,7 +87,9 @@ describe('App', () => {
 
     await waitFor(() => {
       expect(store.getState().emulator.editorCode).toBe(nibblesSource);
-      expect(window.editorCode).toContain('END NIBBLES');
+      const state = store.getState();
+      expect(state.files.items.find((item) => item.id === state.files.activeFileId)?.content)
+        .toContain('END NIBBLES');
     });
 
     expect(closeSidebar).toHaveBeenCalledTimes(2);
@@ -184,7 +185,7 @@ describe('App', () => {
       const layout = ideStore.getState().panelLayout.activeLayout;
       expect(layout.instances[layout.focusedPanelId ?? '']?.kind).toBe('terminal');
     });
-    expect(screen.getByText(/source config · terminal-focus/i)).toBeInTheDocument();
+    expect(screen.queryByText(/source config/i)).not.toBeInTheDocument();
   });
 
   it('adds registers, memory, and hardware as independent panel instances', () => {

@@ -118,6 +118,7 @@ const Registers: React.FC<{ instanceId?: string }> = ({ instanceId }) => {
                   ? groupDescriptors.map((descriptor) => (
                       <RegisterCard
                         defaultCompact
+                        changed={group.changed[descriptor.key]}
                         descriptor={descriptor}
                         key={descriptor.key}
                         onCommit={handleRegisterCommit}

@@ -45,7 +45,7 @@ export async function ignoreBootSourceConfiguration(page: Page): Promise<void> {
   }
 }
 
-export async function openBaselineIde(page: Page, url = '/'): Promise<void> {
+export async function openBaselineIde(page: Page, url = '/?ide_perf=1'): Promise<void> {
   await page.goto(url);
   await ignoreBootSourceConfiguration(page);
 }

@@ -18,6 +18,7 @@ import {
 } from '@/store';
 import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
+import { executionCoordinator } from '@/runtime/executionCoordinator';
 
 function setViewportWidth(width: number): void {
   Object.defineProperty(window, 'innerWidth', {
@@ -564,6 +565,7 @@ describe('Terminal', () => {
   });
 
   it('requests a full resume after a successful worker touch dispatch from a waiting state', async () => {
+    const executionSpy = vi.spyOn(executionCoordinator, 'execute');
     const frameBuffer = createTerminalFrameBuffer(10, 5);
     const terminalMeta = {
       columns: 10,
@@ -665,7 +667,7 @@ describe('Terminal', () => {
       expect(requestDispatchTouchPacket).toHaveBeenCalledTimes(1);
     });
 
-    expect(ideStore.getState().emulator.runtimeIntents.resume).toBeGreaterThan(0);
+    expect(executionSpy).toHaveBeenCalledWith('resume');
   });
 
   it('treats a long press as a single touch until the pointer is released', async () => {

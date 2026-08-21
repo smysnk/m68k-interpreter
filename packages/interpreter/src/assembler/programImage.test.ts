@@ -17,9 +17,9 @@ describe('ProgramImage and initial MC68000 encoder', () => {
     expect(Array.from(image.bytes)).toEqual([0x4e, 0x71, 0x74, 0xff, 0x4a, 0xfc]);
     expect(image.entryPoint).toBe(0x1000);
     expect(image.sourceMap).toEqual([
-      { address: 0x1000, length: 2, line: 10 },
-      { address: 0x1002, length: 2, line: 11 },
-      { address: 0x1004, length: 2, line: 12 },
+      { address: 0x1000, length: 2, line: 10, kind: 'instruction' },
+      { address: 0x1002, length: 2, line: 11, kind: 'instruction' },
+      { address: 0x1004, length: 2, line: 12, kind: 'instruction' },
     ]);
     expect(findProgramSource(image, 0x1003)?.line).toBe(11);
   });

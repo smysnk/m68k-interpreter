@@ -16,6 +16,20 @@ export interface OracleStepResult extends OracleCpuState {
   writes: Array<[address: number, size: number, value: number]>;
 }
 
+export interface NormalizedOracleTraceRow {
+  sequence: number;
+  pcBefore: number;
+  instructionBytes: number[];
+  state: OracleStepResult;
+}
+
+export interface NormalizedOracleTrace {
+  version: 1;
+  rows: NormalizedOracleTraceRow[];
+}
+
+export type OracleEngine = 'musashi' | 'moira';
+
 export type OracleCpuModel = 'm68000' | 'm68010';
 
 export function runMusashiStep(
@@ -34,12 +48,41 @@ export function runMoiraStep(
   return runOracleStep('moira-runner', instructionBytes, state, cpuModel);
 }
 
+export function runOracleTrace(
+  engine: OracleEngine,
+  programBytes: Uint8Array,
+  state: OracleCpuState,
+  steps: number,
+  cpuModel: OracleCpuModel = 'm68000'
+): NormalizedOracleTrace {
+  if (!Number.isInteger(steps) || steps < 1 || steps > 10_000) {
+    throw new Error('Oracle traces must contain between 1 and 10,000 instructions');
+  }
+  return runOracle(
+    engine === 'musashi' ? 'musashi-runner' : 'moira-runner',
+    programBytes,
+    state,
+    cpuModel,
+    { M68K_TRACE_STEPS: String(steps) }
+  ) as NormalizedOracleTrace;
+}
+
 function runOracleStep(
   executable: string,
   instructionBytes: Uint8Array,
   state: OracleCpuState,
   cpuModel: OracleCpuModel
 ): OracleStepResult {
+  return runOracle(executable, instructionBytes, state, cpuModel) as OracleStepResult;
+}
+
+function runOracle(
+  executable: string,
+  instructionBytes: Uint8Array,
+  state: OracleCpuState,
+  cpuModel: OracleCpuModel,
+  extraEnvironment: Record<string, string> = {}
+): OracleStepResult | NormalizedOracleTrace {
   const runner = resolve('.tmp/oracles', executable);
   const hex = Array.from(instructionBytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
   const args = [
@@ -57,6 +100,7 @@ function runOracleStep(
       M68K_VBR: String(state.vbr ?? 0),
       M68K_SFC: String(state.sfc ?? 0),
       M68K_DFC: String(state.dfc ?? 0),
+      ...extraEnvironment,
     },
   });
   return JSON.parse(output) as OracleStepResult;

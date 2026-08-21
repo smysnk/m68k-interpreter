@@ -3,15 +3,26 @@ import type { Easy68kHardwareConfig } from '@m68k/interpreter';
 import { useHardwareSurface } from '@/runtime/useHardwareSurface';
 import { RenderProfileBoundary, useIdeRenderTelemetry } from '@/runtime/idePerformanceTelemetry';
 import { useHardwareController } from '@/hooks/useHardwareController';
+import { createDigitalIoBitLabels } from '@/store';
 import { SevenSegmentBank } from './hardware/SevenSegmentBank';
 import { DigitalIoMatrix } from './hardware/DigitalIoMatrix';
 import { HardwareAddressField } from './hardware/HardwareAddressField';
-import { InterruptControls } from './hardware/InterruptControls';
 
-function SectionHeading({ eyebrow, title, value }: { eyebrow: string; title: string; value?: string }) {
+function SectionHeading({
+  eyebrow,
+  title,
+  value,
+}: {
+  eyebrow: string;
+  title: string;
+  value?: string;
+}) {
   return (
     <div className="hardware-section-heading">
-      <div><p>{eyebrow}</p><h3>{title}</h3></div>
+      <div>
+        <p>{eyebrow}</p>
+        <h3>{title}</h3>
+      </div>
       {value ? <span className="hardware-value-pill">{value}</span> : null}
     </div>
   );
@@ -24,15 +35,8 @@ interface HardwarePanelProps {
 const HardwarePanel: React.FC<HardwarePanelProps> = ({ embedded = false }) => {
   useIdeRenderTelemetry('HardwarePanel');
   const snapshot = useHardwareSurface();
-  const {
-    preferences,
-    configure,
-    restoreDefaults,
-    setToggle,
-    setButton,
-    requestInterrupt,
-  } = useHardwareController();
-  const [lastInterrupt, setLastInterrupt] = React.useState<number | null>(null);
+  const { preferences, configure, restoreDefaults, setToggle, setButton } = useHardwareController();
+  const [bitLabels, setBitLabels] = React.useState(createDigitalIoBitLabels);
 
   const commitAddress = async (field: keyof Easy68kHardwareConfig, value: number) => {
     const result = await configure({ ...preferences.config, [field]: value });
@@ -42,11 +46,6 @@ const HardwarePanel: React.FC<HardwarePanelProps> = ({ embedded = false }) => {
           ok: false as const,
           message: result.errors[0] ?? 'Hardware address configuration is invalid.',
         };
-  };
-
-  const handleInterruptRequest = (level: number) => {
-    setLastInterrupt(level);
-    void requestInterrupt(level);
   };
 
   return (
@@ -69,29 +68,69 @@ const HardwarePanel: React.FC<HardwarePanelProps> = ({ embedded = false }) => {
         <div className="hardware-preview-content">
           <section className="hardware-board-section hardware-display-section">
             <SectionHeading eyebrow="Write output" title="Seven-segment display" value="8 × byte" />
-            <p className="hardware-committed-address">Base · ${snapshot.config.displayBase.toString(16).toUpperCase().padStart(8, '0')}</p>
+            <p className="hardware-committed-address">
+              Base · ${snapshot.config.displayBase.toString(16).toUpperCase().padStart(8, '0')}
+            </p>
             <SevenSegmentBank values={snapshot.display} />
           </section>
 
           <section className="hardware-board-section hardware-io-matrix-section">
             <SectionHeading eyebrow="Digital I/O" title="8-bit control matrix" value="8 columns" />
-            <DigitalIoMatrix snapshot={snapshot} onAddressCommit={commitAddress} onToggle={(bit, enabled) => void setToggle(bit, enabled)} onButton={(bit, pressed) => void setButton(bit, pressed)} />
-            <p className="hardware-io-matrix-note">Each vertical column is one bit: switch → LED → button.</p>
-            <div className="hardware-address-configuration" data-testid="hardware-address-configuration">
-              <HardwareAddressField label="Display base" value={preferences.config.displayBase} onCommit={(value) => commitAddress('displayBase', value)} />
-              <HardwareAddressField label="LED" value={preferences.config.ledAddress} onCommit={(value) => commitAddress('ledAddress', value)} />
-              <HardwareAddressField label="Switch" value={preferences.config.switchAddress} onCommit={(value) => commitAddress('switchAddress', value)} />
-              <HardwareAddressField label="Button" value={preferences.config.buttonAddress} onCommit={(value) => commitAddress('buttonAddress', value)} />
-              <button className="hardware-reset-button" onClick={() => void restoreDefaults()} type="button">Restore defaults</button>
+            <DigitalIoMatrix
+              bitLabels={bitLabels}
+              snapshot={snapshot}
+              onAddressCommit={commitAddress}
+              onToggle={(bit, enabled) => void setToggle(bit, enabled)}
+              onButton={(bit, pressed) => void setButton(bit, pressed)}
+              onLabelCommit={(bit, label) =>
+                setBitLabels((current) =>
+                  current.map((currentLabel, currentBit) =>
+                    currentBit === bit ? label : currentLabel
+                  )
+                )
+              }
+            />
+            <p className="hardware-io-matrix-note">
+              Each vertical column is one bit: switch → LED → button.
+            </p>
+            <div
+              className="hardware-address-configuration"
+              data-testid="hardware-address-configuration"
+            >
+              <HardwareAddressField
+                label="Display base"
+                value={preferences.config.displayBase}
+                onCommit={(value) => commitAddress('displayBase', value)}
+              />
+              <HardwareAddressField
+                label="LED"
+                value={preferences.config.ledAddress}
+                onCommit={(value) => commitAddress('ledAddress', value)}
+              />
+              <HardwareAddressField
+                label="Switch"
+                value={preferences.config.switchAddress}
+                onCommit={(value) => commitAddress('switchAddress', value)}
+              />
+              <HardwareAddressField
+                label="Button"
+                value={preferences.config.buttonAddress}
+                onCommit={(value) => commitAddress('buttonAddress', value)}
+              />
+              <button
+                className="hardware-reset-button"
+                onClick={() => void restoreDefaults()}
+                type="button"
+              >
+                Restore defaults
+              </button>
             </div>
           </section>
 
-          <section className="hardware-board-section hardware-interrupt-section">
-            <SectionHeading eyebrow="CPU control" title="Interrupt requests" value="Levels 7–1" />
-            <InterruptControls automaticLevels={preferences.automaticInterruptLevels} intervalMs={preferences.automaticInterruptIntervalMs} lastInterrupt={lastInterrupt} onRequest={handleInterruptRequest} />
-          </section>
-
-          <p className="hardware-preview-note">Inputs are active immediately. LED and display output reflect CPU writes through the device bus.</p>
+          <p className="hardware-preview-note">
+            Inputs are active immediately. LED and display output reflect CPU writes through the
+            device bus.
+          </p>
         </div>
       </section>
     </RenderProfileBoundary>

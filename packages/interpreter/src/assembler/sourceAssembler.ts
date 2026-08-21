@@ -228,7 +228,14 @@ export function assembleLoadedProgram(loaded: ProgramLoadResult): SourceAssembly
       bytes.forEach((byte, offset) => output.set(cursor + offset, byte));
       cursor += bytes.length;
     }
-    if (cursor > start) sourceMap.push({ address: start, length: cursor - start, line });
+    if (cursor > start) {
+      sourceMap.push({
+        address: start,
+        length: cursor - start,
+        line,
+        kind: isDirective ? 'data' : 'instruction',
+      });
+    }
     maximumAddress = Math.max(maximumAddress, cursor);
   }
 

@@ -30,6 +30,13 @@ describe('StatusBar', () => {
     expect(screen.queryByText(/Cursor/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Frame:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Stop:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Source config/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Reapply source configuration' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Ignore source configuration' })
+    ).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'smysnk.com' })).toHaveAttribute(
       'href',
       'https://smysnk.com'

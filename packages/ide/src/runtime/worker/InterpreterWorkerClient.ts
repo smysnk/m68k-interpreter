@@ -22,6 +22,9 @@ import {
   type Easy68kHardwareSnapshot,
   type Easy68kHardwareValidationResult,
   type InterruptRequestResult,
+  type DebuggerConfiguration,
+  type DebugSnapshot,
+  type DebugStop,
 } from '@m68k/interpreter';
 import type { IdeRuntimeCachedReadApi, IdeRuntimeController } from '@/runtime/ideRuntimeSession';
 import {
@@ -103,6 +106,7 @@ interface WorkerClientCache {
   symbols: Record<string, number>;
   syncVersions?: RuntimeSyncVersions;
   hardwareSnapshot: Easy68kHardwareSnapshot;
+  debugSnapshot?: DebugSnapshot;
 }
 
 type InterpreterWorkerClientEvent = Exclude<
@@ -382,6 +386,26 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
 
   requestStep(): Promise<WorkerStepResult | undefined> {
     return this.postCommand<WorkerStepResult>({ type: 'step' });
+  }
+
+  requestStepOver(): Promise<WorkerStepResult | undefined> {
+    return this.postCommand<WorkerStepResult>({ type: 'stepOver' });
+  }
+
+  async requestStepOut(): Promise<boolean> {
+    return (await this.postCommand<boolean>({ type: 'stepOut' })) ?? false;
+  }
+
+  requestRunToAddress(address: number, config?: WorkerExecutionConfig): Promise<void> {
+    return this.postCommand<void>({
+      type: 'runToAddress',
+      address,
+      config: config ?? { delayMs: 0, speedMultiplier: 1 },
+    });
+  }
+
+  requestConfigureDebugger(configuration: DebuggerConfiguration): Promise<void> {
+    return this.postCommand<void>({ type: 'configureDebugger', configuration });
   }
 
   requestUndo(): Promise<void> {
@@ -724,6 +748,14 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
     return this.cache.syncVersions ? { ...this.cache.syncVersions } : undefined;
   }
 
+  getDebugSnapshot(): DebugSnapshot | undefined {
+    return this.cache.debugSnapshot ? structuredClone(this.cache.debugSnapshot) : undefined;
+  }
+
+  getDebugStop(): DebugStop | undefined {
+    return this.getDebugSnapshot()?.stop;
+  }
+
   getHardwareSnapshot(): Easy68kHardwareSnapshot {
     return {
       ...this.cache.hardwareSnapshot,
@@ -885,6 +917,9 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
     }
     if (snapshot.syncVersions) {
       this.cache.syncVersions = { ...snapshot.syncVersions };
+    }
+    if (snapshot.debugSnapshot) {
+      this.cache.debugSnapshot = structuredClone(snapshot.debugSnapshot);
     }
     if (snapshot.hardwareSnapshot) {
       this.cache.hardwareSnapshot = {

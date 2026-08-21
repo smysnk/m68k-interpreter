@@ -13,8 +13,12 @@ import type {
   Easy68kSoundAsset,
   Easy68kSoundSnapshot,
   EmulationConfig,
+  DebuggerConfiguration,
+  DebugSnapshot,
+  DebugStop,
 } from '@m68k/interpreter';
 import type { RuntimeFrameSyncPayload } from '@/runtime/runtimeFramePayload';
+import type { FrameStopReason } from '@/runtime/executionLoop';
 import type {
   TerminalTouchPacket,
   TerminalTouchProtocolSymbols,
@@ -53,6 +57,7 @@ export interface WorkerAutomaticInterruptConfig {
 
 export interface RuntimeLoadRequest {
   source: string;
+  debugFileId?: string;
   emulation: EmulationConfig;
   terminal: { columns: number; rows: number };
   hardwareDevices: Easy68kHardwareDeviceConfig[];
@@ -65,6 +70,7 @@ export interface WorkerStepResult {
   halted: boolean;
   waitingForInput: boolean;
   exception: string | null;
+  debugStop?: DebugStop;
 }
 
 export interface WorkerRuntimeSnapshot {
@@ -95,6 +101,7 @@ export interface WorkerRuntimeSnapshot {
   graphicsState?: Easy68kGraphicsState;
   graphicsPatch?: Easy68kGraphicsPatch;
   soundSnapshot?: Easy68kSoundSnapshot;
+  debugSnapshot?: DebugSnapshot;
 }
 
 export type WorkerFrameKind = 'full' | 'terminal' | 'hardware' | 'graphics' | 'sound' | 'heartbeat';
@@ -111,6 +118,10 @@ export type InterpreterWorkerCommand =
   | { id: number; type: 'resume'; config: WorkerExecutionConfig }
   | { id: number; type: 'pause' }
   | { id: number; type: 'step' }
+  | { id: number; type: 'stepOver' }
+  | { id: number; type: 'stepOut' }
+  | { id: number; type: 'runToAddress'; address: number; config: WorkerExecutionConfig }
+  | { id: number; type: 'configureDebugger'; configuration: DebuggerConfiguration }
   | { id: number; type: 'undo' }
   | { id: number; type: 'reset' }
   | { id: number; type: 'queueInput'; input: string | number | number[] }
@@ -164,8 +175,11 @@ export interface InterpreterWorkerFrameEvent {
 
 export interface InterpreterWorkerStoppedEvent {
   type: 'stopped';
-  reason: string;
+  reason: WorkerStoppedReason;
+  stop?: DebugStop;
 }
+
+export type WorkerStoppedReason = FrameStopReason | 'paused' | 'manual_step' | 'undo';
 
 export interface InterpreterWorkerFaultEvent {
   type: 'fault';

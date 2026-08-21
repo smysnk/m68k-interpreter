@@ -597,7 +597,7 @@ export async function loadNibbles(
   const terminalTab = page.getByRole('tab', { name: /terminal|term/i });
   const codeTab = page.getByRole('tab', { name: /code/i });
   const fileExplorerButton = page.getByRole('button', { name: /open file explorer/i });
-  const runButton = page.getByRole('button', { name: /run program/i });
+  const runButton = page.getByRole('button', { name: /^start program$/i });
   const speedInput = page.getByLabel('Speed (x)');
 
   await page.getByTestId('app-container').waitFor({ state: 'visible', timeout: 30_000 });

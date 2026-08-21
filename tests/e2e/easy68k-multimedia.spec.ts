@@ -122,7 +122,7 @@ test.describe('Easy68K multimedia workspace', () => {
     await expect(graphicsPanels.nth(1).getByLabel('Graphics scale mode')).toHaveValue('fit');
 
     await page.getByRole('button', { name: 'Enable audio' }).first().click();
-    await page.getByRole('button', { name: /run program/i }).click();
+    await page.getByRole('button', { name: /^start program$/i }).click();
     const firstCanvas = graphicsPanels.nth(0).locator('canvas');
     await expect.poll(async () => (await readBallSample(firstCanvas)).count).toBeGreaterThan(100);
     const firstSample = await readBallSample(firstCanvas);
@@ -161,7 +161,7 @@ test.describe('Easy68K multimedia workspace', () => {
       expect(sample.wallPixel).toEqual([56, 189, 248, 255]);
     }
 
-    await page.getByRole('button', { name: 'Reset' }).click();
+    await page.getByRole('button', { name: 'Stop debugging' }).click();
     await expect(page.locator('.status-pill').filter({ hasText: /^ready$/i })).toBeVisible();
     const stoppedSample = await readBallSample(firstCanvas);
     await page.waitForTimeout(250);
@@ -169,7 +169,7 @@ test.describe('Easy68K multimedia workspace', () => {
     expect(stillStoppedSample.centerX).toBe(stoppedSample.centerX);
     expect(stillStoppedSample.centerY).toBe(stoppedSample.centerY);
 
-    await page.getByRole('button', { name: /run program/i }).click();
+    await page.getByRole('button', { name: /^start program$/i }).click();
     await expect
       .poll(async () => {
         const sample = await readBallSample(firstCanvas);

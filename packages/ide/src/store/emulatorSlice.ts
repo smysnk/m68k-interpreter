@@ -22,12 +22,6 @@ export interface RuntimeSessionMetadata {
 }
 
 export interface RuntimeIntentState {
-  run: number;
-  resume: number;
-  pulseResume: number;
-  step: number;
-  undo: number;
-  reset: number;
   focusTerminal: number;
 }
 
@@ -112,12 +106,6 @@ export const initialRuntimeMetrics: RuntimeMetrics = {
 };
 
 export const initialRuntimeIntents: RuntimeIntentState = {
-  run: 0,
-  resume: 0,
-  pulseResume: 0,
-  step: 0,
-  undo: 0,
-  reset: 0,
   focusTerminal: 0,
 };
 
@@ -349,24 +337,6 @@ const emulatorSlice = createSlice({
     setRuntimeMetrics(state, action: PayloadAction<Partial<RuntimeMetrics>>) {
       state.runtimeMetrics = { ...state.runtimeMetrics, ...action.payload };
     },
-    requestRun(state) {
-      state.runtimeIntents.run += 1;
-    },
-    requestResume(state) {
-      state.runtimeIntents.resume += 1;
-    },
-    requestPulseResume(state) {
-      state.runtimeIntents.pulseResume += 1;
-    },
-    requestStep(state) {
-      state.runtimeIntents.step += 1;
-    },
-    requestUndo(state) {
-      state.runtimeIntents.undo += 1;
-    },
-    requestReset(state) {
-      state.runtimeIntents.reset += 1;
-    },
     requestFocusTerminal(state) {
       state.runtimeIntents.focusTerminal += 1;
     },
@@ -423,12 +393,6 @@ export const {
   setDelay,
   setSpeedMultiplier,
   setRuntimeMetrics,
-  requestRun,
-  requestResume,
-  requestPulseResume,
-  requestStep,
-  requestUndo,
-  requestReset,
   requestFocusTerminal,
   pushHistory,
   popHistory,

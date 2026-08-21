@@ -10,6 +10,7 @@ Bundled example programs for the browser IDE and interpreter:
 - `memory-copy.asm` - copy a zero-terminated string in memory
 - `subroutine-stack.asm` - call a subroutine multiple times
 - `flags-compare.asm` - compare values and inspect the result flags
+- `debugger-loop.asm` - breakpoint, watch, call-stack, Step Over, Step Into, and Step Out tour
 - `nibbles.asm` - the bundled Nibbles game source used by the IDE
 - `hardware-led-switches.asm` - mirror the toggle byte to the LED latch at shared address `$E00010`
 - `hardware-buttons.asm` - inspect active-low push buttons and mirror them to LEDs

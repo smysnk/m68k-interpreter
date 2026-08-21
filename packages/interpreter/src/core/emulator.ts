@@ -1,5 +1,12 @@
 import { assembleLoadedProgram } from '../assembler/sourceAssembler';
 import type { ProgramImage, ProgramSourceMapEntry } from '../assembler/programImage';
+import { DebugSession } from '../debugger/debugSession';
+import type {
+  DebuggerConfiguration,
+  DebugSnapshot,
+  DebugStop,
+} from '../debugger/types';
+import type { BusAccess } from '../cpu/memoryBus';
 import { StrictM68000Core } from '../cpu/core';
 import type { CpuDiagnostic, CpuFault, StepResult } from './execution';
 import {
@@ -44,6 +51,7 @@ export interface EmulatorOptions {
   hardwareConfig?: Easy68kHardwareConfig;
   hardwareDevices?: readonly Easy68kHardwareDeviceConfig[];
   soundAssets?: readonly Easy68kSoundAsset[];
+  debugFileId?: string;
 }
 
 function normalizeUndoCheckpointInterval(value: number | undefined): number {
@@ -56,6 +64,7 @@ export class Emulator {
   private readonly undo = new Undo();
   private readonly emulation: EmulationConfig;
   private readonly machine: MachineAdapter;
+  private readonly debugSession = new DebugSession();
   private readonly terminal: TerminalDevice;
   private readonly hardware: Easy68kHardware;
   private strictCore: StrictM68000Core | undefined;
@@ -126,6 +135,14 @@ export class Emulator {
         this.strictSourceByAddress.set(entry.address, entry);
       }
       this.strictCore = this.createCore(assembled.image);
+      this.debugSession.loadProgram(
+        assembled.image,
+        this.symbolLookup,
+        typeof program === 'string'
+          ? program
+          : Array.from(program, (byte) => String.fromCharCode(byte)).join(''),
+        options.debugFileId ?? 'active'
+      );
       this.updateExecutionMetadata();
     } else {
       const message =
@@ -303,7 +320,7 @@ export class Emulator {
         core.state.pc = handlerAddress;
         this.waitingForInput = false;
         this.updateExecutionMetadata(pcBefore);
-        return { kind: 'executed', pcBefore, pcAfter: handlerAddress, cycles: 44 };
+        return { kind: 'executed', pcBefore, pcAfter: handlerAddress, cycles: 44, transition: 'interrupt' };
       }
 
       if (this.machine.id === 'easy68k' && this.waitingForInput) {
@@ -343,7 +360,7 @@ export class Emulator {
           : this.machine.handleTrap(this.machineTrapContext)) ?? core.step();
       const result: StepResult =
         rawResult.kind === 'exception' && rawResult.fault.code === 'interrupt'
-          ? { kind: 'executed', pcBefore, pcAfter: rawResult.pc, cycles: 44 }
+          ? { kind: 'executed', pcBefore, pcAfter: rawResult.pc, cycles: 44, transition: 'interrupt' }
           : rawResult;
       this.lastStrictFault = result.kind === 'exception' ? result.fault : undefined;
       this.exception = result.kind === 'exception' ? result.fault.message : undefined;
@@ -387,7 +404,19 @@ export class Emulator {
   }
 
   emulationStep(): boolean {
-    const result = this.stepInstruction();
+    if (this.debugSession.beforeInstruction(this)) return false;
+    const pcBefore = this.getPC();
+    const accesses: BusAccess[] = [];
+    this.machine.setBusAccessObserver(
+      this.debugSession.hasWatchpoints() ? (access) => accesses.push(access) : undefined
+    );
+    let result: StepResult;
+    try {
+      result = this.stepInstruction();
+    } finally {
+      this.machine.setBusAccessObserver(undefined);
+    }
+    this.debugSession.afterInstruction(this, pcBefore, result, accesses);
     return result.kind === 'halted' || result.kind === 'completed' || result.kind === 'exception';
   }
 
@@ -397,6 +426,42 @@ export class Emulator {
 
   getPC(): number {
     return this.strictCore?.state.pc ?? 0;
+  }
+
+  configureDebugger(configuration: DebuggerConfiguration): void {
+    this.debugSession.configure(configuration);
+  }
+
+  beginDebugContinue(): void {
+    this.debugSession.beginContinue();
+  }
+
+  beginDebugStepInto(): void {
+    this.debugSession.beginStepInto(this);
+  }
+
+  beginDebugStepOver(): boolean {
+    return this.debugSession.beginStepOver(this);
+  }
+
+  beginDebugStepOut(): boolean {
+    return this.debugSession.beginStepOut();
+  }
+
+  beginDebugRunTo(address: number): void {
+    this.debugSession.beginRunTo(address);
+  }
+
+  pauseDebugger(): DebugStop {
+    return this.debugSession.pause(this);
+  }
+
+  getDebugStop(): DebugStop | undefined {
+    return this.debugSession.getStop();
+  }
+
+  getDebugSnapshot(): DebugSnapshot {
+    return this.debugSession.getSnapshot(this);
   }
 
   getRegisters(): Int32Array {
@@ -418,6 +483,7 @@ export class Emulator {
     if (register < 8) core.state.a[register] = value | 0;
     else core.state.d[register - 8] = value | 0;
     this.reconcileRuntimeSyncVersions(before, true);
+    this.debugSession.invalidateCallStack();
   }
 
   getCCR(): number {
@@ -463,6 +529,7 @@ export class Emulator {
     else if (register === 'sfc') core.state.sfc = value & 0x7;
     else core.state.dfc = value & 0x7;
     this.reconcileRuntimeSyncVersions(before, true);
+    this.debugSession.invalidateCallStack();
   }
 
   getMemory(): Record<number, number> {
@@ -592,14 +659,17 @@ export class Emulator {
 
   writeMemoryByte(address: number, value: number): void {
     this.machine.bus.write8(address, value);
+    this.debugSession.invalidateCallStack();
   }
 
   writeMemoryWord(address: number, value: number): void {
     this.machine.bus.write16(address, value);
+    this.debugSession.invalidateCallStack();
   }
 
   writeMemoryLong(address: number, value: number): void {
     this.machine.bus.write32(address, value);
+    this.debugSession.invalidateCallStack();
   }
 
   private resolveExternalInterruptAddress(address: number): number | undefined {
@@ -614,12 +684,14 @@ export class Emulator {
     const resolved = this.resolveExternalInterruptAddress(handlerAddress);
     if (resolved === undefined) return false;
     this.pendingExternalInterruptAddress = resolved;
+    this.debugSession.resumeMachineWait();
     return true;
   }
 
   requestInterruptLevel(level: number): InterruptRequestResult {
     if (!Number.isInteger(level) || level < 1 || level > 7) return 'rejected';
     this.pendingInterruptLevels.add(level);
+    this.debugSession.resumeMachineWait();
     return isInterruptLevelEligible(this.getSR(), level) ? 'accepted' : 'masked';
   }
 
@@ -628,6 +700,7 @@ export class Emulator {
   }
 
   queueInput(input: string | number | number[] | Uint8Array): void {
+    this.debugSession.resumeMachineWait();
     if (typeof input === 'string') {
       for (let index = 0; index < input.length; index += 1) {
         this.inputQueue.push(input.charCodeAt(index) & 0xff);
@@ -778,6 +851,8 @@ export class Emulator {
     this.exception = undefined;
     this.instructionsSinceUndoSnapshot = 0;
     this.reconcileRuntimeSyncVersions(before, true);
+    this.debugSession.clearStop();
+    this.debugSession.invalidateCallStack();
   }
 
   reset(): void {
@@ -802,6 +877,8 @@ export class Emulator {
       this.updateExecutionMetadata();
     }
     this.resetUndoHistory();
+    this.debugSession.clearStop();
+    this.debugSession.invalidateCallStack();
     this.reconcileRuntimeSyncVersions(before, true);
   }
 }

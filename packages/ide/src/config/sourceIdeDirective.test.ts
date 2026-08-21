@@ -105,6 +105,21 @@ describe('compact source IDE directives', () => {
     );
   });
 
+  it('focuses the dedicated IRQ panel for the interrupt example', () => {
+    const source = bundledExampleFiles.find(
+      (example) => example.name === 'hardware-interrupts.asm'
+    )!.content;
+    const parsed = parseSourceIdeDirective(source);
+    expect(parsed.status).toBe('valid');
+    if (parsed.status !== 'valid') return;
+
+    const resolved = resolveSourceIdeLayout(parsed.directive, createPanelPreset('classic'));
+    expect(resolved.diagnostics).toEqual([]);
+    expect(resolved.layout.instances[resolved.layout.focusedPanelId!]?.kind).toBe(
+      'hardware-interrupts'
+    );
+  });
+
   it('keeps every bundled example on exactly one valid compact directive', () => {
     for (const example of bundledExampleFiles) {
       const directiveLines = example.content

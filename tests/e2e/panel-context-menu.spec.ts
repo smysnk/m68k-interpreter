@@ -9,7 +9,8 @@ const PANEL_CATALOGUE = [
   { kind: 'registers', title: 'Registers' },
   { kind: 'memory', title: 'Memory' },
   { kind: 'hardware-display', title: 'Seven-segment display' },
-  { kind: 'hardware-digital-io', title: 'LEDs / Switches / Buttons / IRQs' },
+  { kind: 'hardware-digital-io', title: 'LEDs / Switches / Buttons' },
+  { kind: 'hardware-interrupts', title: 'CPU Interrupt Lines' },
   { kind: 'help', title: 'Help' },
 ] as const;
 
@@ -144,7 +145,12 @@ test.describe('panel workspace context menu', () => {
       await expect(existing).toHaveCount(countBefore + 1);
       const newest = existing.last();
       await newest.scrollIntoViewIfNeeded();
-      await newest.click({ button: 'right', position: { x: 12, y: 12 } });
+      await newest.dispatchEvent('contextmenu', {
+        bubbles: true,
+        button: 2,
+        clientX: 12,
+        clientY: 12,
+      });
       await expect(page.getByRole('menu', { name: 'Panel workspace actions' })).toBeVisible();
       await page.keyboard.press('Escape');
     }

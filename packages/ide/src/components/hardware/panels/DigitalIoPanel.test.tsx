@@ -6,7 +6,6 @@ import DigitalIoPanel from './DigitalIoPanel';
 
 const controller = vi.hoisted(() => ({
   configure: vi.fn(),
-  requestInterrupt: vi.fn(),
   setButton: vi.fn(),
   setToggle: vi.fn(),
 }));
@@ -18,16 +17,6 @@ vi.mock('@/hooks/useHardwareDeviceController', () => ({
   }),
 }));
 
-vi.mock('@/hooks/useHardwareController', () => ({
-  useHardwareController: () => ({
-    preferences: {
-      automaticInterruptIntervalMs: 1000,
-      automaticInterruptLevels: [],
-    },
-    requestInterrupt: controller.requestInterrupt,
-  }),
-}));
-
 vi.mock('@/runtime/useHardwareSurface', () => ({
   useHardwareDeviceSurface: () => undefined,
 }));
@@ -35,7 +24,7 @@ vi.mock('@/runtime/useHardwareSurface', () => ({
 const instance: PanelInstance = {
   id: 'panel-digital-io-test',
   kind: 'hardware-digital-io',
-  title: 'LEDs / Switches / Buttons / IRQs',
+  title: 'LEDs / Switches / Buttons',
   minimized: false,
   config: {
     kind: 'hardware-digital-io',
@@ -43,6 +32,7 @@ const instance: PanelInstance = {
     ledAddress: 0xe00010,
     switchAddress: 0xe00010,
     buttonAddress: 0xe00012,
+    bitLabels: ['', '', '', '', '', '', '', 'Motor'],
   },
 };
 
@@ -70,7 +60,11 @@ describe('DigitalIoPanel', () => {
     expect(screen.queryByText(/WRITE · \$/)).not.toBeInTheDocument();
     expect(screen.queryByText('0x00')).not.toBeInTheDocument();
     expect(screen.queryByText('Button 3 released')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Request interrupt level 7' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Request interrupt level 7' })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('Motor')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /Edit label for bit/ })).toHaveLength(8);
   });
 
   it('configures each row address independently through its gear', async () => {

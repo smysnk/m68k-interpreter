@@ -1,15 +1,14 @@
-import React from 'react';
-import {
-  MACHINE_PROFILE_REGISTRY,
-  type Easy68kHardwareDeviceSnapshot,
-} from '@m68k/interpreter';
-import { useSelector } from 'react-redux';
+import { MACHINE_PROFILE_REGISTRY, type Easy68kHardwareDeviceSnapshot } from '@m68k/interpreter';
+import { useDispatch, useSelector } from 'react-redux';
 import { DigitalIoMatrix } from '@/components/hardware/DigitalIoMatrix';
-import { InterruptControls } from '@/components/hardware/InterruptControls';
 import { useHardwareDeviceController } from '@/hooks/useHardwareDeviceController';
-import { useHardwareController } from '@/hooks/useHardwareController';
 import { useHardwareDeviceSurface } from '@/runtime/useHardwareSurface';
-import type { PanelInstance, RootState } from '@/store';
+import {
+  commitDigitalIoBitLabel,
+  type AppDispatch,
+  type PanelInstance,
+  type RootState,
+} from '@/store';
 
 function emptyDigitalSnapshot(
   deviceId: string,
@@ -34,6 +33,7 @@ function emptyDigitalSnapshot(
 }
 
 export default function DigitalIoPanel({ instance }: { instance: PanelInstance }) {
+  const dispatch = useDispatch<AppDispatch>();
   const machineProfile = useSelector((state: RootState) => state.settings.machineProfile);
   const config = instance.config as Extract<
     PanelInstance['config'],
@@ -42,8 +42,6 @@ export default function DigitalIoPanel({ instance }: { instance: PanelInstance }
   const runtimeSnapshot = useHardwareDeviceSurface(config.deviceId);
   const snapshot = runtimeSnapshot ?? emptyDigitalSnapshot(config.deviceId, config);
   const controller = useHardwareDeviceController(instance.id, config.deviceId);
-  const { preferences, requestInterrupt } = useHardwareController();
-  const [lastInterrupt, setLastInterrupt] = React.useState<number | null>(null);
 
   const commitAddress = async (
     field: 'ledAddress' | 'switchAddress' | 'buttonAddress',
@@ -60,7 +58,7 @@ export default function DigitalIoPanel({ instance }: { instance: PanelInstance }
 
   return (
     <section
-      aria-label="LED, switch, button, and interrupt hardware"
+      aria-label="LED, switch, and button hardware"
       className="hardware-panel-surface hardware-digital-io-panel"
       data-hardware-device-id={config.deviceId}
       data-testid={`hardware-digital-io-${config.deviceId}`}
@@ -72,31 +70,15 @@ export default function DigitalIoPanel({ instance }: { instance: PanelInstance }
       ) : (
         <DigitalIoMatrix
           snapshot={snapshot}
+          bitLabels={config.bitLabels}
           onAddressCommit={commitAddress}
           onToggle={(bit, enabled) => void controller.setToggle(bit, enabled)}
           onButton={(bit, pressed) => void controller.setButton(bit, pressed)}
+          onLabelCommit={(bit, label) =>
+            dispatch(commitDigitalIoBitLabel({ panelId: instance.id, bit, label }))
+          }
         />
       )}
-      <section
-        aria-label="CPU interrupt lines"
-        className="hardware-combined-interrupt-section"
-        data-testid="hardware-interrupt-requests"
-      >
-        <div className="hardware-combined-interrupt-heading">
-          <span>CPU interrupt lines</span>
-          <span>Levels 7–1</span>
-        </div>
-        <InterruptControls
-          aligned
-          automaticLevels={preferences.automaticInterruptLevels}
-          intervalMs={preferences.automaticInterruptIntervalMs}
-          lastInterrupt={lastInterrupt}
-          onRequest={(level) => {
-            setLastInterrupt(level);
-            void requestInterrupt(level);
-          }}
-        />
-      </section>
     </section>
   );
 }
