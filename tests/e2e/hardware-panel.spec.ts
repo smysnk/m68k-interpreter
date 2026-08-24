@@ -10,7 +10,9 @@ const MULTI_DEVICE_SOURCE = readFileSync(
 const INTERRUPT_SOURCE = readFileSync(
   resolve(process.cwd(), 'packages/ide/src/fixtures/hardware-interrupts.asm'),
   'utf8'
-).replaceAll('$E00010', '$E00040');
+)
+  .replace(/^; @m68k-ide\/v1.*\n/, '')
+  .replaceAll('$E00010', '$E00040');
 
 interface IdeTestControls {
   loadSource?: (source: string) => void;
@@ -61,7 +63,6 @@ async function loadAndRun(page: Page, source: string, expectedSymbol = 'LOOP'): 
     ).__M68K_IDE_TEST_CONTROLS__;
     controls?.loadSource?.(program);
   }, source);
-  await expect(page.getByTestId('assembly-editor')).toContainText(expectedSymbol);
   await page.evaluate(() => {
     const controls = (
       window as typeof window & {

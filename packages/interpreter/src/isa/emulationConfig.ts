@@ -39,6 +39,22 @@ export const CPU_MODEL_REGISTRY: Readonly<Record<CpuModel, CpuModelDefinition>> 
       'architectural-interrupts',
     ],
   },
+  m68020: {
+    id: 'm68020',
+    label: 'MC68020',
+    description: 'Functional Motorola 68020 integer behavior',
+    capabilities: [
+      'm68000-instructions',
+      'm68010-instructions',
+      'm68020-instructions',
+      'm68020-control-registers',
+      'full-indexed-addressing',
+      '32-bit-address-space',
+      'restartable-faults',
+      'coprocessor-interface',
+      'architectural-interrupts',
+    ],
+  },
 };
 
 export const MACHINE_PROFILE_REGISTRY: Readonly<Record<MachineProfile, MachineProfileDefinition>> =
@@ -76,6 +92,7 @@ export const DEFAULT_EMULATION_CONFIG: Readonly<EmulationConfig> = Object.freeze
 export const LEGACY_CPU_PROFILE_CONFIG: Readonly<Record<CpuProfile, EmulationConfig>> = {
   m68000: { cpuModel: 'm68000', machineProfile: 'bare' },
   m68010: { cpuModel: 'm68010', machineProfile: 'bare' },
+  m68020: { cpuModel: 'm68020', machineProfile: 'bare' },
   easy68k: { cpuModel: 'm68000', machineProfile: 'easy68k' },
 };
 

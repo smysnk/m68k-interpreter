@@ -158,7 +158,7 @@ test.describe('source debugger vertical slice', () => {
       .click();
     await expect(page.locator('[data-panel-kind="code"]')).toHaveCount(2);
 
-    const editor = page.locator('.cm-content').first();
+    const editor = page.locator('.cm-content').last();
     await editor.click();
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
     await page.keyboard.insertText(SOURCE);
@@ -202,7 +202,7 @@ test.describe('source debugger vertical slice', () => {
       .getByRole('menuitem', { name: 'Add Code panel' })
       .click();
 
-    const editor = page.locator('.cm-content').first();
+    const editor = page.locator('.cm-content').last();
     await editor.click();
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
     await page.keyboard.insertText(WAIT_FOR_INPUT_SOURCE);

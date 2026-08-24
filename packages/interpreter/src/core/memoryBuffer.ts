@@ -1,5 +1,5 @@
 export const DEFAULT_MEMORY_BUFFER_PAGE_SIZE = 0x1000;
-export const MAX_MEMORY_BUFFER_ADDRESS = 0x7fffffff;
+export const MAX_MEMORY_BUFFER_ADDRESS = 0xffff_ffff;
 
 export interface MemoryBufferPage {
   pageIndex: number;
@@ -92,10 +92,7 @@ function isPageOffsetDefined(page: MemoryBufferPage, pageOffset: number): boolea
   return (page.definedMask[maskIndex] & maskBit) !== 0;
 }
 
-function setPageOffsetDefined(
-  page: MemoryBufferPage,
-  pageOffset: number
-): boolean {
+function setPageOffsetDefined(page: MemoryBufferPage, pageOffset: number): boolean {
   const maskIndex = pageOffset >> 3;
   const maskBit = 1 << (pageOffset & 7);
 
@@ -108,27 +105,18 @@ function setPageOffsetDefined(
   return true;
 }
 
-function assignPageAddress(
-  page: MemoryBufferPage,
-  pageIndex: number
-): MemoryBufferPage {
+function assignPageAddress(page: MemoryBufferPage, pageIndex: number): MemoryBufferPage {
   page.pageIndex = pageIndex;
   return page;
 }
 
-function acquirePage(
-  memoryBuffer: MemoryBuffer,
-  pageIndex: number
-): MemoryBufferPage {
+function acquirePage(memoryBuffer: MemoryBuffer, pageIndex: number): MemoryBufferPage {
   const page = memoryBuffer.pagePool.pop() ?? createMemoryBufferPageStorage(memoryBuffer.pageSize);
   clearMemoryBufferPage(page);
   return assignPageAddress(page, pageIndex);
 }
 
-function releasePage(
-  memoryBuffer: MemoryBuffer,
-  page: MemoryBufferPage
-): void {
+function releasePage(memoryBuffer: MemoryBuffer, page: MemoryBufferPage): void {
   memoryBuffer.pagePool.push(clearMemoryBufferPage(page));
 }
 
@@ -155,10 +143,7 @@ function getCurrentPage(
   return memoryBuffer.workingPages.get(pageIndex) ?? memoryBuffer.basePages.get(pageIndex);
 }
 
-function getOrCreateWorkingPage(
-  memoryBuffer: MemoryBuffer,
-  pageIndex: number
-): MemoryBufferPage {
+function getOrCreateWorkingPage(memoryBuffer: MemoryBuffer, pageIndex: number): MemoryBufferPage {
   const existingWorkingPage = memoryBuffer.workingPages.get(pageIndex);
 
   if (existingWorkingPage) {
@@ -174,11 +159,7 @@ function getOrCreateWorkingPage(
   return workingPage;
 }
 
-function setBaseByte(
-  memoryBuffer: MemoryBuffer,
-  address: number,
-  value: number
-): void {
+function setBaseByte(memoryBuffer: MemoryBuffer, address: number, value: number): void {
   const pageIndex = getPageIndex(memoryBuffer.pageSize, address);
   const pageOffset = getPageOffset(memoryBuffer.pageSize, address);
   let page = memoryBuffer.basePages.get(pageIndex);
@@ -192,9 +173,7 @@ function setBaseByte(
   setPageOffsetDefined(page, pageOffset);
 }
 
-function listCurrentPages(
-  memoryBuffer: MemoryBuffer
-): MemoryBufferPage[] {
+function listCurrentPages(memoryBuffer: MemoryBuffer): MemoryBufferPage[] {
   const pages: MemoryBufferPage[] = [];
 
   for (const [pageIndex, page] of memoryBuffer.basePages) {
@@ -211,10 +190,7 @@ function listCurrentPages(
   return pages;
 }
 
-function clonePage(
-  page: MemoryBufferPage,
-  pageSize: number
-): MemoryBufferPage {
+function clonePage(page: MemoryBufferPage, pageSize: number): MemoryBufferPage {
   const pageClone = createMemoryBufferPageStorage(pageSize);
   pageClone.pageIndex = page.pageIndex;
   pageClone.bytes.set(page.bytes);
@@ -223,10 +199,7 @@ function clonePage(
   return pageClone;
 }
 
-function forEachDefinedByte(
-  page: MemoryBufferPage,
-  visitor: (pageOffset: number) => void
-): void {
+function forEachDefinedByte(page: MemoryBufferPage, visitor: (pageOffset: number) => void): void {
   for (let pageOffset = 0; pageOffset < page.bytes.length; pageOffset += 1) {
     if (isPageOffsetDefined(page, pageOffset)) {
       visitor(pageOffset);
@@ -254,10 +227,7 @@ export function createMemoryBuffer(
   return memoryBuffer;
 }
 
-export function readMemoryBufferByte(
-  memoryBuffer: MemoryBuffer,
-  address: number
-): number {
+export function readMemoryBufferByte(memoryBuffer: MemoryBuffer, address: number): number {
   const normalizedAddress = assertValidAddress(address);
   const pageIndex = getPageIndex(memoryBuffer.pageSize, normalizedAddress);
   const page = getCurrentPage(memoryBuffer, pageIndex);
@@ -334,22 +304,16 @@ export function readMemoryBufferRange(
   return bytes;
 }
 
-export function getMemoryBufferDirtyPageIndices(
-  memoryBuffer: MemoryBuffer
-): number[] {
+export function getMemoryBufferDirtyPageIndices(memoryBuffer: MemoryBuffer): number[] {
   return [...memoryBuffer.dirtyPageIndices].sort((left, right) => left - right);
 }
 
-export function clearMemoryBufferDirtyPages(
-  memoryBuffer: MemoryBuffer
-): MemoryBuffer {
+export function clearMemoryBufferDirtyPages(memoryBuffer: MemoryBuffer): MemoryBuffer {
   memoryBuffer.dirtyPageIndices.clear();
   return memoryBuffer;
 }
 
-export function resetMemoryBuffer(
-  memoryBuffer: MemoryBuffer
-): MemoryBuffer {
+export function resetMemoryBuffer(memoryBuffer: MemoryBuffer): MemoryBuffer {
   if (memoryBuffer.workingPages.size === 0 && memoryBuffer.dirtyPageIndices.size === 0) {
     return memoryBuffer;
   }
@@ -365,9 +329,7 @@ export function resetMemoryBuffer(
   return memoryBuffer;
 }
 
-export function clearMemoryBuffer(
-  memoryBuffer: MemoryBuffer
-): MemoryBuffer {
+export function clearMemoryBuffer(memoryBuffer: MemoryBuffer): MemoryBuffer {
   if (memoryBuffer.basePages.size === 0 && memoryBuffer.workingPages.size === 0) {
     return memoryBuffer;
   }
@@ -392,10 +354,9 @@ export function loadMemoryBufferBaseImage(
   memoryBuffer: MemoryBuffer,
   initialBytes: Record<number, number> = {}
 ): MemoryBuffer {
-  const normalizedEntries = Object.entries(initialBytes).map(([addressKey, value]) => [
-    assertValidAddress(Number(addressKey)),
-    value & 0xff,
-  ] as const);
+  const normalizedEntries = Object.entries(initialBytes).map(
+    ([addressKey, value]) => [assertValidAddress(Number(addressKey)), value & 0xff] as const
+  );
 
   for (const page of memoryBuffer.basePages.values()) {
     releasePage(memoryBuffer, page);
@@ -418,9 +379,7 @@ export function loadMemoryBufferBaseImage(
   return memoryBuffer;
 }
 
-export function cloneMemoryBuffer(
-  memoryBuffer: MemoryBuffer
-): MemoryBuffer {
+export function cloneMemoryBuffer(memoryBuffer: MemoryBuffer): MemoryBuffer {
   const memoryBufferClone: MemoryBuffer = {
     pageSize: memoryBuffer.pageSize,
     version: memoryBuffer.version,
@@ -441,10 +400,7 @@ export function cloneMemoryBuffer(
   return memoryBufferClone;
 }
 
-export function replaceMemoryBufferState(
-  target: MemoryBuffer,
-  source: MemoryBuffer
-): MemoryBuffer {
+export function replaceMemoryBufferState(target: MemoryBuffer, source: MemoryBuffer): MemoryBuffer {
   const canReusePooledPages = target.pageSize === source.pageSize;
 
   for (const page of target.basePages.values()) {
@@ -497,7 +453,9 @@ export function captureMemoryBufferUndoPageEntry(
   return {
     pageIndex,
     previousWorkingPage:
-      existingWorkingPage === undefined ? null : clonePage(existingWorkingPage, memoryBuffer.pageSize),
+      existingWorkingPage === undefined
+        ? null
+        : clonePage(existingWorkingPage, memoryBuffer.pageSize),
   };
 }
 
@@ -534,9 +492,7 @@ export function restoreMemoryBufferUndoPageEntries(
   return memoryBuffer;
 }
 
-export function exportMemoryBufferMap(
-  memoryBuffer: MemoryBuffer
-): Record<number, number> {
+export function exportMemoryBufferMap(memoryBuffer: MemoryBuffer): Record<number, number> {
   const exportedBytes: Record<number, number> = {};
 
   for (const page of listCurrentPages(memoryBuffer)) {
@@ -550,9 +506,7 @@ export function exportMemoryBufferMap(
   return exportedBytes;
 }
 
-export function getMemoryBufferUsedByteCount(
-  memoryBuffer: MemoryBuffer
-): number {
+export function getMemoryBufferUsedByteCount(memoryBuffer: MemoryBuffer): number {
   let usedByteCount = 0;
 
   for (const page of listCurrentPages(memoryBuffer)) {
@@ -562,9 +516,7 @@ export function getMemoryBufferUsedByteCount(
   return usedByteCount;
 }
 
-export function getMemoryBufferAddressRange(
-  memoryBuffer: MemoryBuffer
-): MemoryBufferAddressRange {
+export function getMemoryBufferAddressRange(memoryBuffer: MemoryBuffer): MemoryBufferAddressRange {
   let minAddress: number | null = null;
   let maxAddress: number | null = null;
 
@@ -587,9 +539,7 @@ export function getMemoryBufferAddressRange(
   return { minAddress, maxAddress };
 }
 
-export function getMemoryBufferPageCount(
-  memoryBuffer: MemoryBuffer
-): number {
+export function getMemoryBufferPageCount(memoryBuffer: MemoryBuffer): number {
   let pageCount = memoryBuffer.workingPages.size;
 
   for (const pageIndex of memoryBuffer.basePages.keys()) {

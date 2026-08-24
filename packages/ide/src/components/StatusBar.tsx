@@ -83,7 +83,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
       </button>
       <ContextMenu
         anchor={modeButtonRef.current ? { kind: 'element', element: modeButtonRef.current } : null}
-        className="navbar-menu"
+        className="navbar-menu status-mode-menu"
         id="status-bar-mode-menu"
         label="Select emulation mode"
         menuRef={modeMenuRef}

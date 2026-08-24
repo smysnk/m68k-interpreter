@@ -44,6 +44,10 @@ export interface IdeRuntimeCachedReadApi {
   getVBR?(): number;
   getSFC?(): number;
   getDFC?(): number;
+  getISP?(): number;
+  getMSP?(): number;
+  getCACR?(): number;
+  getCAAR?(): number;
   readMemoryRange(address: number, length: number): Uint8Array;
   getSymbolAddress(symbol: string): number | undefined;
   getSymbols(): Record<string, number>;
@@ -104,7 +108,10 @@ export interface IdeRuntimeController {
   requestWriteMemoryWord(address: number, value: number): Promise<void>;
   requestWriteMemoryLong(address: number, value: number): Promise<void>;
   requestSetRegisterValue(register: number, value: number): Promise<void>;
-  requestSetControlRegisterValue(register: 'vbr' | 'sfc' | 'dfc', value: number): Promise<void>;
+  requestSetControlRegisterValue(
+    register: 'vbr' | 'sfc' | 'dfc' | 'isp' | 'msp' | 'cacr' | 'caar',
+    value: number
+  ): Promise<void>;
   requestDispatchTouchPacket(
     protocol: TerminalTouchProtocolSymbols,
     packet: TerminalTouchPacket
@@ -142,7 +149,10 @@ export interface IdeRuntimeSession extends IdeRuntimeCachedReadApi {
   writeMemoryLong(address: number, value: number): void;
   writeMemoryWord(address: number, value: number): void;
   setRegisterValue?: (register: number, value: number) => void;
-  setControlRegisterValue?: (register: 'vbr' | 'sfc' | 'dfc', value: number) => void;
+  setControlRegisterValue?: (
+    register: 'vbr' | 'sfc' | 'dfc' | 'isp' | 'msp' | 'cacr' | 'caar',
+    value: number
+  ) => void;
   resizeTerminal?: (columns: number, rows: number) => void;
   setUndoCaptureMode?: (mode: UndoCaptureMode, checkpointInterval?: number) => void;
   getUndoCaptureMode?: () => UndoCaptureMode;

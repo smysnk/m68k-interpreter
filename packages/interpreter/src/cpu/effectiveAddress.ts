@@ -2,6 +2,7 @@ import type { EffectiveAddressClass } from '../isa/types';
 import type { OperandSize } from './alu';
 import { signExtend, truncate } from './alu';
 import type { InstructionStream } from './instructionStream';
+import type { AddressSpacePolicy } from './addressSpace';
 import {
   SUPERVISOR_DATA_READ,
   SUPERVISOR_DATA_WRITE,
@@ -10,7 +11,7 @@ import {
   type BusAccessInput,
   type MemoryBus,
 } from './memoryBus';
-import type { M68000State } from './state';
+import type { M68kCpuState } from './state';
 
 export type EffectiveAddressAccess = 'read' | 'write' | 'readwrite' | 'address';
 
@@ -25,13 +26,14 @@ export interface EffectiveAddress {
 }
 
 export interface EffectiveAddressContext {
-  state: M68000State;
+  state: M68kCpuState;
   bus: MemoryBus;
   stream: InstructionStream;
   size: OperandSize;
   access: EffectiveAddressAccess;
   readContext?: BusAccessInput;
   writeContext?: BusAccessInput;
+  addressSpace?: AddressSpacePolicy;
 }
 
 function addressStep(size: OperandSize, register: number): number {
@@ -61,12 +63,80 @@ function writeMemory(
   else bus.write32(address, value, context);
 }
 
-function readIndex(extension: number, state: M68000State): number {
+function readIndex(extension: number, state: M68kCpuState): number {
   const addressRegister = (extension & 0x8000) !== 0;
   const register = (extension >>> 12) & 0x7;
   const longIndex = (extension & 0x0800) !== 0;
   const raw = addressRegister ? state.a[register] : state.d[register];
-  return longIndex ? raw | 0 : signExtend(raw, 2);
+  const value = longIndex ? raw | 0 : signExtend(raw, 2);
+  const scale = state.cpuModel === 'm68020' ? 1 << ((extension >>> 9) & 0x3) : 1;
+  return value * scale;
+}
+
+function readDisplacement(stream: InstructionStream, sizeCode: number): number {
+  if (sizeCode === 2) return stream.readSignedWord();
+  if (sizeCode === 3) return stream.readLong() | 0;
+  return 0;
+}
+
+function resolveIndexedAddress(
+  base: number,
+  extension: number,
+  context: EffectiveAddressContext,
+  pcRelative: boolean
+): { address: number; class: EffectiveAddressClass } {
+  const { state, bus, stream } = context;
+  const addressSpace = context.addressSpace ?? state.addressSpace;
+  if (state.cpuModel !== 'm68020' || (extension & 0x0100) === 0) {
+    // Address registers and indexed calculations remain 32-bit on every model.
+    // The MC68000/MC68010 bus performs the physical 24-bit aliasing when the
+    // operand is accessed; normalizing here would discard the observable
+    // logical effective address used by debuggers and exception metadata.
+    const address = (base + readIndex(extension, state) + signExtend(extension & 0xff, 1)) >>> 0;
+    return {
+      address,
+      class: pcRelative ? 'pc-indexed' : 'indexed',
+    };
+  }
+
+  const baseSuppressed = (extension & 0x0080) !== 0;
+  const indexSuppressed = (extension & 0x0040) !== 0;
+  const baseDisplacementSize = (extension >>> 4) & 0x3;
+  if ((extension & 0x0008) !== 0 || baseDisplacementSize === 0) {
+    throw new RangeError('Reserved MC68020 full-index extension encoding');
+  }
+  const baseDisplacement = readDisplacement(stream, baseDisplacementSize);
+  const indirectSelection = extension & 0x7;
+  if (indirectSelection === 4) {
+    throw new RangeError('Reserved MC68020 full-index extension selection');
+  }
+  const index = indexSuppressed ? 0 : readIndex(extension, state);
+  const baseValue = baseSuppressed ? 0 : base;
+  const baseAddress = addressSpace.add(baseValue, baseDisplacement);
+  if (indirectSelection === 0) {
+    return {
+      address: addressSpace.add(baseAddress, index),
+      class: pcRelative ? 'pc-full-indexed' : 'full-indexed',
+    };
+  }
+
+  const outerSize = indirectSelection & 0x3;
+  const outerDisplacement = readDisplacement(stream, outerSize);
+  const postindexed = indirectSelection >= 5;
+  const pointerAddress = postindexed ? baseAddress : addressSpace.add(baseAddress, index);
+  const readContext =
+    context.readContext ?? (state.isSupervisor() ? SUPERVISOR_DATA_READ : USER_DATA_READ);
+  const pointer = bus.read32(pointerAddress, readContext);
+  return {
+    address: addressSpace.add(postindexed ? pointer + index : pointer, outerDisplacement),
+    class: pcRelative
+      ? postindexed
+        ? 'pc-memory-indirect-postindexed'
+        : 'pc-memory-indirect-preindexed'
+      : postindexed
+        ? 'memory-indirect-postindexed'
+        : 'memory-indirect-preindexed',
+  };
 }
 
 export function classifyEffectiveAddress(mode: number, register: number): EffectiveAddressClass {
@@ -173,6 +243,7 @@ export function resolveEffectiveAddress(
   }
 
   let address: number;
+  let resolvedClass: EffectiveAddressClass = eaClass;
   let postIncrement = false;
   switch (eaClass) {
     case 'address-indirect':
@@ -192,11 +263,14 @@ export function resolveEffectiveAddress(
       break;
     case 'indexed': {
       const extension = stream.readWord();
-      address =
-        ((state.a[normalizedRegister] >>> 0) +
-          readIndex(extension, state) +
-          signExtend(extension & 0xff, 1)) >>>
-        0;
+      const resolved = resolveIndexedAddress(
+        state.a[normalizedRegister] >>> 0,
+        extension,
+        context,
+        false
+      );
+      address = resolved.address;
+      resolvedClass = resolved.class;
       break;
     }
     case 'absolute-short':
@@ -213,7 +287,9 @@ export function resolveEffectiveAddress(
     case 'pc-indexed': {
       const base = stream.cursor;
       const extension = stream.readWord();
-      address = (base + readIndex(extension, state) + signExtend(extension & 0xff, 1)) >>> 0;
+      const resolved = resolveIndexedAddress(base, extension, context, true);
+      address = resolved.address;
+      resolvedClass = resolved.class;
       break;
     }
     default:
@@ -228,7 +304,7 @@ export function resolveEffectiveAddress(
   };
 
   return {
-    class: eaClass,
+    class: resolvedClass,
     mode: normalizedMode,
     register: normalizedRegister,
     address,

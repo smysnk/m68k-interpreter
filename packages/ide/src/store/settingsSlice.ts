@@ -43,7 +43,9 @@ const registerEditRadices: RegisterEditRadix[] = ['hex', 'dec', 'bin'];
 const terminalInputModes: TerminalInputModePreference[] = ['auto', 'text-input', 'touch-only'];
 /** @deprecated Persistence compatibility helper. */
 export function normalizeCpuProfile(value: unknown): CpuProfile {
-  return value === 'm68000' || value === 'm68010' || value === 'easy68k' ? value : 'easy68k';
+  return value === 'm68000' || value === 'm68010' || value === 'm68020' || value === 'easy68k'
+    ? value
+    : 'easy68k';
 }
 
 export function normalizeSettingsEmulation(
@@ -104,8 +106,9 @@ const settingsSlice = createSlice({
       state.cpuModel = normalizeEmulationConfig({ cpuModel: action.payload }).cpuModel;
     },
     setMachineProfile(state, action: PayloadAction<MachineProfile>) {
-      state.machineProfile = normalizeEmulationConfig({ machineProfile: action.payload })
-        .machineProfile;
+      state.machineProfile = normalizeEmulationConfig({
+        machineProfile: action.payload,
+      }).machineProfile;
     },
     setEmulationConfig(state, action: PayloadAction<EmulationConfig>) {
       const normalized = normalizeEmulationConfig(action.payload);

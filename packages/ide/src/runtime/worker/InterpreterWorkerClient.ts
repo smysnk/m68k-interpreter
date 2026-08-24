@@ -93,6 +93,10 @@ interface WorkerClientCache {
   vbr: number;
   sfc: number;
   dfc: number;
+  isp: number;
+  msp: number;
+  cacr: number;
+  caar: number;
   memoryMeta: MemoryMeta;
   memoryImage: Record<number, number>;
   terminalMeta: TerminalMeta;
@@ -153,6 +157,10 @@ function createEmptyWorkerClientCache(): WorkerClientCache {
     vbr: 0,
     sfc: 0,
     dfc: 0,
+    isp: 0,
+    msp: 0,
+    cacr: 0,
+    caar: 0,
     memoryMeta: createEmptyMemoryMeta(),
     memoryImage: {},
     terminalMeta: createTerminalMeta(terminalFrameBuffer.columns, terminalFrameBuffer.rows),
@@ -533,7 +541,10 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
     return this.postCommand<void>({ type: 'setRegisterValue', register, value });
   }
 
-  requestSetControlRegisterValue(register: 'vbr' | 'sfc' | 'dfc', value: number): Promise<void> {
+  requestSetControlRegisterValue(
+    register: 'vbr' | 'sfc' | 'dfc' | 'isp' | 'msp' | 'cacr' | 'caar',
+    value: number
+  ): Promise<void> {
     return this.postCommand<void>({ type: 'setControlRegisterValue', register, value });
   }
 
@@ -681,6 +692,19 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
 
   getDFC(): number {
     return this.cache.dfc;
+  }
+
+  getISP(): number {
+    return this.cache.isp;
+  }
+  getMSP(): number {
+    return this.cache.msp;
+  }
+  getCACR(): number {
+    return this.cache.cacr;
+  }
+  getCAAR(): number {
+    return this.cache.caar;
   }
 
   readMemoryRange(address: number, length: number): Uint8Array {
@@ -863,6 +887,10 @@ export class InterpreterWorkerClient implements IdeRuntimeCachedReadApi, IdeRunt
     if (snapshot.dfc !== undefined) {
       this.cache.dfc = snapshot.dfc;
     }
+    if (snapshot.isp !== undefined) this.cache.isp = snapshot.isp;
+    if (snapshot.msp !== undefined) this.cache.msp = snapshot.msp;
+    if (snapshot.cacr !== undefined) this.cache.cacr = snapshot.cacr;
+    if (snapshot.caar !== undefined) this.cache.caar = snapshot.caar;
     if (snapshot.memoryMeta) {
       this.cache.memoryMeta = { ...snapshot.memoryMeta };
     }

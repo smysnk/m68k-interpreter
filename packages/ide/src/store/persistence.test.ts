@@ -129,8 +129,10 @@ describe('store persistence', () => {
   it.each([
     ['m68000', 'bare'],
     ['m68010', 'bare'],
+    ['m68020', 'bare'],
     ['m68000', 'easy68k'],
     ['m68010', 'easy68k'],
+    ['m68020', 'easy68k'],
   ] as const)('round trips %s with %s', (cpuModel, machineProfile) => {
     const store = createIdeStore();
     store.dispatch(setCpuModel(cpuModel));

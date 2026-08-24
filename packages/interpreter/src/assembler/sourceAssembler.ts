@@ -1,6 +1,11 @@
 import type { CpuDiagnostic } from '../core/execution';
 import { loadProgramSource, type ProgramLoadResult, type ProgramSource } from '../programLoader';
-import type { ProgramImage, ProgramSourceMapEntry } from './programImage';
+import {
+  createSegmentedProgramImage,
+  type ProgramImage,
+  type ProgramImageSegment,
+  type ProgramSourceMapEntry,
+} from './programImage';
 import { encodeSourceInstruction } from './sourceEncoder';
 
 export interface SourceAssemblyResult {
@@ -239,8 +244,37 @@ export function assembleLoadedProgram(loaded: ProgramLoadResult): SourceAssembly
     maximumAddress = Math.max(maximumAddress, cursor);
   }
 
-  const bytes = new Uint8Array(Math.max(0, maximumAddress - loadAddress));
-  for (const [address, value] of output) bytes[address - loadAddress] = value;
+  const segments: ProgramImageSegment[] = [];
+  let monotonic = true;
+  let previousAddress: number | undefined;
+  for (const address of output.keys()) {
+    if (previousAddress !== undefined && address < previousAddress) {
+      monotonic = false;
+      break;
+    }
+    previousAddress = address;
+  }
+  const orderedAddresses = monotonic
+    ? output.keys()
+    : [...output.keys()].sort((left, right) => left - right);
+  let segmentAddress: number | undefined;
+  let segmentEnd = 0;
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const address of orderedAddresses) {
+    if (segmentAddress === undefined || address !== segmentEnd) {
+      if (segmentAddress !== undefined) ranges.push({ start: segmentAddress, end: segmentEnd });
+      segmentAddress = address;
+    }
+    segmentEnd = address + 1;
+  }
+  if (segmentAddress !== undefined) ranges.push({ start: segmentAddress, end: segmentEnd });
+  for (const range of ranges) {
+    const bytes = new Uint8Array(range.end - range.start);
+    for (let address = range.start; address < range.end; address += 1) {
+      bytes[address - range.start] = output.get(address) ?? 0;
+    }
+    segments.push({ address: range.start, bytes });
+  }
   const entryPoint =
     loaded.entryLabel !== undefined
       ? (symbols[loaded.entryLabel.toLowerCase()] ?? loadAddress)
@@ -248,6 +282,6 @@ export function assembleLoadedProgram(loaded: ProgramLoadResult): SourceAssembly
   return {
     symbols,
     diagnostics,
-    image: { bytes, loadAddress, entryPoint, endAddress: maximumAddress, sourceMap },
+    image: createSegmentedProgramImage(segments, { entryPoint, sourceMap }),
   };
 }

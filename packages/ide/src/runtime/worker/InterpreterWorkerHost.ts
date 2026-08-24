@@ -661,6 +661,10 @@ export class InterpreterWorkerHost {
         vbr: snapshot.vbr ?? runtime.getVBR(),
         sfc: snapshot.sfc ?? runtime.getSFC(),
         dfc: snapshot.dfc ?? runtime.getDFC(),
+        isp: snapshot.isp ?? runtime.getISP(),
+        msp: snapshot.msp ?? runtime.getMSP(),
+        cacr: snapshot.cacr ?? runtime.getCACR(),
+        caar: snapshot.caar ?? runtime.getCAAR(),
         memory: snapshot.memoryMeta,
         terminal: snapshot.terminalMeta,
         lastInstruction: snapshot.lastInstruction ?? runtime.getLastInstruction(),
@@ -736,6 +740,10 @@ export class InterpreterWorkerHost {
       vbr: includeRegisters ? runtime.getVBR() : undefined,
       sfc: includeRegisters ? runtime.getSFC() : undefined,
       dfc: includeRegisters ? runtime.getDFC() : undefined,
+      isp: includeRegisters ? runtime.getISP() : undefined,
+      msp: includeRegisters ? runtime.getMSP() : undefined,
+      cacr: includeRegisters ? runtime.getCACR() : undefined,
+      caar: includeRegisters ? runtime.getCAAR() : undefined,
       memoryMeta:
         includeMemoryMeta && (plan.memoryChanged || forceFullSections)
           ? runtime.getMemoryMeta()

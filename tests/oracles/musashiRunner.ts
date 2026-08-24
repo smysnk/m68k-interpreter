@@ -30,7 +30,7 @@ export interface NormalizedOracleTrace {
 
 export type OracleEngine = 'musashi' | 'moira';
 
-export type OracleCpuModel = 'm68000' | 'm68010';
+export type OracleCpuModel = 'm68000' | 'm68010' | 'm68020';
 
 export function runMusashiStep(
   instructionBytes: Uint8Array,

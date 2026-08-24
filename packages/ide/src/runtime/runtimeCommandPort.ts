@@ -454,8 +454,10 @@ export class RuntimeCommandPort {
     const maximumInstructions = 1_000_000;
     for (let index = 0; index < maximumInstructions; index += 1) {
       const finished = runtime.emulationStep();
-      if (runtime.getDebugStop?.() || finished || runtime.isHalted() || runtime.getException()) return;
-      if (index > 0 && index % 2_000 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      if (runtime.getDebugStop?.() || finished || runtime.isHalted() || runtime.getException())
+        return;
+      if (index > 0 && index % 2_000 === 0)
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     runtime.pauseDebugger?.();
   }
@@ -527,7 +529,10 @@ export class RuntimeCommandPort {
     });
   }
 
-  setControlRegisterValue(register: 'vbr' | 'sfc' | 'dfc', value: number): Promise<void> {
+  setControlRegisterValue(
+    register: 'vbr' | 'sfc' | 'dfc' | 'isp' | 'msp' | 'cacr' | 'caar',
+    value: number
+  ): Promise<void> {
     return this.enqueue(async (runtime) => {
       if (runtime.controller) {
         await runtime.controller.requestSetControlRegisterValue(register, value);

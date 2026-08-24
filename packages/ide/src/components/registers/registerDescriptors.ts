@@ -1,4 +1,4 @@
-import type { Registers } from '@m68k/interpreter';
+import type { CpuModel, Registers } from '@m68k/interpreter';
 import type { RegisterBitWidth, RegisterDecimalMode } from './registerFormatting';
 
 export type RegisterGroupId = 'data' | 'address' | 'control';
@@ -18,7 +18,7 @@ export interface RegisterDescriptor {
   decimalMode: RegisterDecimalMode;
   editable: boolean;
   description?: string;
-  minimumCpuModel?: 'm68010';
+  minimumCpuModel?: Exclude<CpuModel, 'm68000'>;
 }
 
 export const REGISTER_GROUPS: readonly RegisterGroupDescriptor[] = [
@@ -181,6 +181,46 @@ export const REGISTER_DESCRIPTORS: readonly RegisterDescriptor[] = [
     editable: true,
     minimumCpuModel: 'm68010',
     description: 'Destination Function Code used by MOVES memory writes.',
+  },
+  {
+    key: 'isp',
+    label: 'ISP',
+    groupId: 'control',
+    bitWidth: 32,
+    decimalMode: 'unsigned',
+    editable: true,
+    minimumCpuModel: 'm68020',
+    description: 'Interrupt supervisor stack pointer.',
+  },
+  {
+    key: 'msp',
+    label: 'MSP',
+    groupId: 'control',
+    bitWidth: 32,
+    decimalMode: 'unsigned',
+    editable: true,
+    minimumCpuModel: 'm68020',
+    description: 'Master supervisor stack pointer.',
+  },
+  {
+    key: 'cacr',
+    label: 'CACR',
+    groupId: 'control',
+    bitWidth: 32,
+    decimalMode: 'unsigned',
+    editable: true,
+    minimumCpuModel: 'm68020',
+    description: 'Instruction cache control register.',
+  },
+  {
+    key: 'caar',
+    label: 'CAAR',
+    groupId: 'control',
+    bitWidth: 32,
+    decimalMode: 'unsigned',
+    editable: true,
+    minimumCpuModel: 'm68020',
+    description: 'Instruction cache address register.',
   },
 ] as const;
 

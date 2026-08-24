@@ -1,6 +1,6 @@
 {
   "title": "M68K Interpreter Help",
-  "subtitle": "Motorola 68000 and 68010 assembly quick start, Easy68K compatibility, hardware support, and known limitations.",
+  "subtitle": "Motorola 68000, 68010, and 68020 assembly quick start, Easy68K compatibility, hardware support, and known limitations.",
   "sections": [
     {
       "id": "workspace",
@@ -20,16 +20,17 @@
       "paragraphs": [
         "Select nibbles.asm from the file explorer, press Run, then use W A S D, arrow keys, or keypad 4 5 6 8. Press Enter to confirm menus.",
         "Reset clears the current emulator session and terminal so the loaded program can be launched again from a clean state.",
-        "The IDE composes a strict byte-addressed CPU model with an independent machine profile. The Easy68K machine layers terminal, trap, and trainer-board services onto either supported CPU."
+        "The IDE composes a strict byte-addressed CPU model with an independent machine profile. The Easy68K machine layers terminal, trap, and trainer-board services onto any supported CPU."
       ]
     },
     {
       "id": "compatibility",
-      "title": "MC68000 and MC68010 Support",
+      "title": "MC68000, MC68010, and MC68020 Support",
       "items": [
         "Assembler compatibility includes standalone labels, END with an entry label, EQU, DC.B/W/L, DS.B/W/L, and character immediates.",
-        "The strict core implements all 116 tracked MC68000 forms and all seven tracked MC68010-specific forms. Select either CPU independently of the machine profile.",
+        "The strict core implements all 116 tracked MC68000 forms, all seven tracked MC68010-specific forms, and all 40 tracked MC68020 integer and protocol forms. Select the CPU independently of the machine profile.",
         "MC68010 mode exposes VBR, SFC, and DFC, VBR-relative vectors, format-aware exception frames, and restartable bus and address faults.",
+        "MC68020 mode adds a 32-bit logical address space, full indexed addressing, three stack banks, cache controls, integer extensions, and generic coprocessor and module protocols.",
         "Canonical Easy68K compatibility includes terminal tasks 5, 6, 7, 9, and 11; graphics tasks 80 through 96; sound tasks 70 through 77; and environment task 33.",
         "Terminal rendering supports clear screen, cursor motion, carriage return, line feed, and ANSI SGR color and style sequences used by Nibbles.",
         "Memory-mapped Easy68K hardware includes independently addressable eight-byte seven-segment displays and digital I/O boards with shared switch and LED bytes, active-low buttons, and configurable 24-bit addresses.",
@@ -56,7 +57,8 @@
         "Easy68K sound file tasks operate on registered browser-safe assets rather than arbitrary host filesystem paths.",
         "Trainer board DUART routines are not implemented.",
         "Pin-level bus timing, arbitration, prefetch-stage attribution, and transparent loop-mode fetch suppression are outside the functionally complete CPU contract.",
-        "Audio completion follows the browser audio backend and is not modeled in CPU cycles."
+        "Audio completion follows the browser audio backend and is not modeled in CPU cycles.",
+        "MC68881 and MC68882 floating-point arithmetic and MC68851 page-table and MMU semantics are not included; MC68020 provides tested attachment and translation boundaries for them."
       ]
     }
   ]

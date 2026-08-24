@@ -83,6 +83,10 @@ export interface WorkerRuntimeSnapshot {
   vbr?: number;
   sfc?: number;
   dfc?: number;
+  isp?: number;
+  msp?: number;
+  cacr?: number;
+  caar?: number;
   memoryMeta?: MemoryMeta;
   memoryImage?: Record<number, number>;
   terminalMeta?: TerminalMeta;
@@ -142,7 +146,7 @@ export type InterpreterWorkerCommand =
   | {
       id: number;
       type: 'setControlRegisterValue';
-      register: 'vbr' | 'sfc' | 'dfc';
+      register: 'vbr' | 'sfc' | 'dfc' | 'isp' | 'msp' | 'cacr' | 'caar';
       value: number;
     }
   | { id: number; type: 'setUndoCaptureMode'; mode: UndoCaptureMode; checkpointInterval?: number }

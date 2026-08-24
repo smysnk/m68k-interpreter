@@ -1,4 +1,5 @@
 import type { Memory } from '../core/memory';
+import { createAddressSpacePolicy, type AddressSpacePolicy } from '../cpu/addressSpace';
 import {
   BusFault,
   type BusAccess,
@@ -9,27 +10,35 @@ import {
   busOperation,
 } from '../cpu/memoryBus';
 
-const ADDRESS_MASK = 0x00ff_ffff;
-
 export class MappedMemoryBus implements MemoryBus {
   private readonly transactionBytes = new Map<number, number>();
   private activeTransaction = 0;
   private nextTransaction = 1;
+  private readonly addressMask: number;
+  private readonly allowsUnalignedData: boolean;
 
   constructor(
     private readonly memory: Memory,
     private readonly devices: readonly MemoryMappedDevice[] = [],
     private readonly beforeRamWrite?: (address: number) => void,
+    addressSpace: AddressSpacePolicy = createAddressSpacePolicy('m68000'),
     private accessObserver?: (access: BusAccess) => void
-  ) {}
+  ) {
+    this.addressMask = addressSpace.mask;
+    this.allowsUnalignedData = addressSpace.allowsUnalignedData;
+  }
 
   setAccessObserver(observer: ((access: BusAccess) => void) | undefined): void {
     this.accessObserver = observer;
   }
 
   private normalize(address: number, access: BusAccessInput, size: 1 | 2 | 4): number {
-    const normalized = address & ADDRESS_MASK;
-    if (size > 1 && (normalized & 1) !== 0) {
+    const normalized = (address & this.addressMask) >>> 0;
+    if (
+      size > 1 &&
+      (normalized & 1) !== 0 &&
+      (busOperation(access, 'read') === 'fetch' || !this.allowsUnalignedData)
+    ) {
       const operation = busOperation(access, 'read');
       const functionCode = typeof access === 'string' ? undefined : access.functionCode;
       throw new BusFault(
@@ -131,6 +140,37 @@ export class MappedMemoryBus implements MemoryBus {
     this.writeByte(normalized + 2, value >>> 8);
     this.writeByte(normalized + 3, value);
     this.record(access, normalized, 4, value);
+  }
+
+  load(address: number, bytes: Uint8Array): void {
+    bytes.forEach((byte, offset) => this.write8(address + offset, byte));
+  }
+
+  readRange(address: number, length: number): Uint8Array {
+    return Uint8Array.from({ length }, (_, offset) => this.read8(address + offset));
+  }
+
+  atomicCompareExchange(
+    address: number,
+    size: 1 | 2 | 4,
+    expected: number,
+    replacement: number,
+    access: BusAccessInput = 'write'
+  ): { value: number; exchanged: boolean } {
+    const value =
+      size === 1
+        ? this.read8(address, access)
+        : size === 2
+          ? this.read16(address, access)
+          : this.read32(address, access);
+    const mask = size === 1 ? 0xff : size === 2 ? 0xffff : 0xffff_ffff;
+    const exchanged = (value & mask) === (expected & mask);
+    if (exchanged) {
+      if (size === 1) this.write8(address, replacement, access);
+      else if (size === 2) this.write16(address, replacement, access);
+      else this.write32(address, replacement, access);
+    }
+    return { value: value >>> 0, exchanged };
   }
 
   breakpointAcknowledge(): boolean {

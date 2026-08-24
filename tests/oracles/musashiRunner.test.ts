@@ -213,4 +213,44 @@ describe('pinned Musashi single-step runner', () => {
       }
     }
   });
+
+  it('matches both independent MC68020 cores for representative added families', () => {
+    const cases = [
+      { name: 'EXTB.L D0', bytes: [0x49, 0xc0], d: [0x1234_5680] },
+      { name: 'MULU.L D0,D1', bytes: [0x4c, 0x00, 0x10, 0x01], d: [3, 7] },
+      { name: 'PACK D0,D1,#0', bytes: [0x83, 0x40, 0x00, 0x00], d: [0x1234, 0x5566_7700] },
+      { name: 'BFEXTU D0{8:8},D1', bytes: [0xe9, 0xc0, 0x12, 0x08], d: [0x12ab_0000] },
+    ] as const;
+
+    for (const testCase of cases) {
+      const state = initialState();
+      testCase.d.forEach((value, index) => (state.d[index] = value));
+      const bytes = Uint8Array.from(testCase.bytes);
+      const musashi = runMusashiStep(bytes, state, 'm68020');
+      const moira = runMoiraStep(bytes, state, 'm68020');
+      expect(moira, testCase.name).toMatchObject({
+        d: musashi.d,
+        a: musashi.a,
+        pc: musashi.pc,
+        sr: musashi.sr,
+      });
+
+      const local = new StrictM68000Core({
+        cpuModel: 'm68020',
+        state: {
+          dataRegisters: state.d,
+          addressRegisters: state.a,
+          pc: state.pc,
+          sr: state.sr,
+        },
+      });
+      local.loadProgram(createProgramImage([{ bytes, line: 1 }], { origin: state.pc }));
+      expect(local.step(), testCase.name).toMatchObject({ kind: 'executed', pcAfter: musashi.pc });
+      expect(
+        Array.from(local.state.d, (value) => value >>> 0),
+        testCase.name
+      ).toEqual(musashi.d);
+      expect(local.state.sr, testCase.name).toBe(musashi.sr);
+    }
+  });
 });

@@ -1,9 +1,27 @@
-export type CpuModel = 'm68000' | 'm68010';
+export type CpuModel = 'm68000' | 'm68010' | 'm68020';
 export type MachineProfile = 'bare' | 'easy68k';
+export type ExecutionAccuracy = 'functional';
+
+export type CoprocessorId = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export interface CoprocessorAttachment {
+  id: CoprocessorId;
+  device: string;
+  stateVersion?: number;
+}
+
+export interface CoprocessorConfiguration {
+  slots: readonly CoprocessorAttachment[];
+}
 
 export interface EmulationConfig {
   cpuModel: CpuModel;
   machineProfile: MachineProfile;
+}
+
+export interface M68kSystemConfiguration extends EmulationConfig {
+  executionAccuracy: ExecutionAccuracy;
+  coprocessors: CoprocessorConfiguration;
 }
 
 /** @deprecated Use CpuModel and MachineProfile through EmulationConfig. */
@@ -24,12 +42,19 @@ export type EffectiveAddressClass =
   | 'absolute-long'
   | 'pc-displacement'
   | 'pc-indexed'
+  | 'full-indexed'
+  | 'memory-indirect-preindexed'
+  | 'memory-indirect-postindexed'
+  | 'pc-full-indexed'
+  | 'pc-memory-indirect-preindexed'
+  | 'pc-memory-indirect-postindexed'
   | 'immediate'
   | 'quick-immediate'
   | 'register-list'
   | 'condition-displacement'
   | 'trap-vector'
-  | 'control-register';
+  | 'control-register'
+  | 'coprocessor-register';
 
 export type StatusFlag = 'x' | 'n' | 'z' | 'v' | 'c';
 

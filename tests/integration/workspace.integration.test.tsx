@@ -51,13 +51,14 @@ describe('workspace integration', () => {
 
     expect(screen.queryByRole('tablist', { name: /workspace views/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('terminal-screen')).toBeInTheDocument();
+    expect(screen.getAllByTestId('assembly-editor')).toHaveLength(1);
 
     fireEvent.click(screen.getByRole('button', { name: /open app menu/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /^view$/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /add panel/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /add code panel/i }));
 
-    expect(screen.getByTestId('assembly-editor')).toBeInTheDocument();
+    expect(screen.getAllByTestId('assembly-editor')).toHaveLength(2);
 
     act(() => {
       ideStore.dispatch(

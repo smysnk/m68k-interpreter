@@ -20,6 +20,11 @@ export interface CpuFault {
   vector?: number;
   address?: number;
   source?: SourceSpan;
+  origin?:
+    | { kind: 'cpu' }
+    | { kind: 'machine-bus' }
+    | { kind: 'translator'; device?: string }
+    | { kind: 'coprocessor'; slot: number; device?: string };
 }
 
 export type StepResult =

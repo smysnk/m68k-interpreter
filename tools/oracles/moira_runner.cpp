@@ -121,9 +121,11 @@ int main(int argc, char **argv) {
     loadHex(cpu.memory, pc, argv[1]);
 
     const char *model = std::getenv("M68K_CPU_MODEL");
-    cpu.setModel(model != nullptr && std::strcmp(model, "m68010") == 0
-        ? Model::M68010
-        : Model::M68000);
+    cpu.setModel(model != nullptr && std::strcmp(model, "m68020") == 0
+        ? Model::M68020
+        : model != nullptr && std::strcmp(model, "m68010") == 0
+          ? Model::M68010
+          : Model::M68000);
     cpu.reset();
     for (int index = 0; index < 8; index += 1) {
         cpu.setD(index, parseU32(argv[4 + index]));

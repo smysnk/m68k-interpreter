@@ -43,7 +43,7 @@ function setLowWord(core: StrictM68000Core, register: number, value: number): vo
 function readNullTerminatedString(bus: MemoryBus, address: number, limit = 1024): string {
   let value = '';
   for (let offset = 0; offset < limit; offset += 1) {
-    const byte = bus.read8((address + offset) & 0x00ff_ffff);
+    const byte = bus.read8((address + offset) >>> 0);
     if (byte === 0) break;
     value += String.fromCharCode(byte);
   }
@@ -420,7 +420,7 @@ export class Easy68kTrapDispatcher {
         },
       };
     }
-    const pcAfter = (pcBefore + 2) & 0x00ff_ffff;
+    const pcAfter = context.core.normalizeAddress(pcBefore + 2);
     const outcome = service.execute(context);
     context.core.state.pc = pcAfter;
     if (outcome !== 'waiting') context.clearWaiting();

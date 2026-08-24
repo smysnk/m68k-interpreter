@@ -13,7 +13,7 @@ test.describe('compact source IDE directives', () => {
 
     await expect(page.locator('[data-source-ide-status]')).toHaveCount(0);
     await expect(page.locator('[data-panel-kind="terminal"]')).toHaveCount(1);
-    await expect(page.locator('[data-panel-kind="registers"]')).toHaveCount(0);
+    await expect(page.locator('[data-panel-kind="registers"]')).toHaveCount(1);
 
     await selectSource(page, 'graphics-sound-demo.asm');
     await expect(page.locator('[data-panel-kind="graphics"]')).toHaveCount(1);
@@ -47,6 +47,6 @@ test.describe('compact source IDE directives', () => {
     await expect(
       page.getByRole('button', { name: 'Reapply source configuration' })
     ).toHaveCount(0);
-    await expect(page.locator('[data-panel-kind="registers"]')).toHaveCount(0);
+    await expect(page.locator('[data-panel-kind="registers"]')).toHaveCount(1);
   });
 });

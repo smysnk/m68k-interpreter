@@ -71,6 +71,17 @@ describe('StatusBar', () => {
     ).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('selects MC68020 from the bottom status bar', async () => {
+    const user = userEvent.setup();
+    renderWithIdeProviders(<StatusBar />);
+    await user.click(screen.getByRole('button', { name: 'Emulation mode: MC68000 · Easy68K' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'MC68020' }));
+    expect(ideStore.getState().settings.cpuModel).toBe('m68020');
+    expect(
+      screen.getByRole('button', { name: 'Emulation mode: MC68020 · Easy68K' })
+    ).toBeInTheDocument();
+  });
+
   it('keeps the status bar focused on runtime info rather than program labels', () => {
     renderWithIdeProviders(<StatusBar />);
 

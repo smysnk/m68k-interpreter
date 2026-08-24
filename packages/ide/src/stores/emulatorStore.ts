@@ -154,7 +154,16 @@ function createActions(dispatch: AppDispatch) {
       const emulator = runtimeSessionStore.getSession();
       if (emulator && name in registerMap) {
         void runtimeCommandPort.setRegisterValue(registerMap[name], value);
-      } else if (emulator && (name === 'vbr' || name === 'sfc' || name === 'dfc')) {
+      } else if (
+        emulator &&
+        (name === 'vbr' ||
+          name === 'sfc' ||
+          name === 'dfc' ||
+          name === 'isp' ||
+          name === 'msp' ||
+          name === 'cacr' ||
+          name === 'caar')
+      ) {
         void runtimeCommandPort.setControlRegisterValue(name, value);
       }
       setRegister(name, value);

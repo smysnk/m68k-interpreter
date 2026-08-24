@@ -1,4 +1,5 @@
 import type { BranchCondition } from '../assembler/encoder';
+import type { CpuModel } from '../isa/types';
 import type { OperandSize } from './alu';
 
 export type DecodedBinaryInstruction =
@@ -18,7 +19,7 @@ export type DecodedBinaryInstruction =
     }
   | {
       kind: 'branch';
-      length: 2 | 4;
+      length: 2 | 4 | 6;
       opcode: number;
       condition: BranchCondition;
       displacement: number;
@@ -116,6 +117,7 @@ export type DecodedBinaryInstruction =
       opcode: number;
       register: number;
     }
+  | { kind: 'link-long'; length: 2; opcode: number; register: number }
   | { kind: 'unlk'; length: 2; opcode: number; register: number }
   | {
       kind: 'move-usp';
@@ -168,6 +170,75 @@ export type DecodedBinaryInstruction =
       length: 2;
       opcode: number;
       dataRegister: number;
+      size: 2 | 4;
+      mode: number;
+      register: number;
+    }
+  | { kind: 'extb'; length: 2; opcode: number; register: number }
+  | {
+      kind: 'trapcc';
+      length: 2 | 4 | 6;
+      opcode: number;
+      condition: number;
+      operandBytes: 0 | 2 | 4;
+    }
+  | {
+      kind: 'pack-unpk';
+      length: 2;
+      opcode: number;
+      operation: 'pack' | 'unpk';
+      memory: boolean;
+      sourceRegister: number;
+      destinationRegister: number;
+    }
+  | {
+      kind: 'bitfield';
+      length: 4;
+      opcode: number;
+      operation: 'bftst' | 'bfextu' | 'bfchg' | 'bfexts' | 'bfclr' | 'bfffo' | 'bfset' | 'bfins';
+      mode: number;
+      register: number;
+    }
+  | {
+      kind: 'cas';
+      length: 4;
+      opcode: number;
+      size: OperandSize;
+      mode: number;
+      register: number;
+    }
+  | { kind: 'cas2'; length: 6; opcode: number; size: 2 | 4 }
+  | {
+      kind: 'chk2-cmp2';
+      length: 4;
+      opcode: number;
+      size: OperandSize;
+      mode: number;
+      register: number;
+    }
+  | {
+      kind: 'long-multiply-divide';
+      length: 4;
+      opcode: number;
+      operation: 'multiply' | 'divide';
+      mode: number;
+      register: number;
+    }
+  | { kind: 'rtm'; length: 2; opcode: number; generalRegister: number }
+  | { kind: 'callm'; length: 4; opcode: number; mode: number; register: number }
+  | {
+      kind: 'coprocessor';
+      length: 4;
+      opcode: number;
+      coprocessorId: number;
+      operation:
+        | 'branch'
+        | 'decrement-branch'
+        | 'general'
+        | 'restore'
+        | 'save'
+        | 'set-condition'
+        | 'trap-condition';
       mode: number;
       register: number;
     }
@@ -333,6 +404,10 @@ function readWord(bytes: Uint8Array, offset: number): number {
   return (bytes[offset] << 8) | bytes[offset + 1];
 }
 
+function readLong(bytes: Uint8Array, offset: number): number {
+  return (readWord(bytes, offset) << 16) | readWord(bytes, offset + 2) | 0;
+}
+
 function signExtendByte(value: number): number {
   return (value << 24) >> 24;
 }
@@ -348,8 +423,157 @@ function decodeOperandSize(code: number): OperandSize | undefined {
   return undefined;
 }
 
-export function decodeBinaryInstruction(bytes: Uint8Array, offset = 0): DecodedBinaryInstruction {
+export function decodeBinaryInstruction(
+  bytes: Uint8Array,
+  offset = 0,
+  cpuModel: CpuModel = 'm68000'
+): DecodedBinaryInstruction {
   const opcode = readWord(bytes, offset);
+
+  if (cpuModel === 'm68020') {
+    if ((opcode & 0xfff8) === 0x4808) {
+      return { kind: 'link-long', length: 2, opcode, register: opcode & 0x7 };
+    }
+    if ((opcode & 0xfff8) === 0x49c0) {
+      return { kind: 'extb', length: 2, opcode, register: opcode & 0x7 };
+    }
+    if ((opcode & 0xfff0) === 0x06c0) {
+      return { kind: 'rtm', length: 2, opcode, generalRegister: opcode & 0xf };
+    }
+    if ((opcode & 0xffc0) === 0x06c0) {
+      return {
+        kind: 'callm',
+        length: 4,
+        opcode,
+        mode: (opcode >>> 3) & 0x7,
+        register: opcode & 0x7,
+      };
+    }
+    if (opcode === 0x0cfc || opcode === 0x0efc) {
+      return { kind: 'cas2', length: 6, opcode, size: opcode === 0x0cfc ? 2 : 4 };
+    }
+    for (const [base, size] of [
+      [0x0ac0, 1],
+      [0x0cc0, 2],
+      [0x0ec0, 4],
+    ] as const) {
+      if ((opcode & 0xffc0) === base) {
+        return {
+          kind: 'cas',
+          length: 4,
+          opcode,
+          size,
+          mode: (opcode >>> 3) & 7,
+          register: opcode & 7,
+        };
+      }
+    }
+    if ((opcode & 0xf8c0) === 0xe8c0) {
+      const operations = [
+        'bftst',
+        'bfextu',
+        'bfchg',
+        'bfexts',
+        'bfclr',
+        'bfffo',
+        'bfset',
+        'bfins',
+      ] as const;
+      return {
+        kind: 'bitfield',
+        length: 4,
+        opcode,
+        operation: operations[(opcode >>> 8) & 7],
+        mode: (opcode >>> 3) & 7,
+        register: opcode & 7,
+      };
+    }
+    for (const [base, operation, memory] of [
+      [0x8140, 'pack', false],
+      [0x8148, 'pack', true],
+      [0x8180, 'unpk', false],
+      [0x8188, 'unpk', true],
+    ] as const) {
+      if ((opcode & 0xf1f8) === base) {
+        return {
+          kind: 'pack-unpk',
+          length: 2,
+          opcode,
+          operation,
+          memory,
+          sourceRegister: opcode & 7,
+          destinationRegister: (opcode >>> 9) & 7,
+        };
+      }
+    }
+    if ((opcode & 0xf1c0) === 0x00c0) {
+      const sizeCode = (opcode >>> 9) & 3;
+      const size = sizeCode === 0 ? 1 : sizeCode === 1 ? 2 : sizeCode === 2 ? 4 : undefined;
+      if (size !== undefined)
+        return {
+          kind: 'chk2-cmp2',
+          length: 4,
+          opcode,
+          size,
+          mode: (opcode >>> 3) & 7,
+          register: opcode & 7,
+        };
+    }
+    if ((opcode & 0xffc0) === 0x4c00 || (opcode & 0xffc0) === 0x4c40) {
+      return {
+        kind: 'long-multiply-divide',
+        length: 4,
+        opcode,
+        operation: (opcode & 0x0040) === 0 ? 'multiply' : 'divide',
+        mode: (opcode >>> 3) & 7,
+        register: opcode & 7,
+      };
+    }
+    if (
+      (opcode & 0xf0ff) === 0x50fc ||
+      (opcode & 0xf0ff) === 0x50fa ||
+      (opcode & 0xf0ff) === 0x50fb
+    ) {
+      const suffix = opcode & 0xff;
+      const operandBytes = suffix === 0xfc ? 0 : suffix === 0xfa ? 2 : 4;
+      return {
+        kind: 'trapcc',
+        length: (2 + operandBytes) as 2 | 4 | 6,
+        opcode,
+        condition: (opcode >>> 8) & 0xf,
+        operandBytes,
+      };
+    }
+    if ((opcode & 0xf000) === 0xf000) {
+      const coprocessorId = (opcode >>> 9) & 7;
+      const group = (opcode >>> 6) & 7;
+      const operation =
+        group === 2
+          ? 'branch'
+          : group === 3
+            ? 'branch'
+            : group === 0
+              ? 'general'
+              : group === 5
+                ? 'restore'
+                : group === 4
+                  ? 'save'
+                  : (opcode & 0x0038) === 0x0038
+                    ? 'trap-condition'
+                    : (opcode & 0x0038) === 0x0008
+                      ? 'decrement-branch'
+                      : 'set-condition';
+      return {
+        kind: 'coprocessor',
+        length: 4,
+        opcode,
+        coprocessorId,
+        operation,
+        mode: (opcode >>> 3) & 7,
+        register: opcode & 7,
+      };
+    }
+  }
 
   switch (opcode) {
     case 0x4e71:
@@ -475,12 +699,13 @@ export function decodeBinaryInstruction(bytes: Uint8Array, offset = 0): DecodedB
     };
   }
 
-  if ((opcode & 0xf1c0) === 0x4180) {
+  if ((opcode & 0xf1c0) === 0x4180 || (cpuModel === 'm68020' && (opcode & 0xf1c0) === 0x4100)) {
     return {
       kind: 'chk',
       length: 2,
       opcode,
       dataRegister: (opcode >>> 9) & 0x7,
+      size: (opcode & 0x0080) !== 0 ? 2 : 4,
       mode: (opcode >>> 3) & 0x7,
       register: opcode & 0x7,
     };
@@ -704,6 +929,15 @@ export function decodeBinaryInstruction(bytes: Uint8Array, offset = 0): DecodedB
   if ((opcode & 0xf000) === 0x6000) {
     const condition = BRANCH_CONDITION[(opcode >>> 8) & 0x0f];
     const shortDisplacement = opcode & 0xff;
+    if (shortDisplacement === 0xff && cpuModel === 'm68020') {
+      return {
+        kind: 'branch',
+        length: 6,
+        opcode,
+        condition,
+        displacement: readLong(bytes, offset + 2),
+      };
+    }
     if (shortDisplacement === 0) {
       return {
         kind: 'branch',

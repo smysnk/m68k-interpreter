@@ -30,7 +30,7 @@ import {
 export type MemorySnapshot = MemoryBuffer;
 export type MemoryUndoPageEntry = MemoryBufferUndoPageEntry;
 
-const MAX_ADDRESS = 0x7fffffff;
+const MAX_ADDRESS = 0xffff_ffff;
 
 export class Memory {
   private readonly memoryBuffer: MemoryBuffer;
@@ -110,7 +110,7 @@ export class Memory {
     if (!this.isValidAddress(address + 3)) return 0;
 
     const byte3 = this.getByte(address + 3);
-    return (((byte0 << 24) | (byte1 << 16) | (byte2 << 8) | byte3) >>> 0);
+    return ((byte0 << 24) | (byte1 << 16) | (byte2 << 8) | byte3) >>> 0;
   }
 
   /**

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { encodeBranch, encodeIllegal, encodeMoveq, encodeNop, encodeTrap } from './encoder';
-import { createProgramImage, findProgramSource } from './programImage';
+import { createProgramImage, createSegmentedProgramImage, findProgramSource } from './programImage';
 import { decodeBinaryInstruction } from '../cpu/decoder';
 
 describe('ProgramImage and initial MC68000 encoder', () => {
@@ -54,5 +54,18 @@ describe('ProgramImage and initial MC68000 encoder', () => {
     expect(() => encodeMoveq(0, 128)).toThrow(RangeError);
     expect(() => encodeTrap(16)).toThrow(RangeError);
     expect(() => encodeBranch('bra', 0x8000)).toThrow(RangeError);
+  });
+
+  it('represents distant 32-bit sections without allocating the intervening span', () => {
+    const image = createSegmentedProgramImage(
+      [
+        { address: 0x1000, bytes: Uint8Array.of(0x4e, 0x71) },
+        { address: 0xf000_0000, bytes: Uint8Array.of(0x4e, 0x75) },
+      ],
+      { entryPoint: 0xf000_0000 }
+    );
+    expect(image.segments).toHaveLength(2);
+    expect(image.segments.reduce((sum, segment) => sum + segment.bytes.length, 0)).toBe(4);
+    expect(image.entryPoint).toBe(0xf000_0000);
   });
 });

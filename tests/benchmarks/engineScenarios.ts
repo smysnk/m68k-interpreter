@@ -155,6 +155,56 @@ START
   END START`;
 }
 
+function buildMc68020AddressAndAtomicProgram(): string {
+  return `ORG $1000
+TABLE DC.L 10,20,30,40
+TARGET DC.L $11223344
+POINTER DC.L TARGET
+ATOMIC DC.L 7
+BYTES DC.B 0,$AA,$BB,$CC,$DD
+START
+  LEA TABLE,A0
+  MOVEQ #1,D1
+  MOVE.L 0(A0,D1.L*4),D0
+  MOVE.L 256(A0,D1.L*2),D2
+  LEA POINTER,A0
+  CLR.L D1
+  MOVE.L ([0,A0,D1.L],0),D2
+  MOVE.L #$89ABCDEF,D3
+  BFEXTU D3{8:8},D4
+  LEA ATOMIC,A1
+  MOVEQ #7,D5
+  MOVEQ #9,D6
+  CAS.L D5,D6,(A1)
+  LEA BYTES,A2
+  MOVE.L 1(A2),D7
+  END START`;
+}
+
+function buildMc68020CacheProgram(iterations = 100): string {
+  const body = Array.from({ length: iterations }, () => '  NOP').join('\n');
+  return `ORG $80
+DC.L CACHE_HANDLER
+ORG $200
+CACHE_HANDLER
+  MOVEQ #1,D0
+  MOVEC D0,CACR
+  ORI.W #$2000,(A7)
+  RTE
+START
+  TRAP #0
+${body}
+  END START`;
+}
+
+function buildMc68020DistantSegmentsProgram(): string {
+  return `ORG $1000
+START NOP
+ORG $F0000000
+HIGH_DATA DC.L $12345678
+END START`;
+}
+
 export const ENGINE_BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
   {
     id: 'cold-load-generated-source',
@@ -259,6 +309,53 @@ export const ENGINE_BENCHMARK_SCENARIOS: BenchmarkScenario[] = [
       registers: { d3: 0x12345678 },
       symbols: { OUTPUT: 0x12345678 },
     },
+  },
+  {
+    id: 'mc68020-address-bitfield-atomic',
+    title: 'MC68020 Addressing, Bitfield, Atomic, And Unaligned Data',
+    description:
+      'Exercises scaled indexing, full and memory-indirect addressing, bitfields, CAS, and an unaligned longword read.',
+    program: buildMc68020AddressAndAtomicProgram(),
+    mode: 'load-and-run',
+    maxSteps: 100,
+    emulation: { cpuModel: 'm68020', machineProfile: 'bare' },
+    expectation: {
+      registers: { d0: 20, d2: 0x1122_3344, d4: 0xab, d7: -0x5544_3323 },
+      symbols: { ATOMIC: 9 },
+    },
+  },
+  {
+    id: 'tight-arithmetic-loop-m68020',
+    title: 'Tight Arithmetic Loop (MC68020)',
+    description: 'Measures MC68020 initialization and inherited hot-path execution.',
+    program: buildTightArithmeticLoopProgram(),
+    mode: 'load-and-run',
+    maxSteps: 5000,
+    emulation: { cpuModel: 'm68020', machineProfile: 'bare' },
+    expectation: {
+      registers: { d0: 100, d1: 300 },
+      symbols: { ITER: 100, ACC: 300 },
+    },
+  },
+  {
+    id: 'mc68020-cache-control',
+    title: 'MC68020 Functional Instruction Cache',
+    description: 'Measures cache-enabled execution and explicit CACR invalidation.',
+    program: buildMc68020CacheProgram(),
+    mode: 'load-and-run',
+    maxSteps: 200,
+    continueAfterArchitecturalException: true,
+    emulation: { cpuModel: 'm68020', machineProfile: 'bare' },
+    expectation: { registers: { d0: 1 } },
+  },
+  {
+    id: 'mc68020-distant-segments',
+    title: 'MC68020 Distant 32-bit Program Segments',
+    description: 'Measures sparse assembly and loading without allocating the intervening span.',
+    program: buildMc68020DistantSegmentsProgram(),
+    mode: 'load-only',
+    maxSteps: 0,
+    emulation: { cpuModel: 'm68020', machineProfile: 'bare' },
   },
 ];
 

@@ -53,12 +53,20 @@ heard—cannot be retracted. The bundled `debugger-loop.asm` example is a compac
 | --------------- | ------------: | :------: | :------: | :---: | :---------: |
 | MC68000 CPU     |           116 |    —     |    —     |   —   |      —      |
 | MC68010 CPU     |           123 |    —     |    —     |   —   |      —      |
+| MC68020 CPU     |           163 |    —     |    —     |   —   |      —      |
 | Bare machine    |             — |    —     |    —     |   —   |      —      |
 | Easy68K machine |             — |    5     |    17    |   8   |      ✓      |
 
 CPU and machine profiles are selected independently. Easy68K services use the canonical
 `TRAP #15` ABI: the task is in `D0.B`, execution resumes at `PC + 2`, and task `9`
 terminates a program. See [Easy68K compatibility and limitations](docs/EASY68K_SUBSET_AND_LIMITATIONS.md).
+
+MC68020 support is functional rather than cycle-accurate. It includes the integer architecture,
+all 18 effective-address categories, 32-bit sparse addressing, three stack banks, control/cache
+state, exception frames, and coprocessor absence behavior. MC68881/MC68882 floating-point
+arithmetic and MC68851 MMU semantics remain separate future profiles. See the generated
+[MC68020 inventory](docs/generated/MC68020_FUNCTIONAL_INVENTORY.md) and
+[execution report](docs/MC68020_FUNCTIONAL_CONFORMANCE_EXECUTION_REPORT.md).
 
 ## Runtime shape
 

@@ -1,4 +1,5 @@
 import type { Memory } from '../core/memory';
+import { createAddressSpacePolicy, type AddressSpacePolicy } from '../cpu/addressSpace';
 import type { StepResult } from '../core/execution';
 import type { BusAccess, MemoryBus, MemoryMappedDevice } from '../cpu/memoryBus';
 import {
@@ -15,7 +16,7 @@ import {
   type Easy68kSoundSnapshot,
 } from '../devices/easy68kSound';
 import { TerminalDevice } from '../devices/terminal';
-import type { MachineProfile } from '../isa/types';
+import type { CpuModel, MachineProfile } from '../isa/types';
 import { Easy68kTrapDispatcher, type Easy68kTrapContext } from './easy68kTrapServices';
 import { MappedMemoryBus } from './mappedMemoryBus';
 
@@ -54,6 +55,8 @@ export interface MachineAdapterOptions {
   mapHardware?: boolean;
   soundAssets?: readonly Easy68kSoundAsset[];
   beforeRamWrite?: (address: number) => void;
+  cpuModel?: CpuModel;
+  addressSpace?: AddressSpacePolicy;
 }
 
 class Easy68kHardwareMappedDevice implements MemoryMappedDevice<Easy68kHardwareOutputSnapshot> {
@@ -94,7 +97,12 @@ abstract class BaseMachineAdapter implements MachineAdapter {
     this.terminal = new TerminalDevice({ columns: options.columns, rows: options.rows });
     this.hardware = new Easy68kHardware(options.hardwareDevices ?? options.hardwareConfig);
     const devices = options.mapHardware ? [new Easy68kHardwareMappedDevice(this.hardware)] : [];
-    this.mappedBus = new MappedMemoryBus(memory, devices, options.beforeRamWrite);
+    this.mappedBus = new MappedMemoryBus(
+      memory,
+      devices,
+      options.beforeRamWrite,
+      options.addressSpace ?? createAddressSpacePolicy(options.cpuModel ?? 'm68000')
+    );
     this.bus = this.mappedBus;
   }
 
@@ -178,7 +186,7 @@ export class Easy68kMachineAdapter extends BaseMachineAdapter {
   }
 
   override validateInterruptVector(level: number, vectorBase = 0): string | undefined {
-    const vectorAddress = (vectorBase + getEasy68kInterruptVectorAddress(level)) & 0x00ff_ffff;
+    const vectorAddress = (vectorBase + getEasy68kInterruptVectorAddress(level)) >>> 0;
     return this.bus.read32(vectorAddress) === 0
       ? `Invalid or missing IRQ ${level} autovector at $${vectorAddress.toString(16).toUpperCase()}`
       : undefined;

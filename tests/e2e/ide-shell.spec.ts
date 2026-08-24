@@ -56,7 +56,18 @@ test.describe('browser e2e ide shell', () => {
       page.getByRole('button', { name: 'Emulation mode: MC68010 · Bare' })
     ).toBeVisible();
 
-    await selectMode('MC68010 · Bare', 'MC68000', 'MC68000 · Bare');
+    await selectMode('MC68010 · Bare', 'MC68020', 'MC68020 · Bare');
+    await selectMode('MC68020 · Bare', 'Easy68K', 'MC68020 · Easy68K');
+    await page.waitForFunction((storageKey) => {
+      const value = window.localStorage.getItem(storageKey) ?? '';
+      return value.includes('"cpuModel":"m68020"') && value.includes('"machineProfile":"easy68k"');
+    }, IDE_PERSISTENCE_KEY);
+    await page.reload();
+    await expect(
+      page.getByRole('button', { name: 'Emulation mode: MC68020 · Easy68K' })
+    ).toBeVisible();
+    await selectMode('MC68020 · Easy68K', 'MC68000', 'MC68000 · Easy68K');
+    await selectMode('MC68000 · Easy68K', 'Bare', 'MC68000 · Bare');
     await selectMode('MC68000 · Bare', 'Easy68K', 'MC68000 · Easy68K');
   });
 
