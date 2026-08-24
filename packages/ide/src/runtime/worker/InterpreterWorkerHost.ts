@@ -65,6 +65,7 @@ interface WorkerPublicationPlan {
   registersChanged: boolean;
   executionChanged: boolean;
   diagnosticsChanged: boolean;
+  debuggerChanged: boolean;
   memoryChanged: boolean;
   terminalChanged: boolean;
   hardwareChanged: boolean;
@@ -188,8 +189,20 @@ export class InterpreterWorkerHost {
           this.emitEvent(createReplyEvent(command.id, true));
           return;
         case 'pause':
-          this.requireEmulator().pauseDebugger();
-          this.stopExecutionLoop('paused');
+          this.stopExecutionLoop();
+          {
+            const emulator = this.requireEmulator();
+            const previousStop = emulator.getDebugStop();
+            const stop = emulator.pauseDebugger();
+            if (previousStop === undefined) {
+              this.publishFrame({
+                lastFrameInstructions: 0,
+                lastFrameDurationMs: 0,
+                lastStopReason: 'manual-pause',
+              });
+              this.emitEvent({ type: 'stopped', reason: 'paused', stop });
+            }
+          }
           this.emitEvent(createReplyEvent(command.id, true));
           return;
         case 'step':
@@ -759,7 +772,10 @@ export class InterpreterWorkerHost {
       symbols: plan.includeSymbols ? runtime.getSymbols() : undefined,
       syncVersions: plan.syncVersions,
       runtimeMetrics,
-      debugSnapshot: includeRuntimeState ? runtime.getDebugSnapshot() : undefined,
+      debugSnapshot:
+        includeRuntimeState && (plan.debuggerChanged || forceFullSections)
+          ? runtime.getDebugSnapshot()
+          : undefined,
     };
   }
 
@@ -781,6 +797,8 @@ export class InterpreterWorkerHost {
       diagnosticsChanged:
         previousSyncVersions === null ||
         previousSyncVersions.diagnostics !== syncVersions.diagnostics,
+      debuggerChanged:
+        previousSyncVersions === null || previousSyncVersions.debugger !== syncVersions.debugger,
       memoryChanged:
         previousSyncVersions === null || previousSyncVersions.memory !== syncVersions.memory,
       terminalChanged:
@@ -892,13 +910,15 @@ export class InterpreterWorkerHost {
     const hasException = Boolean(emulator.getException());
     const halted = emulator.isHalted() || finished;
     const waitingForInput = emulator.isWaitingForInput();
-    const stopReason = emulator.getDebugStop()?.reason ?? (waitingForInput
-      ? 'waiting-for-input'
-      : hasException
-        ? 'exception'
-        : halted
-          ? 'halted'
-          : 'manual_step');
+    const stopReason =
+      emulator.getDebugStop()?.reason ??
+      (waitingForInput
+        ? 'waiting-for-input'
+        : hasException
+          ? 'exception'
+          : halted
+            ? 'halted'
+            : 'manual_step');
 
     this.publishFrame({
       lastFrameInstructions: 1,

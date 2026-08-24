@@ -41,6 +41,7 @@ import { easy68kAudioHost } from '@/runtime/easy68kAudioHost';
 import { DEFAULT_EASY68K_SOUND_ASSETS } from '@/runtime/defaultSoundAssets';
 import { loadPersistedEasy68kSoundAssets } from '@/runtime/easy68kSoundAssetManifest';
 import { executionCoordinator } from '@/runtime/executionCoordinator';
+import { recordDebuggerSnapshotDispatch } from '@/runtime/idePerformanceTelemetry';
 import { syncRuntimeGeometryBridge } from '@/runtime/terminalProgramBridge';
 import { buildRuntimeLoadRequest } from '@/runtime/useRuntimeConfiguration';
 import { subscribeToCurrentRuntimeFrames } from '@/runtime/useRuntimeFrameSubscription';
@@ -259,6 +260,7 @@ export const useEmulatorEvents = () => {
   const handleResetRef = useRef<() => void>(() => undefined);
   const previousEmulationRef = useRef(`${cpuModel}:${machineProfile}`);
   const lastRegisterSyncAtRef = useRef<number>(0);
+  const lastDebugSnapshotVersionRef = useRef<number | null>(null);
   const currentRegistersRef = useRef(currentRegisters);
   const currentFlagsRef = useRef(currentFlags);
   const pendingRunUntilGeometryRef = useRef(false);
@@ -351,9 +353,29 @@ export const useEmulatorEvents = () => {
         publishMemorySurface: workspaceTabRef.current === 'memory',
         suppressRegisterSync: !shouldSyncRegisters,
       });
-      const debugSnapshot = emulator.getDebugSnapshot?.();
+      syncDebuggerSnapshotFromRuntime(emulator);
+    };
+
+    const syncDebuggerSnapshotFromRuntime = (
+      emulator: IdeRuntimeSession,
+      providedSnapshot?: ReturnType<NonNullable<IdeRuntimeSession['getDebugSnapshot']>>
+    ): void => {
+      const publishedVersion = emulator.getRuntimeSyncVersions?.()?.debugger;
+      if (
+        publishedVersion !== undefined &&
+        lastDebugSnapshotVersionRef.current === publishedVersion
+      ) {
+        return;
+      }
+      const debugSnapshot = providedSnapshot ?? emulator.getDebugSnapshot?.();
       if (debugSnapshot) {
+        lastDebugSnapshotVersionRef.current =
+          emulator.getRuntimeSyncVersions?.()?.debugger ?? publishedVersion ?? null;
         dispatch(syncDebugSnapshot(debugSnapshot));
+        recordDebuggerSnapshotDispatch({
+          snapshot: debugSnapshot,
+          manualPause: debugSnapshot.stop?.reason === 'manual-pause',
+        });
         if (debugSnapshot.stop) {
           dispatch(
             captureDebuggerStopRegisters({
@@ -578,6 +600,7 @@ export const useEmulatorEvents = () => {
       const workerController = getWorkerController(emulator);
       emulatorRef.current = emulator;
       frameSyncCacheRef.current = createRuntimeFrameSyncCache();
+      lastDebugSnapshotVersionRef.current = null;
       publishRuntimeSession(emulator, dispatch);
 
       if (workerController?.subscribeEvents) {
@@ -600,15 +623,7 @@ export const useEmulatorEvents = () => {
                 }
               );
               if (event.snapshot.debugSnapshot) {
-                dispatch(syncDebugSnapshot(event.snapshot.debugSnapshot));
-                if (event.snapshot.debugSnapshot.stop) {
-                  dispatch(
-                    captureDebuggerStopRegisters({
-                      stop: event.snapshot.debugSnapshot.stop,
-                      registers: ideStore.getState().emulator.registers,
-                    })
-                  );
-                }
+                syncDebuggerSnapshotFromRuntime(emulator, event.snapshot.debugSnapshot);
               }
               return;
             }

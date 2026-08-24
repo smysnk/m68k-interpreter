@@ -111,6 +111,8 @@ function collectDirtyRows(frameBuffer: TerminalFrameBuffer): number[] {
 
 class TerminalSurfaceStore {
   private readonly listeners = new Set<Listener>();
+  private notificationFrame: number | null = null;
+  private pendingSnapshot: TerminalSurfaceSnapshot | null = null;
   private readonly fallbackFrameBuffer = createTerminalFrameBuffer();
   private snapshot: TerminalSurfaceSnapshot = {
     frameBuffer: this.fallbackFrameBuffer,
@@ -130,11 +132,11 @@ class TerminalSurfaceStore {
   getServerSnapshot = (): TerminalSurfaceSnapshot => this.snapshot;
 
   publishFrame(frameBuffer: TerminalFrameBuffer, meta: TerminalMeta): void {
-    this.publish(frameBuffer, meta);
+    this.publish(frameBuffer, meta, true);
   }
 
   replaceFromRuntime(runtime: TerminalSurfaceRuntime): void {
-    this.publishFrame(runtime.getTerminalFrameBuffer(), runtime.getTerminalMeta());
+    this.publish(runtime.getTerminalFrameBuffer(), runtime.getTerminalMeta());
   }
 
   replaceFromSnapshot(snapshot: TerminalSnapshot): void {
@@ -172,20 +174,53 @@ class TerminalSurfaceStore {
     return readTerminalFrameBufferText(this.snapshot.frameBuffer);
   }
 
-  private publish(frameBuffer: TerminalFrameBuffer, meta: TerminalMeta): void {
+  private publish(frameBuffer: TerminalFrameBuffer, meta: TerminalMeta, defer = false): void {
     const dirtyRows = collectDirtyRows(frameBuffer);
+    const comparisonSnapshot = this.pendingSnapshot ?? this.snapshot;
 
     if (
-      this.snapshot.frameBuffer === frameBuffer &&
-      terminalMetaEquals(this.snapshot.meta, meta) &&
+      comparisonSnapshot.frameBuffer === frameBuffer &&
+      terminalMetaEquals(comparisonSnapshot.meta, meta) &&
       dirtyRows.length === 0
     ) {
       return;
     }
 
+    if (
+      defer &&
+      typeof window !== 'undefined' &&
+      typeof window.requestAnimationFrame === 'function'
+    ) {
+      const mergedDirtyRows = this.pendingSnapshot
+        ? [...new Set([...this.pendingSnapshot.dirtyRows, ...dirtyRows])].sort(
+            (left, right) => left - right
+          )
+        : dirtyRows;
+      this.pendingSnapshot = { frameBuffer, meta, dirtyRows: mergedDirtyRows };
+      clearTerminalFrameBufferDirtyRows(frameBuffer);
+      if (this.notificationFrame === null) {
+        this.notificationFrame = window.requestAnimationFrame(() => {
+          this.notificationFrame = null;
+          if (!this.pendingSnapshot) return;
+          this.snapshot = this.pendingSnapshot;
+          this.pendingSnapshot = null;
+          this.notify();
+        });
+      }
+      return;
+    }
+
+    if (this.notificationFrame !== null && typeof window !== 'undefined') {
+      window.cancelAnimationFrame(this.notificationFrame);
+      this.notificationFrame = null;
+    }
+    this.pendingSnapshot = null;
     this.snapshot = { frameBuffer, meta, dirtyRows };
     clearTerminalFrameBufferDirtyRows(frameBuffer);
+    this.notify();
+  }
 
+  private notify(): void {
     for (const listener of this.listeners) {
       listener();
     }

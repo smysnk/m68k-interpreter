@@ -192,6 +192,46 @@ describe('InterpreterWorkerHost', () => {
     expect(stepStop?.type === 'stopped' ? stepStop.stop?.pc : undefined).not.toBe(breakpointPc);
   });
 
+  it('publishes one complete manual-pause frame before the stopped event and reply', async () => {
+    const events: InterpreterWorkerEvent[] = [];
+    const host = new InterpreterWorkerHost((event) => events.push(event));
+    await host.handleCommand(loadProgramCommand(1, DEBUG_LOOP_SOURCE));
+    await host.handleCommand({
+      id: 2,
+      type: 'configureDebugger',
+      configuration: { breakpoints: [] },
+    });
+    await host.handleCommand({
+      id: 3,
+      type: 'run',
+      config: { delayMs: 10, speedMultiplier: 1, frameBudgetMs: 1 },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    const continuousFrame = getLastFrameEvent(events);
+    expect(continuousFrame.snapshot.debugSnapshot?.status).toBe('running');
+    events.length = 0;
+    await vi.advanceTimersByTimeAsync(10);
+    expect(getLastFrameEvent(events).snapshot.debugSnapshot).toBeUndefined();
+
+    events.length = 0;
+    await host.handleCommand({ id: 4, type: 'pause' });
+    expect(events.map((event) => event.type)).toEqual(['frame', 'stopped', 'reply']);
+    const pauseFrame = getLastFrameEvent(events);
+    expect(pauseFrame.snapshot.debugSnapshot).toMatchObject({
+      status: 'paused',
+      stop: {
+        reason: 'manual-pause',
+        source: { fileId: 'worker-test.asm' },
+      },
+    });
+    expect(pauseFrame.snapshot.runtimeMetrics?.lastStopReason).toBe('manual-pause');
+
+    events.length = 0;
+    await host.handleCommand({ id: 5, type: 'pause' });
+    expect(events).toEqual([{ type: 'reply', id: 5, ok: true, payload: undefined }]);
+  });
+
   it('publishes compact hardware-only frames for panel input and configuration commands', async () => {
     const events: InterpreterWorkerEvent[] = [];
     const host = new InterpreterWorkerHost((event) => events.push(event));
@@ -382,8 +422,8 @@ describe('InterpreterWorkerHost', () => {
       ok: true,
       payload: {
         halted: false,
-      waitingForInput: true,
-      debugStop: { reason: 'waiting-for-input' },
+        waitingForInput: true,
+        debugStop: { reason: 'waiting-for-input' },
         exception: null,
       },
     });
@@ -534,6 +574,36 @@ describe('InterpreterWorkerHost', () => {
     expect(snapshot.waitingForInput).toBe(true);
     expect(snapshot.runtimeMetrics?.lastStopReason).toBe('waiting-for-input');
     expect(getStoppedReasons(events)).toContain('waiting-for-input');
+  });
+
+  it('preserves a worker input wait during debugger attachment and steps after one input', async () => {
+    const events: InterpreterWorkerEvent[] = [];
+    const host = new InterpreterWorkerHost((event) => {
+      events.push(event);
+    });
+
+    await host.handleCommand({ id: 1, type: 'init' });
+    await host.handleCommand(loadProgramCommand(2, WAIT_FOR_INPUT_SOURCE));
+    await host.handleCommand({
+      id: 3,
+      type: 'run',
+      config: { delayMs: 0, speedMultiplier: 1, frameBudgetMs: 20 },
+    });
+    await vi.runAllTimersAsync();
+
+    events.length = 0;
+    await host.handleCommand({ id: 4, type: 'pause' });
+    expect(getStoppedReasons(events)).toEqual([]);
+    expect(events.at(-1)).toMatchObject({ type: 'reply', id: 4, ok: true });
+
+    await host.handleCommand({ id: 5, type: 'queueInput', input: 'w' });
+    await host.handleCommand({ id: 6, type: 'step' });
+
+    const snapshot = getLastFrameSnapshot(events);
+    expect(snapshot.waitingForInput).toBe(false);
+    expect(snapshot.debugSnapshot?.stop).toMatchObject({ reason: 'step-complete' });
+    expect(snapshot.runtimeMetrics?.lastStopReason).toBe('step-complete');
+    expect(getStoppedReasons(events)).toContain('step-complete');
   });
 
   it('propagates runtime exceptions through the committed worker frame', async () => {

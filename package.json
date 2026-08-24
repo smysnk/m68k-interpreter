@@ -38,6 +38,7 @@
     "test:performance:multimedia:test-station": "tsx ./tests/benchmarks/emitEasy68kMultimediaBenchmarkSuite.ts",
     "test:performance:browser:test-station": "tsx ./tests/benchmarks/emitNibblesBrowserBenchmarkSuite.ts",
     "test:performance:debugger:test-station": "tsx ./tests/benchmarks/emitDebuggerBenchmarkSuite.ts",
+    "test:performance:debugger-browser:test-station": "tsx ./tests/benchmarks/emitDebuggerBrowserBenchmarkSuite.ts",
     "profile:ide-runtime": "tsx ./scripts/profile-ide-runtime-summary.ts",
     "profile:ide-runtime:json": "tsx ./scripts/profile-ide-runtime-summary.ts --json",
     "profile:m68000:final": "tsx ./scripts/capture-m68000-performance.ts",

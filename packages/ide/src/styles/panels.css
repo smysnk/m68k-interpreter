@@ -132,6 +132,7 @@
   margin-left: auto;
 }
 .code-debugger-header-controls {
+  --debugger-command-rail-width: 140px;
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -144,6 +145,39 @@
   background: color-mix(in srgb, var(--ide-surface-strong) 92%, transparent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-color) 5%, transparent);
 }
+.code-debugger-header-controls[data-compact='true'] {
+  --debugger-command-rail-width: 84px;
+}
+.code-debugger-pause-button {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  justify-content: center;
+  min-width: 66px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ide-text-muted);
+  cursor: pointer;
+  font: 800 9px/1 var(--font-monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.code-debugger-pause-button:hover:not(:disabled),
+.code-debugger-pause-button:focus-visible {
+  background: color-mix(in srgb, var(--ide-accent) 15%, transparent);
+  color: var(--text-color);
+  outline: none;
+}
+.code-debugger-pause-button:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--ide-accent);
+}
+.code-debugger-pause-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
 .code-debugger-header-label {
   display: inline-flex;
   align-items: center;
@@ -155,6 +189,33 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   white-space: nowrap;
+}
+.code-debugger-command-rail {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  transition: width 150ms ease-in;
+}
+.code-debugger-header-controls[data-expanded='true'] .code-debugger-command-rail {
+  width: var(--debugger-command-rail-width);
+  transition-duration: 190ms;
+  transition-timing-function: ease-out;
+}
+.code-debugger-command-rail-inner {
+  display: inline-flex;
+  width: var(--debugger-command-rail-width);
+  opacity: 0;
+  transform: translateX(-8px);
+  transition:
+    opacity 100ms ease-in,
+    transform 150ms ease-in;
+}
+.code-debugger-header-controls[data-expanded='true'] .code-debugger-command-rail-inner {
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity 130ms 35ms ease-out,
+    transform 190ms ease-out;
 }
 .code-debugger-header-button {
   display: inline-flex;
@@ -500,6 +561,8 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .code-debugger-command-rail,
+  .code-debugger-command-rail-inner,
   .panel-dock-zone,
   .empty-panel-column {
     transition: none;

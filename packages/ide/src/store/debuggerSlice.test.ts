@@ -4,6 +4,7 @@ import reducer, {
   initialDebuggerState,
   markDebugSourceStale,
   markDebugSourceSynchronized,
+  resetDebugSession,
   syncDebugSnapshot,
   upsertBreakpoint,
 } from './debuggerSlice';
@@ -57,5 +58,57 @@ describe('debuggerSlice', () => {
     expect(synchronized.sourceStale).toBe(false);
     expect(synchronized.configuration.breakpoints[0]).not.toHaveProperty('addresses');
     expect(synchronized.snapshot.breakpoints[0]?.hitCount).toBe(1);
+  });
+
+  it.fails('tracks a waiting inspection as shared serializable debugger UI state', () => {
+    const waiting = reducer(
+      initialDebuggerState,
+      syncDebugSnapshot({
+        status: 'waiting',
+        stop: { reason: 'waiting-for-input', pc: 0x1006 },
+        breakpoints: [],
+        watchpoints: [],
+        watches: [],
+        callStack: [],
+        logs: [],
+      })
+    );
+    const inspecting = reducer(waiting, { type: 'debugger/startWaitingInspection' });
+
+    expect(inspecting as unknown).toMatchObject({ waitingInspectionActive: true });
+  });
+
+  it.fails('clears waiting inspection on resume, source replacement, halt, and reset', () => {
+    const beginInspection = () =>
+      reducer(initialDebuggerState, { type: 'debugger/startWaitingInspection' });
+    const running = reducer(
+      beginInspection(),
+      syncDebugSnapshot({
+        status: 'running',
+        breakpoints: [],
+        watchpoints: [],
+        watches: [],
+        callStack: [],
+        logs: [],
+      })
+    );
+    const sourceReplaced = reducer(beginInspection(), markDebugSourceStale());
+    const halted = reducer(
+      beginInspection(),
+      syncDebugSnapshot({
+        status: 'halted',
+        stop: { reason: 'completed', pc: 0x1010 },
+        breakpoints: [],
+        watchpoints: [],
+        watches: [],
+        callStack: [],
+        logs: [],
+      })
+    );
+    const reset = reducer(beginInspection(), resetDebugSession());
+
+    for (const state of [running, sourceReplaced, halted, reset]) {
+      expect(state as unknown).toMatchObject({ waitingInspectionActive: false });
+    }
   });
 });

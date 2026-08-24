@@ -151,6 +151,9 @@ function IdePerformanceProbe(): React.ReactElement | null {
       data-ide-perf-enabled={enabled ? 'true' : 'false'}
       data-ide-test-controls-ready={controlsReady ? 'true' : 'false'}
       data-worker-frame-events={snapshot.workerTransport.frameEventsReceived}
+      data-debugger-snapshot-dispatches={snapshot.debuggerSurface.snapshotDispatchCount}
+      data-debugger-pause-snapshots={snapshot.debuggerSurface.pauseSnapshotCount}
+      data-debugger-pause-latency={snapshot.debuggerSurface.lastPauseToSnapshotLatencyMs}
       data-terminal-repaints={snapshot.terminalRepaint.repaintCount}
       data-touch-dispatches={snapshot.touchLatency.dispatchCount}
       data-touch-visuals={snapshot.touchLatency.visualLatencyCount}

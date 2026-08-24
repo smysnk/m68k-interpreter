@@ -10,7 +10,7 @@ describe('syncRuntimeFrameToIde', () => {
     terminalSurfaceStore.reset();
   });
 
-  it('publishes the runtime frame buffer, memory runtime, and syncs only metadata to Redux', () => {
+  it('publishes the runtime frame buffer, memory runtime, and syncs only metadata to Redux', async () => {
     const frameBuffer = createTerminalFrameBuffer(4, 1);
     frameBuffer.charBytes.set([...'TEST'].map((char) => char.charCodeAt(0)));
     frameBuffer.dirtyRowFlags[0] = 1;
@@ -145,6 +145,7 @@ describe('syncRuntimeFrameToIde', () => {
         },
       })
     );
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(terminalSurfaceStore.getSnapshot().frameBuffer).toBe(frameBuffer);
     expect(terminalSurfaceStore.getSnapshot().meta).toEqual(terminalMeta);
     expect(terminalSurfaceStore.getText()).toBe('TEST');

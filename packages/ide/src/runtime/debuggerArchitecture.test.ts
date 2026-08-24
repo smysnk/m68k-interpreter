@@ -41,4 +41,10 @@ describe('debugger architecture boundaries', () => {
     expect(hook).toContain('runtimeLifecycleCommandPort');
     expect(hook).toContain('runtimeDeviceCommandPort');
   });
+
+  it('does not make runtime synchronization effects depend on resolved debugger session state', () => {
+    const hook = readFileSync(join(ideSourceRoot, 'hooks/useEmulatorEvents.ts'), 'utf8');
+    expect(hook).not.toMatch(/state\.debugger\.snapshot/);
+    expect(hook).toContain('state.debugger.configuration');
+  });
 });

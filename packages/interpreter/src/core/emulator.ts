@@ -1,11 +1,7 @@
 import { assembleLoadedProgram } from '../assembler/sourceAssembler';
 import type { ProgramImage, ProgramSourceMapEntry } from '../assembler/programImage';
 import { DebugSession } from '../debugger/debugSession';
-import type {
-  DebuggerConfiguration,
-  DebugSnapshot,
-  DebugStop,
-} from '../debugger/types';
+import type { DebuggerConfiguration, DebugSnapshot, DebugStop } from '../debugger/types';
 import type { BusAccess } from '../cpu/memoryBus';
 import { StrictM68000Core } from '../cpu/core';
 import type { CpuDiagnostic, CpuFault, StepResult } from './execution';
@@ -320,7 +316,13 @@ export class Emulator {
         core.state.pc = handlerAddress;
         this.waitingForInput = false;
         this.updateExecutionMetadata(pcBefore);
-        return { kind: 'executed', pcBefore, pcAfter: handlerAddress, cycles: 44, transition: 'interrupt' };
+        return {
+          kind: 'executed',
+          pcBefore,
+          pcAfter: handlerAddress,
+          cycles: 44,
+          transition: 'interrupt',
+        };
       }
 
       if (this.machine.id === 'easy68k' && this.waitingForInput) {
@@ -360,7 +362,13 @@ export class Emulator {
           : this.machine.handleTrap(this.machineTrapContext)) ?? core.step();
       const result: StepResult =
         rawResult.kind === 'exception' && rawResult.fault.code === 'interrupt'
-          ? { kind: 'executed', pcBefore, pcAfter: rawResult.pc, cycles: 44, transition: 'interrupt' }
+          ? {
+              kind: 'executed',
+              pcBefore,
+              pcAfter: rawResult.pc,
+              cycles: 44,
+              transition: 'interrupt',
+            }
           : rawResult;
       this.lastStrictFault = result.kind === 'exception' ? result.fault : undefined;
       this.exception = result.kind === 'exception' ? result.fault.message : undefined;
@@ -552,6 +560,7 @@ export class Emulator {
       registers: this.registerSyncVersion,
       execution: this.executionSyncVersion,
       diagnostics: this.diagnosticsSyncVersion,
+      debugger: this.debugSession.getRevision(),
       memory: this.memory.getMemoryVersion(),
       terminal: terminalMeta.version,
       terminalGeometry: terminalMeta.geometryVersion,

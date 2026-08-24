@@ -62,6 +62,7 @@ export class DebugSession {
   private breakOnException = false;
   private breakOnInterrupt = false;
   private nextFrameId = 1;
+  private revision = 1;
 
   loadProgram(
     image: ProgramImage,
@@ -91,6 +92,7 @@ export class DebugSession {
     this.stop = undefined;
     this.status = 'idle';
     this.resolveBreakpoints();
+    this.touch();
   }
 
   configure(configuration: DebuggerConfiguration): void {
@@ -106,6 +108,7 @@ export class DebugSession {
     this.breakOnException = configuration.breakOnException === true;
     this.breakOnInterrupt = configuration.breakOnInterrupt === true;
     this.resolveBreakpoints();
+    this.touch();
   }
 
   private resolveBreakpoints(): void {
@@ -155,6 +158,7 @@ export class DebugSession {
     this.stop = undefined;
     this.status = 'running';
     this.runMode = { kind: 'continue' };
+    this.touch();
   }
 
   beginStepInto(host: DebugSessionHost): void {
@@ -162,6 +166,7 @@ export class DebugSession {
     this.stop = undefined;
     this.status = 'running';
     this.runMode = { kind: 'step-into', startPc: host.getPC() };
+    this.touch();
   }
 
   beginStepOver(host: DebugSessionHost): boolean {
@@ -180,6 +185,7 @@ export class DebugSession {
       startDepth: this.callStack.length,
       fallthrough: (pc + entry.length) & ADDRESS_MASK,
     };
+    this.touch();
     return true;
   }
 
@@ -189,6 +195,7 @@ export class DebugSession {
     this.stop = undefined;
     this.status = 'running';
     this.runMode = { kind: 'step-out', targetDepth: this.callStack.length - 1 };
+    this.touch();
     return true;
   }
 
@@ -197,9 +204,11 @@ export class DebugSession {
     this.stop = undefined;
     this.status = 'running';
     this.runMode = { kind: 'run-to', address: address & ADDRESS_MASK };
+    this.touch();
   }
 
   pause(host: DebugSessionHost): DebugStop {
+    if (this.stop) return cloneStop(this.stop)!;
     return this.setStop({
       reason: 'manual-pause',
       pc: host.getPC(),
@@ -289,6 +298,7 @@ export class DebugSession {
         });
       }
       this.status = 'faulted';
+      this.touch();
       return undefined;
     }
     if (result.kind === 'waiting')
@@ -326,10 +336,13 @@ export class DebugSession {
   }
 
   clearStop(): void {
+    const changed =
+      this.stop !== undefined || this.status !== 'idle' || this.runMode.kind !== 'continue';
     this.stop = undefined;
     this.status = 'idle';
     this.runMode = { kind: 'continue' };
     this.suppression = undefined;
+    if (changed) this.touch();
   }
 
   resumeMachineWait(): void {
@@ -337,10 +350,13 @@ export class DebugSession {
     this.stop = undefined;
     this.status = 'running';
     this.runMode = { kind: 'continue' };
+    this.touch();
   }
 
   invalidateCallStack(): void {
+    if (this.callStack.length === 0) return;
     this.callStack = [];
+    this.touch();
   }
 
   hasWatchpoints(): boolean {
@@ -349,6 +365,10 @@ export class DebugSession {
 
   getStop(): DebugStop | undefined {
     return cloneStop(this.stop);
+  }
+
+  getRevision(): number {
+    return this.revision;
   }
 
   getSnapshot(host?: DebugSessionHost): DebugSnapshot {
@@ -376,13 +396,26 @@ export class DebugSession {
 
   private evaluateWatches(host: DebugSessionHost): void {
     const context = this.expressionContext(host);
-    this.watchValues = (this.watches ?? []).map((watch) => {
+    const nextValues: DebugSnapshot['watches'] = (this.watches ?? []).map((watch) => {
       try {
         return { ...watch, value: evaluateDebuggerExpression(watch.expression, context) };
       } catch (error) {
         return { ...watch, diagnostic: error instanceof Error ? error.message : String(error) };
       }
     });
+    const changed =
+      nextValues.length !== this.watchValues.length ||
+      nextValues.some((value, index) => {
+        const previous = this.watchValues[index];
+        return (
+          previous?.id !== value.id ||
+          previous.expression !== value.expression ||
+          previous.value !== value.value ||
+          previous.diagnostic !== value.diagnostic
+        );
+      });
+    this.watchValues = nextValues;
+    if (changed) this.touch();
   }
 
   private expressionContext(host: DebugSessionHost): DebuggerExpressionContext {
@@ -520,6 +553,7 @@ export class DebugSession {
             ? 'faulted'
             : 'paused';
     this.runMode = { kind: 'continue' };
+    this.touch();
     return stop;
   }
   private hitConditionMatches(breakpoint: ResolvedDebugBreakpoint): boolean {
@@ -542,10 +576,15 @@ export class DebugSession {
   private appendLog(message: string): void {
     this.logs.push(message.slice(0, 1_024));
     if (this.logs.length > MAX_DEBUG_LOGS) this.logs.splice(0, this.logs.length - MAX_DEBUG_LOGS);
+    this.touch();
   }
   private suppressCurrentBreakpoint(): void {
     if (this.stop?.reason === 'breakpoint' && this.stop.breakpointId) {
       this.suppression = { breakpointId: this.stop.breakpointId, address: this.stop.pc };
     }
+  }
+
+  private touch(): void {
+    this.revision += 1;
   }
 }

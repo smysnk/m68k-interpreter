@@ -58,6 +58,7 @@ export interface RuntimeSyncVersions {
   registers: number;
   execution: number;
   diagnostics: number;
+  debugger?: number;
   memory: number;
   terminal: number;
   terminalGeometry: number;

@@ -43,8 +43,12 @@ const Navbar: React.FC<NavbarProps> = ({ fileExplorerOpen, onToggleFileExplorer 
     (state: RootState) => selectNavbarPresentationModel(state)
   );
   const executionState = useSelector((state: RootState) => state.emulator.executionState);
+  const runtimeReady = useSelector((state: RootState) => state.emulator.runtime.ready);
+  const debuggerStopped = useSelector(
+    (state: RootState) => state.debugger.snapshot.stop !== undefined
+  );
   const sourceStale = useSelector((state: RootState) => state.debugger.sourceStale);
-  const shouldStartFresh = !executionState.started || sourceStale;
+  const shouldStartFresh = !runtimeReady || !executionState.started || sourceStale;
   const isCompactShell = useCompactShell();
   const isFocusedMobileTerminal = isCompactShell && activeWorkspaceTab === 'terminal';
   const showRuntimeControls = !isCompactShell || activeWorkspaceTab !== 'terminal';
@@ -228,7 +232,13 @@ const Navbar: React.FC<NavbarProps> = ({ fileExplorerOpen, onToggleFileExplorer 
               <button
                 aria-label="Pause program"
                 className="btn-toolbar btn-toolbar-icon"
-                disabled={!executionState.started || executionState.stopped || executionState.ended}
+                disabled={
+                  !runtimeReady ||
+                  !executionState.started ||
+                  executionState.stopped ||
+                  executionState.ended ||
+                  debuggerStopped
+                }
                 onClick={() => executionCoordinator.execute('pause')}
                 title="Pause (F6)"
                 type="button"

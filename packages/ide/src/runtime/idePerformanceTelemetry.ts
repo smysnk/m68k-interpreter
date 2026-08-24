@@ -113,6 +113,19 @@ export interface IdePanelWorkspaceStat {
   totalPersistenceDurationMs: number;
 }
 
+export interface IdeDebuggerSurfaceStat {
+  snapshotDispatchCount: number;
+  totalSnapshotPayloadBytes: number;
+  maxSnapshotPayloadBytes: number;
+  medianSnapshotPayloadBytes: number;
+  p95SnapshotPayloadBytes: number;
+  pauseRequestCount: number;
+  pauseSnapshotCount: number;
+  totalPauseToSnapshotLatencyMs: number;
+  maxPauseToSnapshotLatencyMs: number;
+  lastPauseToSnapshotLatencyMs: number;
+}
+
 export interface IdePerformanceSnapshot {
   renderStats: IdeRenderProfileStat[];
   runtimeSync: IdeRuntimeSyncStat;
@@ -122,6 +135,7 @@ export interface IdePerformanceSnapshot {
   inputProgressAck: IdeInputProgressAckStat;
   hardwareSurface: IdeHardwareSurfaceStat;
   panelWorkspace: IdePanelWorkspaceStat;
+  debuggerSurface: IdeDebuggerSurfaceStat;
 }
 
 interface IdePerformanceTelemetryController {
@@ -239,10 +253,24 @@ const panelWorkspaceStat: IdePanelWorkspaceStat = {
   persistenceBytes: 0,
   totalPersistenceDurationMs: 0,
 };
+const debuggerSurfaceStat: IdeDebuggerSurfaceStat = {
+  snapshotDispatchCount: 0,
+  totalSnapshotPayloadBytes: 0,
+  maxSnapshotPayloadBytes: 0,
+  medianSnapshotPayloadBytes: 0,
+  p95SnapshotPayloadBytes: 0,
+  pauseRequestCount: 0,
+  pauseSnapshotCount: 0,
+  totalPauseToSnapshotLatencyMs: 0,
+  maxPauseToSnapshotLatencyMs: 0,
+  lastPauseToSnapshotLatencyMs: 0,
+};
 
 let pendingTouchVisualLatencyStartedAtMs: number | null = null;
 let pendingInputProgressAckStartedAtMs: number | null = null;
+let pendingDebuggerPauseStartedAtMs: number | null = null;
 const panelDragFrameIntervalsMs: number[] = [];
+const debuggerSnapshotPayloadBytes: number[] = [];
 
 function nowMs(): number {
   if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
@@ -297,6 +325,9 @@ function buildSnapshot(): IdePerformanceSnapshot {
     },
     panelWorkspace: {
       ...panelWorkspaceStat,
+    },
+    debuggerSurface: {
+      ...debuggerSurfaceStat,
     },
   };
 }
@@ -361,18 +392,47 @@ function resetTelemetry(): void {
   inputProgressAckStat.maxLatencyMs = 0;
   inputProgressAckStat.lastLatencyMs = 0;
   Object.assign(panelWorkspaceStat, {
-    visiblePanels: 0, expandedPanels: 0, minimizedPanels: 0, floatingPanels: 0,
-    terminalMirrors: 0, layoutCommits: 0, dragStarts: 0, dragCancels: 0,
-    successfulDrops: 0, validDockDrops: 0, floatingDrops: 0,
-    dragDurationCount: 0, totalDragDurationMs: 0, maxDragDurationMs: 0,
-    previewFrameCount: 0, p95PreviewFrameIntervalMs: 0, maxPreviewFrameIntervalMs: 0,
-    ownershipTransfers: 0, totalReducerDurationMs: 0,
-    maxReducerDurationMs: 0, persistenceWrites: 0, persistenceBytes: 0,
+    visiblePanels: 0,
+    expandedPanels: 0,
+    minimizedPanels: 0,
+    floatingPanels: 0,
+    terminalMirrors: 0,
+    layoutCommits: 0,
+    dragStarts: 0,
+    dragCancels: 0,
+    successfulDrops: 0,
+    validDockDrops: 0,
+    floatingDrops: 0,
+    dragDurationCount: 0,
+    totalDragDurationMs: 0,
+    maxDragDurationMs: 0,
+    previewFrameCount: 0,
+    p95PreviewFrameIntervalMs: 0,
+    maxPreviewFrameIntervalMs: 0,
+    ownershipTransfers: 0,
+    totalReducerDurationMs: 0,
+    maxReducerDurationMs: 0,
+    persistenceWrites: 0,
+    persistenceBytes: 0,
     totalPersistenceDurationMs: 0,
   });
+  Object.assign(debuggerSurfaceStat, {
+    snapshotDispatchCount: 0,
+    totalSnapshotPayloadBytes: 0,
+    maxSnapshotPayloadBytes: 0,
+    medianSnapshotPayloadBytes: 0,
+    p95SnapshotPayloadBytes: 0,
+    pauseRequestCount: 0,
+    pauseSnapshotCount: 0,
+    totalPauseToSnapshotLatencyMs: 0,
+    maxPauseToSnapshotLatencyMs: 0,
+    lastPauseToSnapshotLatencyMs: 0,
+  });
   panelDragFrameIntervalsMs.length = 0;
+  debuggerSnapshotPayloadBytes.length = 0;
   pendingTouchVisualLatencyStartedAtMs = null;
   pendingInputProgressAckStartedAtMs = null;
+  pendingDebuggerPauseStartedAtMs = null;
 }
 
 function ensureTelemetryController(): IdePerformanceTelemetryController | null {
@@ -503,6 +563,50 @@ export function recordWorkerEventReceived(metric: {
       workerTransportStat.faultEventsReceived += 1;
       break;
   }
+}
+
+export function recordDebuggerPauseRequest(): void {
+  const controller = ensureTelemetryController();
+  if (!controller?.enabled) return;
+  debuggerSurfaceStat.pauseRequestCount += 1;
+  pendingDebuggerPauseStartedAtMs = nowMs();
+}
+
+export function recordDebuggerSnapshotDispatch(metric: {
+  snapshot: unknown;
+  manualPause: boolean;
+}): void {
+  const controller = ensureTelemetryController();
+  if (!controller?.enabled) return;
+  let payloadBytes = 0;
+  try {
+    payloadBytes = new TextEncoder().encode(JSON.stringify(metric.snapshot)).byteLength;
+  } catch {
+    payloadBytes = 0;
+  }
+  debuggerSurfaceStat.snapshotDispatchCount += 1;
+  debuggerSurfaceStat.totalSnapshotPayloadBytes += payloadBytes;
+  debuggerSurfaceStat.maxSnapshotPayloadBytes = Math.max(
+    debuggerSurfaceStat.maxSnapshotPayloadBytes,
+    payloadBytes
+  );
+  debuggerSnapshotPayloadBytes.push(payloadBytes);
+  if (debuggerSnapshotPayloadBytes.length > 240) debuggerSnapshotPayloadBytes.shift();
+  const orderedPayloadSizes = [...debuggerSnapshotPayloadBytes].sort((left, right) => left - right);
+  debuggerSurfaceStat.medianSnapshotPayloadBytes =
+    orderedPayloadSizes[Math.floor(orderedPayloadSizes.length / 2)] ?? 0;
+  debuggerSurfaceStat.p95SnapshotPayloadBytes =
+    orderedPayloadSizes[Math.max(0, Math.ceil(orderedPayloadSizes.length * 0.95) - 1)] ?? 0;
+  if (!metric.manualPause || pendingDebuggerPauseStartedAtMs === null) return;
+  const latencyMs = Math.max(0, nowMs() - pendingDebuggerPauseStartedAtMs);
+  debuggerSurfaceStat.pauseSnapshotCount += 1;
+  debuggerSurfaceStat.totalPauseToSnapshotLatencyMs += latencyMs;
+  debuggerSurfaceStat.maxPauseToSnapshotLatencyMs = Math.max(
+    debuggerSurfaceStat.maxPauseToSnapshotLatencyMs,
+    latencyMs
+  );
+  debuggerSurfaceStat.lastPauseToSnapshotLatencyMs = latencyMs;
+  pendingDebuggerPauseStartedAtMs = null;
 }
 
 export function recordHardwareSurfaceSnapshot(metric: {
@@ -687,7 +791,10 @@ export function recordPanelWorkspaceCommit(metric: {
   panelWorkspaceStat.layoutCommits += 1;
   panelWorkspaceStat.ownershipTransfers += metric.ownershipTransfer ? 1 : 0;
   panelWorkspaceStat.totalReducerDurationMs += metric.durationMs;
-  panelWorkspaceStat.maxReducerDurationMs = Math.max(panelWorkspaceStat.maxReducerDurationMs, metric.durationMs);
+  panelWorkspaceStat.maxReducerDurationMs = Math.max(
+    panelWorkspaceStat.maxReducerDurationMs,
+    metric.durationMs
+  );
 }
 
 export function recordPanelWorkspaceDrag(
@@ -696,7 +803,7 @@ export function recordPanelWorkspaceDrag(
     durationMs?: number;
     outcome?: 'dock' | 'float' | 'noop';
     frameIntervalsMs?: readonly number[];
-  },
+  }
 ): void {
   const controller = ensureTelemetryController();
   if (!controller?.enabled) return;
@@ -712,12 +819,12 @@ export function recordPanelWorkspaceDrag(
     panelWorkspaceStat.totalDragDurationMs += metric.durationMs;
     panelWorkspaceStat.maxDragDurationMs = Math.max(
       panelWorkspaceStat.maxDragDurationMs,
-      metric.durationMs,
+      metric.durationMs
     );
   }
   if (metric?.frameIntervalsMs?.length) {
     panelDragFrameIntervalsMs.push(
-      ...metric.frameIntervalsMs.filter((value) => Number.isFinite(value) && value >= 0),
+      ...metric.frameIntervalsMs.filter((value) => Number.isFinite(value) && value >= 0)
     );
     if (panelDragFrameIntervalsMs.length > 240) {
       panelDragFrameIntervalsMs.splice(0, panelDragFrameIntervalsMs.length - 240);
@@ -728,12 +835,15 @@ export function recordPanelWorkspaceDrag(
       sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)] ?? 0;
     panelWorkspaceStat.maxPreviewFrameIntervalMs = Math.max(
       panelWorkspaceStat.maxPreviewFrameIntervalMs,
-      ...metric.frameIntervalsMs,
+      ...metric.frameIntervalsMs
     );
   }
 }
 
-export function recordPanelWorkspacePersistence(metric: { durationMs: number; bytes: number }): void {
+export function recordPanelWorkspacePersistence(metric: {
+  durationMs: number;
+  bytes: number;
+}): void {
   const controller = ensureTelemetryController();
   if (!controller?.enabled) return;
   panelWorkspaceStat.persistenceWrites += 1;

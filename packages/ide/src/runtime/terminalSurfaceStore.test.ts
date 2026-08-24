@@ -54,10 +54,12 @@ describe('terminalSurfaceStore', () => {
       cursorColumn: 2,
       output: '█┌',
       lines: ['█┌'],
-      cells: [[
-        { char: '█', foreground: null, background: null, bold: false, inverse: false },
-        { char: '┌', foreground: null, background: null, bold: false, inverse: false },
-      ]],
+      cells: [
+        [
+          { char: '█', foreground: null, background: null, bold: false, inverse: false },
+          { char: '┌', foreground: null, background: null, bold: false, inverse: false },
+        ],
+      ],
     });
 
     expect(terminalSurfaceStore.getLines()).toEqual(['█┌']);
@@ -94,6 +96,41 @@ describe('terminalSurfaceStore', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     expect(Array.from(runtimeFrameBuffer.dirtyRowFlags)).toEqual([0]);
 
+    unsubscribe();
+  });
+
+  it('coalesces execution-frame notifications and preserves every dirty row', async () => {
+    const runtimeFrameBuffer = createTerminalFrameBuffer(2, 2);
+    const listener = vi.fn();
+    const unsubscribe = terminalSurfaceStore.subscribe(listener);
+
+    runtimeFrameBuffer.dirtyRowFlags[0] = 1;
+    runtimeFrameBuffer.version += 1;
+    terminalSurfaceStore.publishFrame(runtimeFrameBuffer, {
+      columns: 2,
+      rows: 2,
+      cursorRow: 0,
+      cursorColumn: 1,
+      output: 'A',
+      version: runtimeFrameBuffer.version,
+      geometryVersion: runtimeFrameBuffer.geometryVersion,
+    });
+    runtimeFrameBuffer.dirtyRowFlags[1] = 1;
+    runtimeFrameBuffer.version += 1;
+    terminalSurfaceStore.publishFrame(runtimeFrameBuffer, {
+      columns: 2,
+      rows: 2,
+      cursorRow: 1,
+      cursorColumn: 1,
+      output: 'A\nB',
+      version: runtimeFrameBuffer.version,
+      geometryVersion: runtimeFrameBuffer.geometryVersion,
+    });
+
+    expect(listener).not.toHaveBeenCalled();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(terminalSurfaceStore.getSnapshot().dirtyRows).toEqual([0, 1]);
     unsubscribe();
   });
 });

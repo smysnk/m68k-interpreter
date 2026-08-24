@@ -176,6 +176,18 @@ export default {
       coverage: { enabled: false }
     },
     {
+      id: "debugger-browser-performance",
+      label: "Debugger Browser Performance",
+      adapter: "shell",
+      package: "benchmark",
+      cwd: rootDir,
+      command: ["yarn", "test:performance:debugger-browser:test-station"],
+      resultFormat: "suite-json-v1",
+      module: "debugger",
+      theme: "benchmark",
+      coverage: { enabled: false }
+    },
+    {
       id: "easy68k-multimedia-benchmark",
       label: "Easy68K Multimedia Performance",
       adapter: "shell",
