@@ -60,6 +60,31 @@ describe('debuggerSlice', () => {
     expect(synchronized.snapshot.breakpoints[0]?.hitCount).toBe(1);
   });
 
+  it('discards a stopped runtime snapshot when the source changes without removing policy', () => {
+    const configured = reducer(
+      initialDebuggerState,
+      upsertBreakpoint({ id: 'raw', enabled: true, kind: 'address', address: 0x1000 })
+    );
+    const paused = reducer(
+      configured,
+      syncDebugSnapshot({
+        status: 'paused',
+        stop: { reason: 'breakpoint', pc: 0x1000, breakpointId: 'raw' },
+        breakpoints: [],
+        watchpoints: [],
+        watches: [],
+        callStack: [],
+        logs: [],
+      })
+    );
+
+    const stale = reducer(paused, markDebugSourceStale());
+
+    expect(stale.sourceStale).toBe(true);
+    expect(stale.snapshot).toEqual(initialDebuggerState.snapshot);
+    expect(stale.configuration.breakpoints).toEqual(configured.configuration.breakpoints);
+  });
+
   it.fails('tracks a waiting inspection as shared serializable debugger UI state', () => {
     const waiting = reducer(
       initialDebuggerState,

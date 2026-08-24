@@ -12,6 +12,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import {
   closeAppMenu,
   commitColumnWidths,
+  commitPanelSizes,
   selectActivePanelLayout,
   type AppDispatch,
 } from '@/store';
@@ -160,6 +161,30 @@ export default function PanelWorkspace(): React.ReactElement {
     );
     if (widths.length === document.columns.length && changed) dispatch(commitColumnWidths(widths));
   };
+
+  const handlePanelLayout = (columnId: string, panelIds: string[], layout: Layout): void => {
+    const expandedPanelIds = panelIds.filter((panelId) => !document.instances[panelId]?.minimized);
+    if (expandedPanelIds.length < 2) return;
+    const sizes = Object.fromEntries(
+      expandedPanelIds.map((panelId) => [panelId, layout[panelId]])
+    ) as Record<string, number | undefined>;
+    if (expandedPanelIds.some((panelId) => typeof sizes[panelId] !== 'number')) return;
+    const total = expandedPanelIds.reduce((sum, panelId) => sum + sizes[panelId]!, 0);
+    if (total <= 0) return;
+    const normalized = Object.fromEntries(
+      panelIds.map((panelId) => [
+        panelId,
+        document.instances[panelId]?.minimized
+          ? (document.columns.find((column) => column.id === columnId)?.panelSizes[panelId] ?? 1)
+          : (sizes[panelId]! / total) * 100,
+      ])
+    );
+    const column = document.columns.find((candidate) => candidate.id === columnId);
+    const changed = panelIds.some(
+      (panelId) => Math.abs(normalized[panelId]! - (column?.panelSizes[panelId] ?? 0)) > 0.05
+    );
+    if (changed) dispatch(commitPanelSizes({ columnId, panelSizes: normalized }));
+  };
   return (
     <div
       className="panel-workspace"
@@ -196,31 +221,113 @@ export default function PanelWorkspace(): React.ReactElement {
                     data-panel-column-id={column.id}
                     data-testid={`panel-column-${columnIndex + 1}`}
                   >
-                    <PanelDockZone
-                      active={drag.activeDockTarget?.id === targets[0]?.id}
-                      document={document}
-                      enabled={Boolean(drag.session)}
-                      panelTitle={activeInstance?.title ?? 'Panel'}
-                      target={targets[0]!}
-                    />
-                    {column.panelIds.map((panelId, panelIndex) => {
-                      const instance = document.instances[panelId];
-                      return instance ? (
-                        <React.Fragment key={panelId}>
-                          <PanelFrame
-                            instance={instance}
-                            interactive={document.terminalOwnerPanelId === panelId}
-                          />
-                          <PanelDockZone
-                            active={drag.activeDockTarget?.id === targets[panelIndex + 1]?.id}
-                            document={document}
-                            enabled={Boolean(drag.session)}
-                            panelTitle={activeInstance?.title ?? 'Panel'}
-                            target={targets[panelIndex + 1]!}
-                          />
-                        </React.Fragment>
-                      ) : null;
-                    })}
+                    {column.panelIds.some((panelId) =>
+                      document.instances[panelId]?.kind.startsWith('hardware-')
+                    ) ? (
+                      <>
+                        <PanelDockZone
+                          active={drag.activeDockTarget?.id === targets[0]?.id}
+                          document={document}
+                          enabled={Boolean(drag.session)}
+                          panelTitle={activeInstance?.title ?? 'Panel'}
+                          target={targets[0]!}
+                        />
+                        {column.panelIds.map((panelId, panelIndex) => {
+                          const instance = document.instances[panelId];
+                          return instance ? (
+                            <React.Fragment key={panelId}>
+                              <PanelFrame
+                                instance={instance}
+                                interactive={document.terminalOwnerPanelId === panelId}
+                              />
+                              <PanelDockZone
+                                active={drag.activeDockTarget?.id === targets[panelIndex + 1]?.id}
+                                document={document}
+                                enabled={Boolean(drag.session)}
+                                panelTitle={activeInstance?.title ?? 'Panel'}
+                                target={targets[panelIndex + 1]!}
+                              />
+                            </React.Fragment>
+                          ) : null;
+                        })}
+                      </>
+                    ) : column.panelIds.length > 0 ? (
+                      <Group
+                        className="panel-row-group"
+                        onLayoutChanged={(layout) =>
+                          handlePanelLayout(column.id, column.panelIds, layout)
+                        }
+                        orientation="vertical"
+                        resizeTargetMinimumSize={{ coarse: 24, fine: 12 }}
+                      >
+                        {column.panelIds.map((panelId, panelIndex) => {
+                          const instance = document.instances[panelId];
+                          if (!instance) return null;
+                          const previous =
+                            document.instances[column.panelIds[panelIndex - 1] ?? ''];
+                          return (
+                            <React.Fragment key={panelId}>
+                              {panelIndex > 0 ? (
+                                <Separator
+                                  aria-label={`Resize ${previous?.title ?? 'panel'} and ${instance.title}`}
+                                  className="panel-row-separator"
+                                  data-testid={`panel-row-separator-${column.id}-${panelIndex}`}
+                                  disabled={Boolean(
+                                    drag.session || previous?.minimized || instance.minimized
+                                  )}
+                                >
+                                  <PanelDockZone
+                                    active={drag.activeDockTarget?.id === targets[panelIndex]?.id}
+                                    document={document}
+                                    enabled={Boolean(drag.session)}
+                                    panelTitle={activeInstance?.title ?? 'Panel'}
+                                    target={targets[panelIndex]!}
+                                  />
+                                </Separator>
+                              ) : null}
+                              <Panel
+                                defaultSize={
+                                  instance.minimized
+                                    ? '40px'
+                                    : `${column.panelSizes[panelId] ?? 100 / column.panelIds.length}`
+                                }
+                                disabled={instance.minimized}
+                                id={panelId}
+                                maxSize={instance.minimized ? '40px' : undefined}
+                                minSize={instance.minimized ? '40px' : '12%'}
+                              >
+                                <div className="panel-row-content">
+                                  {panelIndex === 0 ? (
+                                    <PanelDockZone
+                                      active={drag.activeDockTarget?.id === targets[0]?.id}
+                                      document={document}
+                                      enabled={Boolean(drag.session)}
+                                      panelTitle={activeInstance?.title ?? 'Panel'}
+                                      target={targets[0]!}
+                                    />
+                                  ) : null}
+                                  <PanelFrame
+                                    instance={instance}
+                                    interactive={document.terminalOwnerPanelId === panelId}
+                                  />
+                                  {panelIndex === column.panelIds.length - 1 ? (
+                                    <PanelDockZone
+                                      active={
+                                        drag.activeDockTarget?.id === targets[panelIndex + 1]?.id
+                                      }
+                                      document={document}
+                                      enabled={Boolean(drag.session)}
+                                      panelTitle={activeInstance?.title ?? 'Panel'}
+                                      target={targets[panelIndex + 1]!}
+                                    />
+                                  ) : null}
+                                </div>
+                              </Panel>
+                            </React.Fragment>
+                          );
+                        })}
+                      </Group>
+                    ) : null}
                     {column.panelIds.length === 0 ? (
                       <EmptyPanelColumn columnId={column.id} columnIndex={columnIndex} />
                     ) : null}

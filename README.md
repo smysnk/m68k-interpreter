@@ -120,7 +120,7 @@ yarn type-check      # workspace type-check
 
 Boot-time IDE env vars:
 
-- `VITE_IDE_PRELOAD_FILE=hello-terminal.asm` selects which known file should be loaded on startup. You can use the file id, name, or path, for example `example:hello-terminal.asm`, `hello-terminal.asm`, or `fixtures/hello-terminal.asm`.
+- `VITE_IDE_PRELOAD_FILE=hello-world.asm` selects which known file should be loaded on startup. You can use the file id, name, or path, for example `example:hello-world.asm`, `hello-world.asm`, or `fixtures/hello-world.asm`.
 - `VITE_IDE_AUTOPLAY=true` runs the loaded program automatically on boot.
 
 ---

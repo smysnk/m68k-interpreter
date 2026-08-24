@@ -1,15 +1,18 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  addSourceBreakpoint,
   createEmptyMemoryState,
   createEmptyTerminalState,
   createActionSizeGuardMiddleware,
   createIdeStore,
   measureSerializedSize,
+  markDebugSourceSynchronized,
   resetEmulatorState,
   sanitizeIdeDevToolsAction,
   sanitizeIdeDevToolsState,
   syncEmulatorFrame,
+  syncDebugSnapshot,
   setEditorCode,
   setRegisterEditRadix,
   setRootHorizontalLayout,
@@ -74,6 +77,40 @@ describe('ideStore', () => {
     expect(store.getState().emulator.terminal).not.toHaveProperty('lines');
     expect(store.getState().emulator.terminal).not.toHaveProperty('cells');
     expect(store.getState().emulator.memory).toEqual(createEmptyMemoryState());
+  });
+
+  it('invalidates a stopped debugger session when editor source changes', () => {
+    const store = createIdeStore();
+    const fileId = store.getState().files.activeFileId;
+    store.dispatch(addSourceBreakpoint({ fileId, id: 'source-2', line: 2 }));
+    store.dispatch(markDebugSourceSynchronized());
+    store.dispatch(
+      syncDebugSnapshot({
+        status: 'paused',
+        stop: {
+          pc: 0x1000,
+          reason: 'breakpoint',
+          breakpointId: 'source-2',
+          source: { fileId, line: 2 },
+        },
+        breakpoints: [],
+        watchpoints: [],
+        watches: [],
+        callStack: [],
+        logs: [],
+      })
+    );
+
+    store.dispatch(setEditorCode('START\n  NOP\n  END START'));
+
+    expect(store.getState().debugger).toMatchObject({
+      sourceStale: true,
+      snapshot: { status: 'idle' },
+      configuration: {
+        breakpoints: [expect.objectContaining({ id: 'source-2', fileId, line: 2 })],
+      },
+    });
+    expect(store.getState().debugger.snapshot.stop).toBeUndefined();
   });
 
   it('reuses unchanged frame slices when sync metadata is effectively identical', () => {

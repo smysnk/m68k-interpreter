@@ -1,7 +1,7 @@
 import type { FilesState } from '@/store/filesSlice';
 
-const DEFAULT_PRELOAD_FILE = 'nibbles.asm';
-const DEFAULT_AUTOPLAY = true;
+const DEFAULT_PRELOAD_FILE = 'hello-world.asm';
+const DEFAULT_AUTOPLAY = false;
 
 export interface IdeBootConfig {
   preloadFile: string;

@@ -1,4 +1,4 @@
-; @m68k-ide/v1 layout=terminal-focus machine=easy68k cpu=m68000 focus=terminal speed=1 run=auto
+; Hello World for the Motorola 68000 browser IDE
         ORG     $1000
 
 START
@@ -19,6 +19,6 @@ PUTS
 PUTS_DONE
         RTS
 
-MESSAGE  DC.B    'Hello from the Motorola 68000 browser IDE!',13,10,0
+MESSAGE  DC.B    'Hello World!',13,10,0
 
         END     START

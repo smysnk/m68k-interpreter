@@ -54,8 +54,7 @@ async function addPanelAt(
 
 async function dockedKinds(column: Locator): Promise<string[]> {
   return column.evaluate((element) =>
-    Array.from(element.children)
-      .filter((child): child is HTMLElement => child instanceof HTMLElement)
+    Array.from(element.querySelectorAll<HTMLElement>('[data-panel-instance-id][data-panel-kind]'))
       .map((child) => child.dataset.panelKind)
       .filter((kind): kind is string => Boolean(kind))
   );
@@ -79,7 +78,7 @@ test.describe('panel workspace context menu', () => {
     page,
   }) => {
     await openBaselineIde(page);
-    const firstColumn = page.getByTestId('panel-column-1');
+    const screenColumn = page.getByTestId('panel-column-2');
     const screenPanel = page.getByTestId('panel-instance-panel-terminal-1');
     const screenBox = await screenPanel.boundingBox();
     expect(screenBox).not.toBeNull();
@@ -89,14 +88,14 @@ test.describe('panel workspace context menu', () => {
       y: Math.min(30, screenBox!.height / 4),
     });
 
-    await expect.poll(() => dockedKinds(firstColumn)).toEqual(['memory', 'terminal']);
+    await expect.poll(() => dockedKinds(screenColumn)).toEqual(['memory', 'terminal', 'registers']);
     await page.waitForFunction(
       (storageKey) => window.localStorage.getItem(storageKey)?.includes('"kind":"memory"'),
       IDE_PERSISTENCE_KEY
     );
     await page.reload();
     await ignoreBootSourceConfiguration(page);
-    await expect.poll(() => dockedKinds(firstColumn)).toEqual(['memory', 'terminal']);
+    await expect.poll(() => dockedKinds(screenColumn)).toEqual(['memory', 'terminal', 'registers']);
   });
 
   test('keeps root and nested menus inside every viewport edge across one to four columns', async ({

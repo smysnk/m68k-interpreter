@@ -120,11 +120,16 @@ describe('compact source IDE directives', () => {
     );
   });
 
-  it('keeps every bundled example on exactly one valid compact directive', () => {
+  it('keeps configured bundled examples on exactly one valid compact directive', () => {
     for (const example of bundledExampleFiles) {
       const directiveLines = example.content
         .split(/\r?\n/)
         .filter((line) => line.includes('@m68k-ide/'));
+      if (example.id === 'example:hello-world.asm') {
+        expect(directiveLines, example.name).toHaveLength(0);
+        expect(parseSourceIdeDirective(example.content), example.name).toEqual({ status: 'none' });
+        continue;
+      }
       expect(directiveLines, example.name).toHaveLength(1);
       expect(parseSourceIdeDirective(example.content), example.name).toMatchObject({
         status: 'valid',

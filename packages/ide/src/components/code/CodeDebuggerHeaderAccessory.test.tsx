@@ -118,14 +118,12 @@ describe('CodeDebuggerHeaderAccessory', () => {
     expect(screen.getByRole('toolbar', { name: 'Code debugging controls' })).toHaveClass(
       'code-debugger-header-controls'
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Step backward' }));
     fireEvent.click(screen.getByRole('button', { name: 'Step over' }));
     fireEvent.click(screen.getByRole('button', { name: 'Step into' }));
     fireEvent.click(screen.getByRole('button', { name: 'Step out' }));
     fireEvent.click(screen.getByRole('button', { name: 'Run to cursor' }));
 
     expect(execute.mock.calls.map(([command]) => command)).toEqual([
-      'stepBack',
       'stepOver',
       'stepInto',
       'stepOut',
@@ -169,7 +167,7 @@ describe('CodeDebuggerHeaderAccessory', () => {
         .getAllByRole('toolbar', { name: 'Code debugging controls' })
         .map((toolbar) => toolbar.getAttribute('data-expanded'))
     ).toEqual(['true', 'true']);
-    expect(screen.getAllByRole('button', { name: 'Step backward' })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Step backward' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Step into' })[0]).toBeDisabled();
   });
 
@@ -221,7 +219,7 @@ describe('CodeDebuggerHeaderAccessory', () => {
     expect(screen.queryByRole('button', { name: 'Step out' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'More debugging controls' }));
-    expect(screen.getByRole('menuitem', { name: /step backward/i })).toBeVisible();
+    expect(screen.queryByRole('menuitem', { name: /step backward/i })).not.toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /step out/i })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: /run to cursor/i })).toBeVisible();
   });

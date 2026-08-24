@@ -15,6 +15,7 @@ describe('source IDE directive controller', () => {
 
   it('applies source configuration and restores the session baseline for scratch', async () => {
     const store = createIdeStore();
+    store.dispatch(setActiveFile('example:nibbles.asm'));
     renderWithIdeProviders(<Harness />, { store });
 
     await waitFor(() => expect(store.getState().sourceIde.current.status).toBe('applied'));
@@ -52,6 +53,7 @@ describe('source IDE directive controller', () => {
 
   it('restores the baseline when a file configuration is ignored', async () => {
     const store = createIdeStore();
+    store.dispatch(setActiveFile('example:nibbles.asm'));
     renderWithIdeProviders(<Harness />, { store });
     await waitFor(() => expect(store.getState().sourceIde.current.status).toBe('applied'));
 

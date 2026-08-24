@@ -2,7 +2,7 @@
 
 Bundled example programs for the browser IDE and interpreter:
 
-- `hello-terminal.asm` - print text to the terminal
+- `hello-world.asm` - print Hello World to the terminal
 - `echo-input.asm` - wait for one key and echo it back
 - `polling-input.asm` - poll for input with canonical `TRAP #15` task `7`
 - `arithmetic-registers.asm` - basic arithmetic and memory writes

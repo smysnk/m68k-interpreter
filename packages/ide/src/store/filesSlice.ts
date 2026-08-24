@@ -19,11 +19,13 @@ export interface FilesState {
 }
 
 export const NIBBLES_FILE_ID = 'example:nibbles.asm';
+export const HELLO_WORLD_FILE_ID = 'example:hello-world.asm';
 export const SCRATCH_FILE_ID = 'workspace:scratch.asm';
+const LEGACY_HELLO_TERMINAL_FILE_ID = 'example:hello-terminal.asm';
 
 export function createDefaultFilesState(): FilesState {
   return {
-    activeFileId: NIBBLES_FILE_ID,
+    activeFileId: HELLO_WORLD_FILE_ID,
     items: [
       {
         id: SCRATCH_FILE_ID,
@@ -81,11 +83,20 @@ export function normalizeFilesState(value?: Partial<FilesState>): FilesState {
 
     return persistedItem;
   });
-  const extraItems = persistedItems.filter((item) => !defaults.items.some((defaultItem) => defaultItem.id === item.id));
+  const extraItems = persistedItems.filter(
+    (item) =>
+      item.id !== LEGACY_HELLO_TERMINAL_FILE_ID &&
+      !defaults.items.some((defaultItem) => defaultItem.id === item.id)
+  );
   const items = dedupeFiles([...mergedDefaults, ...extraItems]);
+  const requestedActiveFileId =
+    value?.activeFileId === LEGACY_HELLO_TERMINAL_FILE_ID
+      ? HELLO_WORLD_FILE_ID
+      : value?.activeFileId;
   const activeFileId =
-    typeof value?.activeFileId === 'string' && items.some((item) => item.id === value.activeFileId)
-      ? value.activeFileId
+    typeof requestedActiveFileId === 'string' &&
+    items.some((item) => item.id === requestedActiveFileId)
+      ? requestedActiveFileId
       : defaults.activeFileId;
 
   return {

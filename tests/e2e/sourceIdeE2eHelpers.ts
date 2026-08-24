@@ -1,6 +1,15 @@
 import { expect, type Page } from '@playwright/test';
 
 export async function ignoreBootSourceConfiguration(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => typeof window.__M68K_IDE_TEST_CONTROLS__?.getSourceIdeStatus === 'function',
+    undefined,
+    { timeout: 5_000 }
+  );
+  const initialStatus = await page.evaluate(() =>
+    window.__M68K_IDE_TEST_CONTROLS__?.getSourceIdeStatus()
+  );
+  if (initialStatus === 'none') return;
   const ignoreButton = page.getByRole('button', { name: 'Ignore source configuration' });
   if (await ignoreButton.isVisible()) {
     await ignoreButton.click();

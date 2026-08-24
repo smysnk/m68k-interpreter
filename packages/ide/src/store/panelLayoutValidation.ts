@@ -35,6 +35,16 @@ function finite(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
+function normalizePanelSizes(panelIds: readonly string[], value: unknown): Record<string, number> {
+  if (panelIds.length === 0) return {};
+  const source = isRecord(value) ? value : {};
+  const weights = panelIds.map((panelId) => Math.max(0.1, finite(source[panelId], 1)));
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  return Object.fromEntries(
+    panelIds.map((panelId, index) => [panelId, (weights[index]! / total) * 100])
+  );
+}
+
 function address(value: unknown, fallback: number): number {
   return normalizeDeviceAddress(finite(value, fallback));
 }
@@ -314,6 +324,9 @@ function migratePanelLayoutDocument(value: unknown): unknown {
   if (finite(migrated.schemaVersion, 1) < 6) {
     migrated = { ...migrated, schemaVersion: 6 };
   }
+  if (finite(migrated.schemaVersion, 1) < 7) {
+    migrated = { ...migrated, schemaVersion: 7 };
+  }
   return migrated;
 }
 
@@ -342,7 +355,9 @@ function normalizeConfiguration(
     return {
       kind,
       collapsedSections: Array.isArray(source.collapsedSections)
-        ? source.collapsedSections.filter((item): item is string => typeof item === 'string').slice(0, 8)
+        ? source.collapsedSections
+            .filter((item): item is string => typeof item === 'string')
+            .slice(0, 8)
         : [],
       radix: source.radix === 'decimal' ? 'decimal' : 'hex',
     };
@@ -480,6 +495,7 @@ export function normalizePanelLayoutDocument(value: unknown): PanelLayoutDocumen
       id: typeof column.id === 'string' ? column.id : `column-${index + 1}`,
       width: finite(column.width, 100 / columnCount),
       panelIds,
+      panelSizes: normalizePanelSizes(panelIds, column.panelSizes),
     };
   });
   while (columns.length < columnCount) {
@@ -487,6 +503,7 @@ export function normalizePanelLayoutDocument(value: unknown): PanelLayoutDocumen
       id: `column-${columns.length + 1}`,
       width: 100 / columnCount,
       panelIds: [],
+      panelSizes: {},
     });
   }
 
@@ -504,6 +521,9 @@ export function normalizePanelLayoutDocument(value: unknown): PanelLayoutDocumen
       delete instances[id].floatingRect;
       seen.add(id);
     }
+  }
+  for (const column of columns) {
+    column.panelSizes = normalizePanelSizes(column.panelIds, column.panelSizes);
   }
 
   if (Object.keys(instances).length === 0) return createPanelPreset('classic');
@@ -604,6 +624,18 @@ export function getPanelLayoutInvariantErrors(document: PanelLayoutDocument): st
   if (placements.some((id) => !document.instances[id])) {
     errors.push('placement references missing instance');
   }
+  for (const column of document.columns) {
+    const sizedPanelIds = Object.keys(column.panelSizes);
+    const sizeTotal = Object.values(column.panelSizes).reduce((sum, size) => sum + size, 0);
+    if (
+      sizedPanelIds.length !== column.panelIds.length ||
+      column.panelIds.some((panelId) => !sizedPanelIds.includes(panelId)) ||
+      Object.values(column.panelSizes).some((size) => !Number.isFinite(size) || size <= 0) ||
+      (column.panelIds.length > 0 && Math.abs(sizeTotal - 100) > 0.1)
+    ) {
+      errors.push(`invalid panel sizes for ${column.id}`);
+    }
+  }
   if (
     document.terminalOwnerPanelId &&
     document.instances[document.terminalOwnerPanelId]?.kind !== 'terminal'
@@ -651,7 +683,12 @@ export function migrateLegacyPanelLayout(
         existingDevices: getPanelHardwareDeviceConfigs(Object.values(instances)),
       }),
     };
-    return { id: `column-${index + 1}`, width: widths[index], panelIds: [id] };
+    return {
+      id: `column-${index + 1}`,
+      width: widths[index],
+      panelIds: [id],
+      panelSizes: { [id]: 100 },
+    };
   });
   return normalizePanelLayoutState({
     activeLayout: {

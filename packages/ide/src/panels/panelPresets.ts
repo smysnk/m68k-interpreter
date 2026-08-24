@@ -18,15 +18,24 @@ export interface PanelPresetDefinition {
 
 function buildPreset(
   name: string,
-  columnKinds: readonly (readonly { kind: PanelKind; minimized?: boolean }[])[],
-  widths?: readonly number[]
+  columnKinds: readonly (readonly {
+    kind: PanelKind;
+    minimized?: boolean;
+    instanceSequence?: number;
+  }[])[],
+  widths?: readonly number[],
+  rowSizes?: readonly (readonly number[] | undefined)[]
 ): PanelLayoutDocument {
   let nextInstanceSequence = 1;
   const instances: PanelLayoutDocument['instances'] = {};
   const columns: PanelColumn[] = columnKinds.map((entries, columnIndex) => {
-    const panelIds = entries.map(({ kind, minimized = false }) => {
-      const id = `panel-${kind}-${nextInstanceSequence}`;
-      nextInstanceSequence += 1;
+    const panelIds = entries.map(({ kind, minimized = false, instanceSequence }) => {
+      const sequence = instanceSequence ?? nextInstanceSequence;
+      const id = `panel-${kind}-${sequence}`;
+      nextInstanceSequence =
+        instanceSequence === undefined
+          ? nextInstanceSequence + 1
+          : Math.max(nextInstanceSequence, sequence + 1);
       instances[id] = {
         id,
         kind,
@@ -43,6 +52,12 @@ function buildPreset(
       id: `column-${columnIndex + 1}`,
       width: widths?.[columnIndex] ?? 100 / columnKinds.length,
       panelIds,
+      panelSizes: Object.fromEntries(
+        panelIds.map((panelId, panelIndex) => [
+          panelId,
+          rowSizes?.[columnIndex]?.[panelIndex] ?? 100 / panelIds.length,
+        ])
+      ),
     };
   });
   const terminalOwnerPanelId =
@@ -66,9 +81,20 @@ export const PANEL_PRESETS: readonly PanelPresetDefinition[] = [
   {
     id: 'classic',
     name: 'Classic IDE',
-    description: 'Screen and registers in the familiar two-column layout.',
+    description: 'Code beside a resizable screen and register inspector.',
     create: () =>
-      buildPreset('Classic IDE', [[{ kind: 'terminal' }], [{ kind: 'registers' }]], [61, 39]),
+      buildPreset(
+        'Classic IDE',
+        [
+          [{ kind: 'code', instanceSequence: 3 }],
+          [
+            { kind: 'terminal', instanceSequence: 1 },
+            { kind: 'registers', instanceSequence: 2 },
+          ],
+        ],
+        [61, 39],
+        [undefined, [56, 44]]
+      ),
   },
   {
     id: 'code-run',

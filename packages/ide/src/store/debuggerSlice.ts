@@ -123,7 +123,11 @@ const debuggerSlice = createSlice({
       state.snapshot = structuredClone(action.payload);
     },
     markDebugSourceStale(state) {
+      state.snapshot = structuredClone(initialDebuggerState.snapshot);
       state.sourceStale = true;
+      state.previousStopRegisters = undefined;
+      state.lastStopRegisters = undefined;
+      state.lastStopKey = undefined;
     },
     markDebugSourceSynchronized(state) {
       state.sourceStale = false;

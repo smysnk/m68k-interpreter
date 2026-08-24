@@ -1,6 +1,6 @@
 import React from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faEllipsisVertical, faUndo } from '@fortawesome/free-solid-svg-icons';
+import { faEllipsisVertical } from '@fortawesome/free-solid-svg-icons';
 import { shallowEqual, useSelector } from 'react-redux';
 import ContextMenu from '@/components/menus/ContextMenu';
 import MenuItem from '@/components/menus/MenuItem';
@@ -122,7 +122,6 @@ function CodeDebuggerHeaderAccessory(): React.ReactElement {
   const {
     canPause,
     controlsExpanded,
-    canStepBackward,
     canStepOver,
     canStepInto,
     canStepOut,
@@ -179,15 +178,6 @@ function CodeDebuggerHeaderAccessory(): React.ReactElement {
         inert={!controlsExpanded}
       >
         <div className="code-debugger-command-rail-inner">
-          {!compact ? (
-            <DebugCommandButton
-              command="stepBack"
-              disabled={!canStepBackward}
-              label="Step backward"
-              shortcut="Alt+F11"
-              symbol={<FontAwesomeIcon icon={faUndo} size="xs" />}
-            />
-          ) : null}
           <DebugCommandButton
             command="stepOver"
             disabled={!canStepOver}
@@ -253,15 +243,6 @@ function CodeDebuggerHeaderAccessory(): React.ReactElement {
           restoreFocusTo={overflowButtonRef.current}
           width={220}
         >
-          <MenuItem
-            disabled={!canStepBackward}
-            label="Step backward"
-            meta="Alt+F11"
-            onClick={() => {
-              executionCoordinator.execute('stepBack');
-              closeOverflow();
-            }}
-          />
           <MenuItem
             disabled={!canStepOut}
             label="Step out"

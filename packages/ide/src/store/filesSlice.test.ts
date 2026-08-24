@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  HELLO_WORLD_FILE_ID,
   NIBBLES_FILE_ID,
   createDefaultFilesState,
   getActiveFile,
@@ -12,10 +13,11 @@ import { bundledExampleFiles } from '@/programs/examples';
 import filesReducer from '@/store/filesSlice';
 
 describe('filesSlice', () => {
-  it('seeds the default workspace with nibbles selected', () => {
+  it('seeds the default workspace with Hello World selected', () => {
     const state = createDefaultFilesState();
 
-    expect(getActiveFile(state).name).toBe('nibbles.asm');
+    expect(getActiveFile(state).name).toBe('hello-world.asm');
+    expect(getActiveFile(state).content).toContain("'Hello World!'");
     expect(state.items).toHaveLength(1 + bundledExampleFiles.length);
     expect(state.items.filter((item) => item.kind === 'example').map((item) => item.name)).toEqual(
       bundledExampleFiles.map((item) => item.name)
@@ -37,7 +39,7 @@ describe('filesSlice', () => {
     });
 
     expect(normalized.items.some((item) => item.id === 'example:nibbles.asm')).toBe(true);
-    expect(getActiveFile(normalized).id).toBe('example:nibbles.asm');
+    expect(getActiveFile(normalized).id).toBe(HELLO_WORLD_FILE_ID);
   });
 
   it('refreshes bundled example file content when persisted local storage is stale', () => {
@@ -67,6 +69,24 @@ describe('filesSlice', () => {
     expect(getActiveFile(editedState).content).toBe('MOVE.L #1,D0');
 
     const resetState = filesReducer(editedState, resetFilesState());
-    expect(getActiveFile(resetState).name).toBe('nibbles.asm');
+    expect(getActiveFile(resetState).name).toBe('hello-world.asm');
+  });
+
+  it('migrates the renamed Hello World example without retaining a stale duplicate', () => {
+    const normalized = normalizeFilesState({
+      activeFileId: 'example:hello-terminal.asm',
+      items: [
+        {
+          id: 'example:hello-terminal.asm',
+          name: 'hello-terminal.asm',
+          path: 'fixtures/hello-terminal.asm',
+          kind: 'example',
+          content: 'stale content',
+        },
+      ],
+    });
+
+    expect(normalized.activeFileId).toBe(HELLO_WORLD_FILE_ID);
+    expect(normalized.items.some((item) => item.id === 'example:hello-terminal.asm')).toBe(false);
   });
 });

@@ -148,9 +148,8 @@ describe('selectCodeDebuggerControlModel', () => {
     });
   });
 
-  it.fails('exposes only commands that are valid during an inspected input wait', () => {
+  it('exposes only commands that are valid during an inspected input wait', () => {
     expect(waitingInspectionModel()).toMatchObject({
-      canStepBackward: true,
       canStepOver: false,
       canStepInto: false,
       canStepOut: false,

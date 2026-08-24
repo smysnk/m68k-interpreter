@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import panelLayoutReducer, {
   closePanel,
+  commitPanelSizes,
   commitDigitalIoBitLabel,
   createPanel,
   duplicatePanel,
@@ -85,6 +86,22 @@ describe('panelLayoutSlice', () => {
     state = panelLayoutReducer(state, resetToPreset('terminal-focus'));
     expect(state.activeLayout.columnCount).toBe(1);
     expect(state.activeLayoutDirty).toBe(false);
+  });
+
+  it('stores normalized row sizes independently for each panel column', () => {
+    const state = reduce([
+      commitPanelSizes({
+        columnId: 'column-2',
+        panelSizes: { 'panel-terminal-1': 68, 'panel-registers-2': 32 },
+      }),
+    ]);
+
+    expect(state.activeLayout.columns[1]?.panelSizes).toEqual({
+      'panel-terminal-1': 68,
+      'panel-registers-2': 32,
+    });
+    expect(state.activeLayout.columns[0]?.panelSizes).toEqual({ 'panel-code-3': 100 });
+    expect(getPanelLayoutInvariantErrors(state.activeLayout)).toEqual([]);
   });
 
   it('repairs corrupt placement, owner, widths, and floating rectangles', () => {
@@ -280,7 +297,7 @@ describe('panelLayoutSlice', () => {
       nextColumnSequence: 2,
     });
 
-    expect(migrated.schemaVersion).toBe(6);
+    expect(migrated.schemaVersion).toBe(7);
     expect(Object.values(migrated.instances).map((panel) => panel.kind)).toEqual([
       'hardware-display',
       'hardware-digital-io',
@@ -331,7 +348,7 @@ describe('panelLayoutSlice', () => {
       nextColumnSequence: 2,
     });
 
-    expect(migrated.schemaVersion).toBe(6);
+    expect(migrated.schemaVersion).toBe(7);
     expect(Object.keys(migrated.instances)).toEqual(['digital', 'digital-interrupts']);
     expect(migrated.instances.digital?.title).toBe('LEDs / Switches / Buttons');
     expect(migrated.instances['digital-interrupts']?.kind).toBe('hardware-interrupts');

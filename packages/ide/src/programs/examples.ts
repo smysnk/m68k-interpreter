@@ -1,7 +1,7 @@
 import arithmeticRegistersSource from '@/fixtures/arithmetic-registers.asm';
 import echoInputSource from '@/fixtures/echo-input.asm';
 import flagsCompareSource from '@/fixtures/flags-compare.asm';
-import helloTerminalSource from '@/fixtures/hello-terminal.asm';
+import helloWorldSource from '@/fixtures/hello-world.asm';
 import memoryCopySource from '@/fixtures/memory-copy.asm';
 import nibblesSource from '@/fixtures/nibbles.asm';
 import pollingInputSource from '@/fixtures/polling-input.asm';
@@ -81,11 +81,11 @@ export const bundledExampleFiles: BundledExampleFile[] = [
     content: nibblesSource,
   },
   {
-    id: 'example:hello-terminal.asm',
-    name: 'hello-terminal.asm',
-    path: 'fixtures/hello-terminal.asm',
+    id: 'example:hello-world.asm',
+    name: 'hello-world.asm',
+    path: 'fixtures/hello-world.asm',
     kind: 'example',
-    content: helloTerminalSource,
+    content: helloWorldSource,
   },
   {
     id: 'example:echo-input.asm',

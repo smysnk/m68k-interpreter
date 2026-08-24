@@ -102,12 +102,12 @@ test.describe('explicit panel drag and dock', () => {
     expect(afterMove?.x).not.toBe(beforeMove?.x);
 
     await beginPointerDrag(page, floatingWindow.getByRole('heading', { name: 'Screen' }));
-    const columnOneEmpty = page.locator(
-      '[data-panel-dock-target][data-panel-column-index="0"][data-panel-dock-relation="empty"]'
+    const columnOneEnd = page.locator(
+      '[data-panel-dock-target][data-panel-column-index="0"][data-panel-dock-relation="after"]'
     );
-    await expect(columnOneEmpty).toHaveCount(1);
-    await moveToCenter(page, columnOneEmpty);
-    await expect(columnOneEmpty).toHaveAttribute('data-panel-dock-active', 'true');
+    await expect(columnOneEnd).toHaveCount(1);
+    await moveToCenter(page, columnOneEnd);
+    await expect(columnOneEnd).toHaveAttribute('data-panel-dock-active', 'true');
     await page.mouse.up();
 
     await expect(floatingWindow).toHaveCount(0);

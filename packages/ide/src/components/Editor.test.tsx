@@ -5,6 +5,8 @@ import {
   addSourceBreakpoint,
   clearBreakpoints,
   createIdeStore,
+  markDebugSourceStale,
+  markDebugSourceSynchronized,
   setEditorCode,
   setLineNumbers,
   syncDebugSnapshot,
@@ -71,6 +73,7 @@ describe('Editor debugger gutters', () => {
     const store = createIdeStore();
     const fileId = store.getState().files.activeFileId;
     store.dispatch(setEditorCode(SOURCE));
+    store.dispatch(markDebugSourceSynchronized());
     store.dispatch(addSourceBreakpoint({ fileId, id: 'breakpoint-4', line: 4 }));
     store.dispatch(
       syncDebugSnapshot({
@@ -103,5 +106,52 @@ describe('Editor debugger gutters', () => {
         marker.querySelector('.debug-current-instruction-marker')
     );
     expect(composite).toBeInTheDocument();
+  });
+
+  it('does not show a stopped-line marker after the source becomes stale', () => {
+    const store = createIdeStore();
+    const fileId = store.getState().files.activeFileId;
+    store.dispatch(setEditorCode(SOURCE));
+    store.dispatch(markDebugSourceSynchronized());
+    store.dispatch(
+      syncDebugSnapshot({
+        status: 'paused',
+        stop: { pc: 0x1006, reason: 'manual-pause', source: { fileId, line: 4 } },
+        breakpoints: [],
+        callStack: [],
+        logs: [],
+        watches: [],
+        watchpoints: [],
+      })
+    );
+    store.dispatch(markDebugSourceStale());
+
+    renderWithIdeProviders(<Editor />, { store });
+
+    expect(document.querySelector('.cm-debug-current-line')).not.toBeInTheDocument();
+    expect(document.querySelector('.debug-current-instruction-marker')).not.toBeInTheDocument();
+  });
+
+  it('does not show a historical stop after the debug session has completed', () => {
+    const store = createIdeStore();
+    const fileId = store.getState().files.activeFileId;
+    store.dispatch(setEditorCode(SOURCE));
+    store.dispatch(markDebugSourceSynchronized());
+    store.dispatch(
+      syncDebugSnapshot({
+        status: 'halted',
+        stop: { pc: 0x1006, reason: 'completed', source: { fileId, line: 4 } },
+        breakpoints: [],
+        callStack: [],
+        logs: [],
+        watches: [],
+        watchpoints: [],
+      })
+    );
+
+    renderWithIdeProviders(<Editor />, { store });
+
+    expect(document.querySelector('.cm-debug-current-line')).not.toBeInTheDocument();
+    expect(document.querySelector('.debug-current-instruction-marker')).not.toBeInTheDocument();
   });
 });

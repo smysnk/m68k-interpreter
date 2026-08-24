@@ -41,7 +41,6 @@ export const selectCodeDebuggerControlModel = createSelector(
       controlsExpanded,
       stopReason,
       currentSourceLocation: snapshot.stop?.source,
-      canStepBackward: runtimeReady && controlsExpanded,
       canStepOver: runtimeReady && controlsExpanded,
       canStepInto: runtimeReady && controlsExpanded,
       canStepOut: runtimeReady && controlsExpanded && snapshot.callStack.length > 0,

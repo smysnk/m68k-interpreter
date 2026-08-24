@@ -28,13 +28,18 @@ describe('PanelWorkspace', () => {
     renderWithIdeProviders(<PanelWorkspace />, { store });
     expect(screen.getByTestId('panel-column-1')).toBeInTheDocument();
     expect(screen.getByTestId('panel-column-2')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-instance-panel-code-3')).toBeInTheDocument();
     expect(screen.getByTestId('panel-instance-panel-terminal-1')).toBeInTheDocument();
     expect(screen.getByTestId('panel-instance-panel-registers-2')).toBeInTheDocument();
+    expect(screen.getByRole('separator', { name: 'Resize Screen and Registers' })).toHaveAttribute(
+      'aria-orientation',
+      'horizontal'
+    );
     const targets = document.querySelectorAll('[data-panel-dock-target]');
-    expect(targets).toHaveLength(4);
+    expect(targets).toHaveLength(5);
     expect(
       Array.from(targets).map((target) => target.getAttribute('data-panel-dock-relation'))
-    ).toEqual(['before', 'after', 'before', 'after']);
+    ).toEqual(['before', 'after', 'before', 'between', 'after']);
   });
 
   it('creates a passive terminal mirror and transfers ownership explicitly', () => {
@@ -160,12 +165,12 @@ describe('PanelWorkspace', () => {
     ).toEqual(PANEL_KIND_ORDER.map((kind) => `Add ${PANEL_REGISTRY[kind].title} panel`));
 
     fireEvent.click(within(addMenu).getByRole('menuitem', { name: 'Add Memory panel' }));
-    const firstColumnKinds = store
+    const targetColumnKinds = store
       .getState()
-      .panelLayout.activeLayout.columns[0]!.panelIds.map(
+      .panelLayout.activeLayout.columns[1]!.panelIds.map(
         (id) => store.getState().panelLayout.activeLayout.instances[id]!.kind
       );
-    expect(firstColumnKinds).toEqual(['memory', 'terminal']);
+    expect(targetColumnKinds).toEqual(['memory', 'terminal', 'registers']);
     expect(screen.queryByRole('menu', { name: 'Panel workspace actions' })).not.toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByTestId(/panel-instance-panel-memory/)).toHaveFocus();
@@ -239,7 +244,7 @@ describe('PanelWorkspace', () => {
         .panelLayout.activeLayout.columns[1]!.panelIds.map(
           (id) => store.getState().panelLayout.activeLayout.instances[id]!.kind
         )
-    ).toEqual(['registers', 'help']);
+    ).toEqual(['terminal', 'registers', 'help']);
   });
 
   it('integrates the hardware title and window controls into one header', () => {

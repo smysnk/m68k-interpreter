@@ -37,7 +37,7 @@ describe('viewSelectors', () => {
       'hardware-seven-segment.asm',
       'hardware-interrupts.asm',
       'nibbles.asm',
-      'hello-terminal.asm',
+      'hello-world.asm',
       'echo-input.asm',
       'polling-input.asm',
       'arithmetic-registers.asm',

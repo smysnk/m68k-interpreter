@@ -70,7 +70,7 @@ test.describe('browser e2e ide shell', () => {
     const columnGroup = page.locator('.panel-column-group');
     const firstColumn = page.getByTestId('panel-column-1');
     const lastColumn = page.getByTestId('panel-column-2');
-    const firstPanel = page.getByTestId('panel-instance-panel-terminal-1');
+    const firstPanel = page.getByTestId('panel-instance-panel-code-3');
     const gutter = await columnGroup.evaluate((element) =>
       Number.parseFloat(window.getComputedStyle(element).paddingLeft)
     );
@@ -137,6 +137,45 @@ test.describe('browser e2e ide shell', () => {
     }
     expect(panelFrameRadius).not.toBe('0px');
     expect(controlRadius).not.toBe('0px');
+  });
+
+  test('resizes and persists the Screen and Registers split', async ({ page }) => {
+    await openBaselineIde(page);
+    const divider = page.getByRole('separator', { name: 'Resize Screen and Registers' });
+    const screenPanel = page.getByTestId('panel-instance-panel-terminal-1');
+    const registersPanel = page.getByTestId('panel-instance-panel-registers-2');
+    const [dividerBox, screenBefore, registersBefore] = await Promise.all([
+      divider.boundingBox(),
+      screenPanel.boundingBox(),
+      registersPanel.boundingBox(),
+    ]);
+    expect(dividerBox).not.toBeNull();
+    expect(screenBefore).not.toBeNull();
+    expect(registersBefore).not.toBeNull();
+    await expect(divider).toHaveCSS('cursor', 'row-resize');
+
+    await page.mouse.move(
+      dividerBox!.x + dividerBox!.width / 2,
+      dividerBox!.y + dividerBox!.height / 2
+    );
+    await page.mouse.down();
+    await page.mouse.move(dividerBox!.x + dividerBox!.width / 2, dividerBox!.y + 90, {
+      steps: 8,
+    });
+    await page.mouse.up();
+
+    await expect
+      .poll(async () => (await screenPanel.boundingBox())!.height)
+      .toBeGreaterThan(screenBefore!.height + 60);
+    await expect
+      .poll(async () => (await registersPanel.boundingBox())!.height)
+      .toBeLessThan(registersBefore!.height - 60);
+    const resizedScreenHeight = (await screenPanel.boundingBox())!.height;
+    await page.waitForTimeout(350);
+    await page.reload();
+    await expect
+      .poll(async () => (await screenPanel.boundingBox())!.height)
+      .toBeCloseTo(resizedScreenHeight, 0);
   });
 
   test('keeps View compact and reveals one contextual submenu at a time', async ({ page }) => {
@@ -309,7 +348,7 @@ test.describe('browser e2e ide shell', () => {
     await openViewMenu(page);
     await page.getByRole('menuitem', { name: /^add panel/i }).click();
     await page.getByRole('menuitem', { name: /add code panel/i }).click();
-    await expect(page.getByTestId('assembly-editor')).toBeVisible();
+    await expect(page.getByTestId('assembly-editor')).toHaveCount(2);
     await page.waitForFunction(
       (storageKey) => window.localStorage.getItem(storageKey)?.includes('"kind":"code"'),
       IDE_PERSISTENCE_KEY
@@ -330,7 +369,7 @@ test.describe('browser e2e ide shell', () => {
 
     await expect(appContainer).toHaveAttribute('data-theme', expectedTheme);
     await expect(page.getByRole('tablist', { name: 'Workspace views' })).toHaveCount(0);
-    await expect(page.getByTestId('assembly-editor')).toBeVisible();
+    await expect(page.getByTestId('assembly-editor')).toHaveCount(2);
   });
 
   test('shows terminal focus glow state and keeps the register identity column separate from controls', async ({

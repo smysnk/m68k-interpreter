@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import Navbar from './Navbar';
-import { createIdeStore, setEditorCode, setExecutionState } from '@/store';
+import { createIdeStore, focusPanel, setEditorCode, setExecutionState } from '@/store';
 import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
 import { executionCoordinator } from '@/runtime/executionCoordinator';
@@ -177,6 +177,7 @@ describe('Navbar', () => {
   it('shows mobile workspace tabs and hides runtime controls while terminal is active', () => {
     setViewportWidth(600);
     const store = createIdeStore();
+    store.dispatch(focusPanel('panel-terminal-1'));
 
     renderWithIdeProviders(<Navbar fileExplorerOpen={false} onToggleFileExplorer={() => {}} />, {
       store,

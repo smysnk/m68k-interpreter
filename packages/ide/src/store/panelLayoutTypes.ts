@@ -4,7 +4,7 @@ import {
   type Easy68kHardwareDeviceConfig,
 } from '@m68k/interpreter';
 
-export const PANEL_LAYOUT_SCHEMA_VERSION = 6 as const;
+export const PANEL_LAYOUT_SCHEMA_VERSION = 7 as const;
 export const MIN_PANEL_COLUMNS = 1;
 export const MAX_PANEL_COLUMNS = 4;
 export const MAX_PANEL_INSTANCES = 32;
@@ -216,6 +216,7 @@ export interface PanelColumn {
   id: PanelColumnId;
   width: number;
   panelIds: PanelInstanceId[];
+  panelSizes: Record<PanelInstanceId, number>;
 }
 
 export interface PanelLayoutDocument {

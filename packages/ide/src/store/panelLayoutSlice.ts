@@ -18,14 +18,33 @@ import {
   type PanelCreateTarget,
   type PanelInstanceId,
   type PanelKind,
+  type PanelColumn,
   type PanelLayoutDocument,
   type PanelLayoutState,
   type PanelPresetId,
 } from '@/store/panelLayoutTypes';
 
+function normalizeColumnPanelSizes(column: PanelColumn): void {
+  if (column.panelIds.length === 0) {
+    column.panelSizes = {};
+    return;
+  }
+  const weights = column.panelIds.map((panelId) => {
+    const value = column.panelSizes[panelId];
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  });
+  const total = weights.reduce((sum, value) => sum + value, 0);
+  column.panelSizes = Object.fromEntries(
+    column.panelIds.map((panelId, index) => [panelId, (weights[index]! / total) * 100])
+  );
+}
+
 function removePlacement(document: PanelLayoutDocument, panelId: string): void {
-  for (const column of document.columns)
+  for (const column of document.columns) {
     column.panelIds = column.panelIds.filter((id) => id !== panelId);
+    delete column.panelSizes[panelId];
+    normalizeColumnPanelSizes(column);
+  }
   document.floatingPanelIds = document.floatingPanelIds.filter((id) => id !== panelId);
 }
 
@@ -85,6 +104,7 @@ function addInstance(
       Math.max(0, target.index ?? column.panelIds.length)
     );
     column.panelIds.splice(index, 0, id);
+    normalizeColumnPanelSizes(column);
   }
   document.focusedPanelId = id;
   if (kind === 'terminal' && !document.terminalOwnerPanelId) document.terminalOwnerPanelId = id;
@@ -197,10 +217,7 @@ const panelLayoutSlice = createSlice({
       state,
       action: PayloadAction<{
         panelId: string;
-        config: Extract<
-          PanelLayoutDocument['instances'][string]['config'],
-          { kind: 'debugger' }
-        >;
+        config: Extract<PanelLayoutDocument['instances'][string]['config'], { kind: 'debugger' }>;
       }>
     ) {
       const panel = state.activeLayout.instances[action.payload.panelId];
@@ -271,10 +288,12 @@ const panelLayoutSlice = createSlice({
           id: `column-${document.nextColumnSequence++}`,
           width: 1,
           panelIds: [],
+          panelSizes: {},
         });
       if (document.columns.length > count) {
         const removed = document.columns.splice(count);
         document.columns[count - 1]!.panelIds.push(...removed.flatMap((column) => column.panelIds));
+        normalizeColumnPanelSizes(document.columns[count - 1]!);
       }
       document.columnCount = count;
       document.columns.forEach((column) => {
@@ -294,6 +313,28 @@ const panelLayoutSlice = createSlice({
       });
       markDirty(state);
     },
+    commitPanelSizes(
+      state,
+      action: PayloadAction<{ columnId: string; panelSizes: Record<string, number> }>
+    ) {
+      const column = state.activeLayout.columns.find(
+        (candidate) => candidate.id === action.payload.columnId
+      );
+      if (!column || column.panelIds.length < 2) return;
+      if (
+        column.panelIds.some((panelId) => {
+          const size = action.payload.panelSizes[panelId];
+          return !Number.isFinite(size) || size <= 0;
+        })
+      ) {
+        return;
+      }
+      column.panelSizes = Object.fromEntries(
+        column.panelIds.map((panelId) => [panelId, action.payload.panelSizes[panelId]!])
+      );
+      normalizeColumnPanelSizes(column);
+      markDirty(state);
+    },
     movePanel(state, action: PayloadAction<{ panelId: string; columnId: string; index?: number }>) {
       const { panelId, columnId } = action.payload;
       const column = state.activeLayout.columns.find((candidate) => candidate.id === columnId);
@@ -308,6 +349,7 @@ const panelLayoutSlice = createSlice({
         0,
         panelId
       );
+      normalizeColumnPanelSizes(column);
       state.activeLayout.focusedPanelId = panelId;
       markDirty(state);
     },
@@ -414,6 +456,7 @@ export const {
   revealPanelKind,
   setColumnCount,
   commitColumnWidths,
+  commitPanelSizes,
   movePanel,
   floatPanel,
   moveFloatingPanel,

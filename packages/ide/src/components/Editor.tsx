@@ -30,6 +30,7 @@ const Editor: React.FC = () => {
   const lineNumbers = useSelector((state: RootState) => state.settings.lineNumbers);
   const debuggerConfiguration = useSelector((state: RootState) => state.debugger.configuration);
   const debugSnapshot = useSelector((state: RootState) => state.debugger.snapshot);
+  const debugSourceStale = useSelector((state: RootState) => state.debugger.sourceStale);
   const theme = useTheme();
   const [breakpointMenu, setBreakpointMenu] = React.useState<{
     line: number;
@@ -45,8 +46,9 @@ const Editor: React.FC = () => {
   );
 
   const extensions = React.useMemo(() => {
+    const debuggerStopped = debugSnapshot.status === 'paused' || debugSnapshot.status === 'waiting';
     const currentLine =
-      debugSnapshot.stop?.source?.fileId === activeFileId
+      !debugSourceStale && debuggerStopped && debugSnapshot.stop?.source?.fileId === activeFileId
         ? debugSnapshot.stop.source.line
         : undefined;
     return [
@@ -88,6 +90,7 @@ const Editor: React.FC = () => {
   }, [
     activeFileId,
     debugSnapshot,
+    debugSourceStale,
     debuggerConfiguration.breakpoints,
     lineNumbers,
     toggleBreakpoint,

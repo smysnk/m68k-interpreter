@@ -88,8 +88,9 @@ describe('App', () => {
     await waitFor(() => {
       expect(store.getState().emulator.editorCode).toBe(nibblesSource);
       const state = store.getState();
-      expect(state.files.items.find((item) => item.id === state.files.activeFileId)?.content)
-        .toContain('END NIBBLES');
+      expect(
+        state.files.items.find((item) => item.id === state.files.activeFileId)?.content
+      ).toContain('END NIBBLES');
     });
 
     expect(closeSidebar).toHaveBeenCalledTimes(2);
@@ -132,6 +133,7 @@ describe('App', () => {
     render(<App />);
 
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-shell-mode', 'mobile');
+    fireEvent.click(screen.getByRole('tab', { name: /terminal/i }));
     expect(screen.getByTestId('app-container')).toHaveAttribute(
       'data-terminal-view-mode',
       'focused'
@@ -167,10 +169,11 @@ describe('App', () => {
     expect(screen.getByTestId(/hardware-display-device-/)).toBeInTheDocument();
   });
 
-  it('keeps Nibbles selected in the persisted file state', () => {
+  it('starts with Hello World selected', () => {
     render(<App />);
 
-    expect(ideStore.getState().files.activeFileId).toBe('example:nibbles.asm');
+    expect(ideStore.getState().files.activeFileId).toBe('example:hello-world.asm');
+    expect(ideStore.getState().emulator.editorCode).toContain("'Hello World!'");
   });
 
   it('applies the source-requested terminal focus when opening Nibbles', async () => {
@@ -248,13 +251,13 @@ describe('App', () => {
     renderWithIdeProviders(<AppShell />, { store });
 
     expect(screen.getByTestId('app-container')).toHaveAttribute('data-theme', 'dark');
-    expect(store.getState().panelLayout.activeLayout.columns).toHaveLength(1);
-    expect(store.getState().sourceIde.baseline?.panelLayout.activeLayout.columns).toHaveLength(3);
+    expect(store.getState().panelLayout.activeLayout.columns).toHaveLength(3);
+    expect(store.getState().sourceIde.baseline).toBeNull();
     expect(
       Object.values(store.getState().panelLayout.activeLayout.instances).map((panel) => panel.kind)
-    ).toEqual(['terminal']);
-    expect(store.getState().files.activeFileId).toBe('example:nibbles.asm');
-    expect(store.getState().emulator.editorCode).toBe(nibblesSource);
+    ).toEqual(['code', 'memory', 'help']);
+    expect(store.getState().files.activeFileId).toBe('example:hello-world.asm');
+    expect(store.getState().emulator.editorCode).toContain("'Hello World!'");
   });
 
   it('propagates the overall app theme into the terminal surface', () => {
