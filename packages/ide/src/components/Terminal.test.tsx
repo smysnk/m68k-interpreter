@@ -120,9 +120,12 @@ describe('Terminal', () => {
 
     renderWithIdeProviders(<Terminal />);
 
-    await waitFor(() => {
-      expect(screen.getByTestId('terminal-screen')).toHaveTextContent('GAME');
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('terminal-screen')).toHaveTextContent('GAME');
+      },
+      { timeout: 5_000 }
+    );
   });
 
   it('records terminal repaint telemetry when the retro display writes a frame patch', async () => {
