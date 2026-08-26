@@ -47,11 +47,20 @@ async function main(): Promise<void> {
       try {
         const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
         await page.goto(`${baseUrl}/?ide_perf=1`, { waitUntil: 'networkidle', timeout: 60_000 });
-        await page.waitForFunction(() => Boolean(window.__M68K_IDE_TEST_CONTROLS__));
-        await page.evaluate(() => window.__M68K_IDE_TEST_CONTROLS__?.ignoreSourceConfiguration());
         await page.waitForFunction(
-          () => window.__M68K_IDE_TEST_CONTROLS__?.getSourceIdeStatus() === 'ignored'
+          () => typeof window.__M68K_IDE_TEST_CONTROLS__?.getSourceIdeStatus === 'function'
         );
+        const sourceIdeStatus = await page.evaluate(() =>
+          window.__M68K_IDE_TEST_CONTROLS__?.getSourceIdeStatus()
+        );
+        if (sourceIdeStatus !== 'none') {
+          await page.evaluate(() =>
+            window.__M68K_IDE_TEST_CONTROLS__?.ignoreSourceConfiguration()
+          );
+          await page.waitForFunction(
+            () => window.__M68K_IDE_TEST_CONTROLS__?.getSourceIdeStatus() === 'ignored'
+          );
+        }
         await page.evaluate((source) => {
           window.__M68K_IDE_TEST_CONTROLS__?.setPanelPreset('code-run');
           window.__M68K_IDE_TEST_CONTROLS__?.loadSource(source);
