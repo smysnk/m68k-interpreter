@@ -46,7 +46,7 @@ The pending state is an intent lifecycle only. Whether the IDE is actually pause
 Do not add an independent persistent `debugMode` boolean. Derive stopped-debugging presentation from a current, non-stale debugger snapshot whose status and stop reason are actionable. A manual pause is confirmed by:
 
 ```ts
-snapshot.status === 'paused' && snapshot.stop?.reason === 'manual-pause'
+snapshot.status === 'paused' && snapshot.stop?.reason === 'manual-pause';
 ```
 
 Breakpoint, watchpoint, step-complete, run-to-cursor, exception, and interrupt stops should continue to use the same stopped-debugging presentation contract.
@@ -84,43 +84,43 @@ The Code-panel control may continue to display the text **Debug**, but it must u
 
 ## Implementation phases
 
-1. [ ] **Unify pause intent**
+1. [x] **Unify pause intent**
    - Add one canonical pause-for-debugging handler at the execution coordination/runtime hook boundary.
    - Route the top bar, Code-panel Debug button, and `F6` through it.
    - Move `recordDebuggerPauseRequest()` out of the Code-panel component.
 
-2. [ ] **Add shared pending state**
+2. [x] **Add shared pending state**
    - Add request/confirm/fail/reset actions to `debuggerSlice`.
    - Expose shared selectors for pause availability and pending state.
    - Remove component-local pause-request timers.
    - Make rapid repeated requests idempotent.
 
-3. [ ] **Confirm the runtime stop contract**
+3. [x] **Confirm the runtime stop contract**
    - Synchronize debugger configuration before requesting pause.
    - Preserve the worker ordering: stop loop, create manual stop, publish complete frame, emit stopped event, acknowledge command.
    - Ensure in-process and worker transports publish equivalent debugger, register, execution, and source-location state.
    - Clear pending state only from confirmed snapshot, explicit failure, reset, or bounded recovery timeout.
 
-4. [ ] **Enter debugging presentation**
+4. [x] **Enter debugging presentation**
    - Derive active stopped-debugging presentation from the synchronized debugger snapshot.
    - Expand Code-panel debug controls and highlight the current instruction.
    - Reveal/focus the Debugger panel non-destructively with `revealPanelKind('debugger')`.
    - Reuse existing panels and avoid duplicate debugger instances.
    - Preserve custom and saved layouts.
 
-5. [ ] **Replace the top-bar icon and copy**
+5. [x] **Replace the top-bar icon and copy**
    - Replace `faPause` with `faBug` in `Navbar.tsx`.
    - Change the accessible name to `Pause for debugging`.
    - Change the tooltip to `Pause for debugging (F6)`.
    - Add pending and stopped presentation where needed without making the icon the only status indicator.
 
-6. [ ] **Complete lifecycle behavior**
+6. [x] **Complete lifecycle behavior**
    - Clear pending state on continue, stop, reset, source replacement, runtime disposal, and failure.
    - Leave revealed debugging panels in the user's layout on continue.
    - Preserve the existing source-staleness guard for execution highlighting.
    - Keep reverse-step controls excluded from the toolbar until exact reverse execution is ready.
 
-7. [ ] **Validate the complete flow**
+7. [x] **Validate the complete flow**
    - Add unit coverage for Navbar, Code header, selectors, debugger reducer, keyboard commands, runtime command port, and worker host.
    - Update browser tests that currently assert no debugger panel is opened by manual pause.
    - Add browser coverage for top-bar pause, Code-panel Debug, and `F6` parity.
@@ -165,3 +165,17 @@ The Code-panel control may continue to display the text **Debug**, but it must u
 - Proof that a custom layout is preserved.
 - Pause-request-to-snapshot latency and duplicate-request count.
 - Final `git diff --check` and scoped worktree status.
+
+## Completion evidence
+
+Completed on 2026-08-24.
+
+- The canonical handler in `useEmulatorEvents` accepts the request once, records telemetry once, synchronizes debugger configuration, invokes the runtime pause command, and confirms pending state only from a synchronized `manual-pause` snapshot. Failure, timeout, continue, reset, runtime replacement, source invalidation, fault, and disposal paths clear the shared intent.
+- Navbar, Code-panel Debug, and `F6` all submit `executionCoordinator.execute('pause')`. Navbar now uses `faBug`, the accessible name **Pause for debugging**, the tooltip **Pause for debugging (F6)**, and the shared busy/disabled state.
+- Actionable debugger snapshots dispatch `revealPanelKind('debugger')` once per stop. Reducer coverage proves an existing minimized panel is restored rather than duplicated, column identity and widths remain unchanged, and the selected saved custom view and its stored document are preserved.
+- Focused Vitest: 8 files passed; 73 tests passed and 7 pre-existing expected-failure tests remained explicitly marked.
+- Runtime coverage includes both worker and in-process pause command paths. The existing worker-host test verifies the exact `frame -> stopped -> reply` order and ignores a duplicate pause after the stop.
+- Chromium debugger suite: 10 tests accepted, including the Code-panel button, top-bar button, `F6`, breakpoint stops, duplicate Code panels, continue behavior, source replacement, and explicit Debug layout. The two pre-existing waiting-input cases remain declared expected failures.
+- Browser telemetry verified one request and one manual-pause snapshot for each entry point, less than 1,000 ms request-to-snapshot latency, and exactly one accepted request when duplicate Code controls dispatch click events together.
+- IDE type-check passed. The production Vite build passed with 259 modules transformed; its existing large-chunk advisory remains non-blocking.
+- Focused ESLint passed. `git diff --check` passed, and the scoped status review kept the pre-existing `StatusBar.test.tsx` and interpreter `emulationConfig.ts` edits outside this implementation.

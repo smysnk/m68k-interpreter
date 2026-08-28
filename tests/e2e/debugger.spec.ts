@@ -30,7 +30,7 @@ LOOP
   END START`;
 
 test.describe('source debugger vertical slice', () => {
-  test('stops before a gutter breakpoint and never opens debugging panels automatically', async ({
+  test('stops before a gutter breakpoint and reveals one debugging panel non-destructively', async ({
     page,
   }) => {
     await openBaselineIde(page);
@@ -59,16 +59,17 @@ test.describe('source debugger vertical slice', () => {
     await page.locator('button[aria-label="Start program"]').click();
     await expect(page.locator('.status-pill')).toContainText('Breakpoint');
     await expect(page.locator('.cm-debug-current-line')).toContainText('ADDQ.L #1,D0');
-    await expect(page.locator('[data-panel-kind="debugger"]')).toHaveCount(0);
+    await expect(page.locator('[data-panel-kind="debugger"]')).toHaveCount(1);
     const codePanel = page.locator('[data-panel-kind="code"]');
     await expect(codePanel.getByRole('button', { name: /step into/i })).toBeVisible();
     await expect(
       codePanel.getByRole('toolbar', { name: 'Code debugging controls' })
     ).toHaveAttribute('data-expanded', 'true');
 
-    await page.locator('button[aria-label="Continue program"]').click();
+    await expect(page.getByRole('button', { name: 'Continue program' })).toBeDisabled();
+    await page.keyboard.press('F5');
     await expect(page.locator('.status-pill')).toContainText('Breakpoint');
-    await expect(page.locator('[data-panel-kind="debugger"]')).toHaveCount(0);
+    await expect(page.locator('[data-panel-kind="debugger"]')).toHaveCount(1);
   });
 
   test('pauses from the collapsed Debug button and highlights the current instruction', async ({
@@ -86,8 +87,18 @@ test.describe('source debugger vertical slice', () => {
 
     const codePanel = page.locator('[data-panel-kind="code"]');
     const debugToolbar = codePanel.getByRole('toolbar', { name: 'Code debugging controls' });
+    const runtimeControls = page.locator('.navbar-runtime-controls');
     await expect(debugToolbar).toHaveAttribute('data-expanded', 'false');
+    await expect(runtimeControls).toHaveAttribute('data-runtime-state', 'ready');
     await page.getByRole('button', { name: 'Start program', exact: true }).click();
+    await expect(runtimeControls).toHaveAttribute('data-runtime-state', 'running');
+    await expect(page.getByRole('button', { name: 'Program running' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Program running' })).toHaveAttribute(
+      'data-current-state',
+      'false'
+    );
+    await expect(page.getByRole('button', { name: 'Stop program' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Restart program' })).toBeEnabled();
     const debugButton = codePanel.getByRole('button', { name: 'Pause for debugging' });
     await expect(debugButton).toBeEnabled();
     await page.evaluate(() => window.__M68K_IDE_PERF__?.reset());
@@ -110,12 +121,46 @@ test.describe('source debugger vertical slice', () => {
     await debugButton.click();
 
     await expect(page.locator('.status-pill')).toContainText('Paused');
+    await expect(runtimeControls).toHaveAttribute('data-runtime-state', 'paused');
+    await expect(page.getByRole('button', { name: 'Continue program' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Debugger paused' })).toHaveAttribute(
+      'data-current-state',
+      'true'
+    );
     await expect(page.locator('.cm-debug-current-line')).toHaveCount(1);
     const pauseToHighlightMs = (await page.evaluate(() => performance.now())) - pauseStartedAt;
     expect(pauseToHighlightMs).toBeLessThan(1_000);
     await expect(debugToolbar).toHaveAttribute('data-expanded', 'true');
     await expect(codePanel.getByRole('button', { name: /step into/i })).toBeVisible();
-    await expect(page.locator('[data-panel-kind="debugger"]')).toHaveCount(0);
+    await expect(
+      codePanel
+        .getByRole('button', { name: 'Step over' })
+        .locator('[data-debug-command-icon="over"]')
+    ).toBeVisible();
+    await expect(
+      codePanel
+        .getByRole('button', { name: 'Step into' })
+        .locator('[data-debug-command-icon="into"]')
+    ).toBeVisible();
+    await expect(
+      codePanel.getByRole('button', { name: 'Step out' }).locator('[data-debug-command-icon="out"]')
+    ).toBeVisible();
+    await expect(
+      codePanel
+        .getByRole('button', { name: 'Run to cursor' })
+        .locator('[data-debug-command-icon="run-to-cursor"]')
+    ).toBeVisible();
+    await expect(page.locator('[data-panel-kind="debugger"]')).toHaveCount(1);
+    await expect(page.getByTestId('debugger-panel')).toBeVisible();
+    const toolbarBox = await debugToolbar.boundingBox();
+    const lastCommandBox = await debugToolbar
+      .locator('.code-debugger-command-rail-inner .code-debugger-header-button:last-child')
+      .boundingBox();
+    expect(toolbarBox).not.toBeNull();
+    expect(lastCommandBox).not.toBeNull();
+    expect(
+      toolbarBox!.x + toolbarBox!.width - (lastCommandBox!.x + lastCommandBox!.width)
+    ).toBeLessThanOrEqual(2);
 
     const stoppedLine = await page.locator('.cm-debug-current-line').textContent();
     await codePanel.getByRole('button', { name: /step into/i }).click();
@@ -128,16 +173,89 @@ test.describe('source debugger vertical slice', () => {
       pauseRequestCount: 1,
       pauseSnapshotCount: 1,
     });
-    expect(pauseTelemetry!.debuggerSurface.snapshotDispatchCount).toBe(
+    expect(pauseTelemetry!.debuggerSurface.snapshotDispatchCount).toBeGreaterThanOrEqual(
       (steadyStateSnapshot?.debuggerSurface.snapshotDispatchCount ?? 0) + 2
+    );
+    expect(pauseTelemetry!.debuggerSurface.snapshotDispatchCount).toBeLessThanOrEqual(
+      (steadyStateSnapshot?.debuggerSurface.snapshotDispatchCount ?? 0) + 3
     );
     expect(pauseTelemetry!.debuggerSurface.lastPauseToSnapshotLatencyMs).toBeLessThan(1_000);
     expect(pauseTelemetry!.debuggerSurface.maxSnapshotPayloadBytes).toBeGreaterThan(0);
 
-    await page.locator('button[aria-label="Continue program"]').click();
+    await page.keyboard.press('F5');
+    await expect(runtimeControls).toHaveAttribute('data-runtime-state', 'running');
     await expect(debugToolbar).toHaveAttribute('data-expanded', 'false');
     await expect(codePanel.getByRole('button', { name: 'Pause for debugging' })).toBeVisible();
+    await expect(page.locator('[data-panel-kind="debugger"]')).toHaveCount(1);
   });
+
+  test('disables invalid execution actions while the program waits for input', async ({ page }) => {
+    await openBaselineIde(page);
+    await page.getByRole('button', { name: /open app menu/i }).click();
+    await page.getByRole('menuitem', { name: /^view$/i }).click();
+    await page.getByRole('menuitem', { name: /layouts/i }).click();
+    await page.getByRole('menuitem', { name: 'Apply Code and Run layout' }).click();
+    const editor = page.locator('.cm-content').first();
+    await editor.click();
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+    await page.keyboard.insertText(WAIT_FOR_INPUT_SOURCE);
+
+    await page.getByRole('button', { name: 'Start program', exact: true }).click();
+    const runtimeControls = page.locator('.navbar-runtime-controls');
+    await expect(runtimeControls).toHaveAttribute('data-runtime-state', 'waiting');
+    await expect(page.locator('.navbar-execution-state')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Program waiting for input' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Pause for debugging' }).first()).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Stop program' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Restart program' })).toBeEnabled();
+
+    await page.getByRole('button', { name: 'Stop program' }).click();
+    await expect(runtimeControls).toHaveAttribute('data-runtime-state', 'ready');
+    await expect(page.getByRole('button', { name: 'Stop program' })).toBeDisabled();
+  });
+
+  for (const { entryPoint, trigger } of [
+    { entryPoint: 'top execution bar', trigger: 'button' },
+    { entryPoint: 'F6 shortcut', trigger: 'keyboard' },
+  ] as const) {
+    test(`pauses for debugging from the ${entryPoint}`, async ({ page }) => {
+      await openBaselineIde(page);
+      await page.getByRole('button', { name: /open app menu/i }).click();
+      await page.getByRole('menuitem', { name: /^view$/i }).click();
+      await page.getByRole('menuitem', { name: /layouts/i }).click();
+      await page.getByRole('menuitem', { name: 'Apply Code and Run layout' }).click();
+      const editor = page.locator('.cm-content').first();
+      await editor.click();
+      await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+      await page.keyboard.insertText(SOURCE);
+      await page.getByRole('button', { name: 'Start program', exact: true }).click();
+
+      const topPause = page.locator('.navbar').getByRole('button', {
+        name: 'Pause for debugging',
+      });
+      await expect(topPause).toBeEnabled();
+      await expect(topPause).toHaveAttribute('title', 'Pause for debugging (F6)');
+      await expect(topPause.locator('svg')).toHaveAttribute('data-icon', 'bug');
+      await page.evaluate(() => window.__M68K_IDE_PERF__?.reset());
+
+      if (trigger === 'button') await topPause.click();
+      else await page.keyboard.press('F6');
+
+      await expect(page.locator('.status-pill')).toContainText('Paused');
+      await expect(page.locator('.cm-debug-current-line')).toHaveCount(1);
+      await expect(page.locator('[data-panel-kind="debugger"]')).toHaveCount(1);
+      await expect(
+        page
+          .locator('[data-panel-kind="code"]')
+          .getByRole('toolbar', { name: 'Code debugging controls' })
+      ).toHaveAttribute('data-expanded', 'true');
+      const telemetry = await page.evaluate(() => window.__M68K_IDE_PERF__?.snapshot());
+      expect(telemetry?.debuggerSurface).toMatchObject({
+        pauseRequestCount: 1,
+        pauseSnapshotCount: 1,
+      });
+    });
+  }
 
   test('keeps duplicate Code-panel controls synchronized around one pause command', async ({
     page,
@@ -168,16 +286,24 @@ test.describe('source debugger vertical slice', () => {
     await expect(toolbars).toHaveCount(2);
     await expect(toolbars.nth(0)).toHaveAttribute('data-expanded', 'false');
     await expect(toolbars.nth(1)).toHaveAttribute('data-expanded', 'false');
-    await page
+    await page.evaluate(() => window.__M68K_IDE_PERF__?.reset());
+    const pauseButtons = page
       .locator('[data-panel-kind="code"]')
-      .first()
-      .getByRole('button', { name: 'Pause for debugging' })
-      .click();
+      .getByRole('button', { name: 'Pause for debugging' });
+    await expect(pauseButtons).toHaveCount(2);
+    await expect(pauseButtons.nth(0)).toBeEnabled();
+    await expect(pauseButtons.nth(1)).toBeEnabled();
+    await Promise.all([
+      pauseButtons.nth(0).dispatchEvent('click'),
+      pauseButtons.nth(1).dispatchEvent('click'),
+    ]);
 
     await expect(page.locator('.status-pill')).toContainText('Paused');
     await expect(toolbars.nth(0)).toHaveAttribute('data-expanded', 'true');
     await expect(toolbars.nth(1)).toHaveAttribute('data-expanded', 'true');
     await expect(page.locator('.cm-debug-current-line')).toHaveCount(2);
+    const telemetry = await page.evaluate(() => window.__M68K_IDE_PERF__?.snapshot());
+    expect(telemetry?.debuggerSurface.pauseRequestCount).toBe(1);
   });
 
   test('starts one shared inspection session from a waiting input instruction', async ({
@@ -271,7 +397,8 @@ test.describe('source debugger vertical slice', () => {
       beforeIdleWindow?.debuggerSurface.snapshotDispatchCount
     );
 
-    await page.getByRole('button', { name: 'Continue program' }).click();
+    await expect(page.getByRole('button', { name: 'Continue program' })).toBeDisabled();
+    await page.keyboard.press('F5');
     await expect(debugToolbar).toHaveAttribute('data-expanded', 'false');
   });
 
@@ -303,7 +430,11 @@ test.describe('source debugger vertical slice', () => {
       .filter({ hasText: /^9$/ });
     await targetLineNumber.click();
 
-    await page.getByRole('button', { name: 'Start program', exact: true }).click();
+    await expect(page.locator('.navbar-runtime-controls')).toHaveAttribute(
+      'data-runtime-state',
+      'source-stale'
+    );
+    await page.getByRole('button', { name: 'Run updated source', exact: true }).click();
     await expect(page.locator('.status-pill')).toContainText('Breakpoint');
     await expect(page.locator('.cm-debug-current-line')).toContainText('ADDQ.L #1,D0');
   });

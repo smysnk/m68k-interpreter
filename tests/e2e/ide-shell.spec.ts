@@ -82,20 +82,33 @@ test.describe('browser e2e ide shell', () => {
     const firstColumn = page.getByTestId('panel-column-1');
     const lastColumn = page.getByTestId('panel-column-2');
     const firstPanel = page.getByTestId('panel-instance-panel-code-3');
+    const screenPanel = page.getByTestId('panel-instance-panel-terminal-1');
+    const registersPanel = page.getByTestId('panel-instance-panel-registers-2');
     const gutter = await columnGroup.evaluate((element) =>
       Number.parseFloat(window.getComputedStyle(element).paddingLeft)
     );
-    const [mainBox, firstColumnBox, lastColumnBox, firstPanelBox] = await Promise.all([
+    const [
+      mainBox,
+      firstColumnBox,
+      lastColumnBox,
+      firstPanelBox,
+      screenPanelBox,
+      registersPanelBox,
+    ] = await Promise.all([
       mainContent.boundingBox(),
       firstColumn.boundingBox(),
       lastColumn.boundingBox(),
       firstPanel.boundingBox(),
+      screenPanel.boundingBox(),
+      registersPanel.boundingBox(),
     ]);
 
     expect(mainBox).not.toBeNull();
     expect(firstColumnBox).not.toBeNull();
     expect(lastColumnBox).not.toBeNull();
     expect(firstPanelBox).not.toBeNull();
+    expect(screenPanelBox).not.toBeNull();
+    expect(registersPanelBox).not.toBeNull();
     expect(gutter).toBeGreaterThan(0);
     expect(gutter).toBeLessThan(3);
     expect(Math.abs(firstColumnBox!.x - mainBox!.x - gutter)).toBeLessThanOrEqual(1);
@@ -105,6 +118,13 @@ test.describe('browser e2e ide shell', () => {
     ).toBeLessThanOrEqual(1);
     expect(Math.abs(firstPanelBox!.x - firstColumnBox!.x)).toBeLessThanOrEqual(1);
     expect(Math.abs(firstPanelBox!.y - firstColumnBox!.y)).toBeLessThanOrEqual(1);
+    expect(firstColumnBox!.width / (firstColumnBox!.width + lastColumnBox!.width)).toBeCloseTo(
+      0.41,
+      1
+    );
+    expect(
+      screenPanelBox!.height / (screenPanelBox!.height + registersPanelBox!.height)
+    ).toBeCloseTo(0.41, 1);
 
     await openViewMenu(page);
     await page.getByRole('menuitem', { name: /^add panel/i }).click();
@@ -187,6 +207,22 @@ test.describe('browser e2e ide shell', () => {
     await expect
       .poll(async () => (await screenPanel.boundingBox())!.height)
       .toBeCloseTo(resizedScreenHeight, 0);
+  });
+
+  test('accepts emulator input while the interactive Screen owns focus', async ({ page }) => {
+    await openBaselineIde(page);
+    await page.getByRole('button', { name: /open file explorer/i }).click();
+    await page.getByRole('button', { name: 'echo-input.asm' }).click();
+    await page.getByRole('button', { name: 'Start program', exact: true }).click();
+
+    await expect(page.locator('.status-pill')).toContainText('Waiting');
+    const terminal = page.getByRole('application', { name: 'M68K interactive terminal' });
+    await terminal.click();
+    await expect(page.locator('.retro-screen__viewport')).toBeFocused();
+    await page.keyboard.press('x');
+
+    await expect(page.locator('.status-pill')).toContainText('Halted');
+    await expect(terminal).toContainText('You pressed: x');
   });
 
   test('keeps View compact and reveals one contextual submenu at a time', async ({ page }) => {

@@ -393,3 +393,4 @@ export * from '@/store/panelLayoutValidation';
 export * from '@/store/sourceIdeSlice';
 export * from '@/store/debuggerSlice';
 export * from '@/store/codeDebuggerSelectors';
+export * from '@/store/executionControlSelectors';

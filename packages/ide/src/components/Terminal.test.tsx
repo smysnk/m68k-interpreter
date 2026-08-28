@@ -246,6 +246,26 @@ describe('Terminal', () => {
     });
   });
 
+  it('forwards keyboard input when the retro display viewport owns focus', async () => {
+    const queueInput = vi.fn();
+
+    useEmulatorStore.getState().setEmulatorInstance({
+      queueInput,
+    } as unknown as Emulator);
+
+    renderWithIdeProviders(<Terminal />);
+
+    const viewport = document.querySelector('.retro-screen__viewport') as HTMLDivElement | null;
+    expect(viewport).not.toBeNull();
+    viewport!.focus();
+    fireEvent.keyDown(viewport!, { key: 'x' });
+
+    await waitFor(() => {
+      expect(queueInput).toHaveBeenCalledTimes(1);
+      expect(queueInput).toHaveBeenCalledWith('x');
+    });
+  });
+
   it('keeps duplicate terminal mirrors passive so one physical key queues one command', async () => {
     const queueInput = vi.fn();
     useEmulatorStore.getState().setEmulatorInstance({ queueInput } as unknown as Emulator);

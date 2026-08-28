@@ -700,7 +700,7 @@ const Terminal: React.FC<TerminalProps> = ({
         aria-label={interactive ? 'M68K interactive terminal' : 'M68K terminal mirror'}
       >
         <RetroScreen
-          captureKeyboard={interactive && !isTouchOnlyMode}
+          captureKeyboard={false}
           captureMouse={false}
           className="terminal-retro-screen"
           controller={controllerRef.current}

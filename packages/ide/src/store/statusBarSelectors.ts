@@ -1,5 +1,6 @@
 import { createSelector } from '@reduxjs/toolkit';
 import type { RootState } from '@/store';
+import { selectRuntimePhaseModel } from '@/store/executionControlSelectors';
 
 export type RuntimeTone = 'good' | 'warn' | 'danger' | 'neutral';
 
@@ -17,11 +18,8 @@ export const selectActiveInspectorPane = createSelector(
 );
 
 export const selectStatusBarModel = createSelector(
-  [
-    (state: RootState) => state.emulator.executionState,
-    (state: RootState) => state.debugger.snapshot,
-  ],
-  (executionState, debuggerSnapshot): StatusBarModel => {
+  [selectRuntimePhaseModel, (state: RootState) => state.debugger.snapshot],
+  (phaseModel, debuggerSnapshot): StatusBarModel => {
     const debugStop = debuggerSnapshot.stop;
     const debugLocation = debugStop
       ? ` · $${debugStop.pc.toString(16).toUpperCase().padStart(8, '0')}${
@@ -29,21 +27,37 @@ export const selectStatusBarModel = createSelector(
         }`
       : '';
     const runtime =
-      debugStop?.reason === 'breakpoint'
-        ? { label: `Breakpoint${debugLocation}`, tone: 'warn' as const }
-        : debugStop?.reason === 'watchpoint'
-          ? { label: `Watchpoint${debugLocation}`, tone: 'warn' as const }
-          : debugStop?.reason === 'manual-pause' || debugStop?.reason === 'step-complete' || debugStop?.reason === 'run-to-cursor'
-            ? { label: `Paused${debugLocation}`, tone: 'warn' as const }
-      : executionState.exception !== null
-        ? { label: 'Exception', tone: 'danger' as const }
-        : executionState.stopped && !executionState.ended
-          ? { label: 'Waiting', tone: 'warn' as const }
-          : executionState.ended
-            ? { label: 'Halted', tone: 'neutral' as const }
-            : executionState.started
-            ? { label: 'Running', tone: 'good' as const }
-              : { label: 'Ready', tone: 'neutral' as const };
+      phaseModel.phase === 'source-stale'
+        ? {
+            label:
+              phaseModel.underlyingPhase === 'running'
+                ? 'Source changed · old build running'
+                : 'Source changed',
+            tone: 'warn' as const,
+          }
+        : phaseModel.phase === 'starting'
+          ? { label: 'Starting', tone: 'neutral' as const }
+          : phaseModel.phase === 'pause-requested'
+            ? { label: 'Pausing', tone: 'warn' as const }
+            : phaseModel.phase === 'stopping'
+              ? { label: 'Stopping', tone: 'neutral' as const }
+              : phaseModel.phase === 'restarting'
+                ? { label: 'Restarting', tone: 'neutral' as const }
+                : debugStop?.reason === 'breakpoint'
+                  ? { label: `Breakpoint${debugLocation}`, tone: 'warn' as const }
+                  : debugStop?.reason === 'watchpoint'
+                    ? { label: `Watchpoint${debugLocation}`, tone: 'warn' as const }
+                    : phaseModel.phase === 'paused'
+                      ? { label: `Paused${debugLocation}`, tone: 'warn' as const }
+                      : phaseModel.phase === 'exception'
+                        ? { label: 'Exception', tone: 'danger' as const }
+                        : phaseModel.phase === 'waiting'
+                          ? { label: 'Waiting', tone: 'warn' as const }
+                          : phaseModel.phase === 'halted'
+                            ? { label: 'Halted', tone: 'neutral' as const }
+                            : phaseModel.phase === 'running'
+                              ? { label: 'Running', tone: 'good' as const }
+                              : { label: 'Ready', tone: 'neutral' as const };
 
     return {
       runtime,

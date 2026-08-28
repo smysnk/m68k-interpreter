@@ -1,15 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import reducer, {
   addSourceBreakpoint,
+  cancelDebuggerPauseRequest,
+  confirmDebuggerPause,
+  failDebuggerPause,
   initialDebuggerState,
   markDebugSourceStale,
   markDebugSourceSynchronized,
   resetDebugSession,
+  requestDebuggerPause,
   syncDebugSnapshot,
   upsertBreakpoint,
 } from './debuggerSlice';
 
 describe('debuggerSlice', () => {
+  it('tracks one shared pause request lifecycle and clears it at every terminal action', () => {
+    const pending = reducer(initialDebuggerState, requestDebuggerPause());
+    expect(pending.pauseRequestPending).toBe(true);
+    expect(reducer(pending, requestDebuggerPause()).pauseRequestPending).toBe(true);
+    expect(reducer(pending, confirmDebuggerPause()).pauseRequestPending).toBe(false);
+    expect(reducer(pending, failDebuggerPause()).pauseRequestPending).toBe(false);
+    expect(reducer(pending, cancelDebuggerPauseRequest()).pauseRequestPending).toBe(false);
+    expect(reducer(pending, markDebugSourceStale()).pauseRequestPending).toBe(false);
+    expect(reducer(pending, resetDebugSession()).pauseRequestPending).toBe(false);
+  });
+
   it('toggles file-scoped source breakpoints without coupling them to a runtime', () => {
     const added = reducer(
       initialDebuggerState,

@@ -61,6 +61,11 @@ describe('StatusBar', () => {
       'aria-checked',
       'true'
     );
+    expect(screen.getByText('Original ISA · 24-bit addressing')).toBeInTheDocument();
+    expect(screen.getByText('Adds VBR · restartable faults · MOVEC/MOVES')).toBeInTheDocument();
+    expect(
+      screen.getByText('Adds 32-bit addressing · full indexing · bitfields/CAS')
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('menuitemradio', { name: 'MC68010' }));
 

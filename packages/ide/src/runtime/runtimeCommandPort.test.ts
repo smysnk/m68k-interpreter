@@ -64,7 +64,9 @@ describe('RuntimeCommandPort', () => {
     const first = port.queueInput('first');
     const stale = port.queueInput('stale');
     await Promise.resolve();
-    sessions.replace({ controller: { requestQueueInput: vi.fn() } } as unknown as IdeRuntimeSession);
+    sessions.replace({
+      controller: { requestQueueInput: vi.fn() },
+    } as unknown as IdeRuntimeSession);
     release();
     await first;
     await expect(stale).rejects.toBeInstanceOf(StaleRuntimeCommandError);
@@ -74,6 +76,29 @@ describe('RuntimeCommandPort', () => {
   it('fails closed when no runtime is active', async () => {
     const port = new RuntimeCommandPort(createRuntimeSessionStore());
     await expect(port.reset()).rejects.toBeInstanceOf(RuntimeUnavailableError);
+  });
+
+  it('pauses worker and in-process runtimes through equivalent command contracts', async () => {
+    const workerSessions = createRuntimeSessionStore();
+    const requestPause = vi.fn().mockResolvedValue(undefined);
+    const workerPauseDebugger = vi.fn();
+    workerSessions.replace({
+      controller: { requestPause },
+      pauseDebugger: workerPauseDebugger,
+    } as unknown as IdeRuntimeSession);
+    const workerPort = new RuntimeCommandPort(workerSessions);
+
+    await expect(workerPort.pause()).resolves.toBe(true);
+    expect(workerPauseDebugger).toHaveBeenCalledOnce();
+    expect(requestPause).toHaveBeenCalledOnce();
+
+    const inProcessSessions = createRuntimeSessionStore();
+    const pauseDebugger = vi.fn();
+    inProcessSessions.replace({ pauseDebugger } as unknown as IdeRuntimeSession);
+    const inProcessPort = new RuntimeCommandPort(inProcessSessions);
+
+    await expect(inProcessPort.pause()).resolves.toBe(false);
+    expect(pauseDebugger).toHaveBeenCalledOnce();
   });
 
   it('orders hardware input commands through the worker controller', async () => {

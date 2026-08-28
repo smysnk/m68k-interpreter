@@ -10,6 +10,7 @@ import PanelWorkspace from './panels/PanelWorkspace';
 import { useAppShellController } from '@/hooks/useAppShellController';
 import { useCompactShell } from '@/hooks/useCompactShell';
 import { useEmulatorEvents } from '@/hooks/useEmulatorEvents';
+import { useDebuggerPanelReveal } from '@/hooks/useDebuggerPanelReveal';
 import HardwareRuntimeBridge from '@/runtime/HardwareRuntimeBridge';
 import {
   getIdePerformanceSnapshot,
@@ -163,6 +164,7 @@ function IdePerformanceProbe(): React.ReactElement | null {
 
 function AppShell(): React.ReactElement {
   useIdeRenderTelemetry('AppShell');
+  useDebuggerPanelReveal();
   const theme = useTheme();
   const { navbarShellRef, statusBarShellRef } = useAppShellController();
   const panelLayout = useSelector(selectActivePanelLayout);

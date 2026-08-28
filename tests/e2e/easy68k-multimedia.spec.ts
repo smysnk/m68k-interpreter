@@ -161,7 +161,7 @@ test.describe('Easy68K multimedia workspace', () => {
       expect(sample.wallPixel).toEqual([56, 189, 248, 255]);
     }
 
-    await page.getByRole('button', { name: 'Stop debugging' }).click();
+    await page.getByRole('button', { name: 'Stop program' }).click();
     await expect(page.locator('.status-pill').filter({ hasText: /^ready$/i })).toBeVisible();
     const stoppedSample = await readBallSample(firstCanvas);
     await page.waitForTimeout(250);

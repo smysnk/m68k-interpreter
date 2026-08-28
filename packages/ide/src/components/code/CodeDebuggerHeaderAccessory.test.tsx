@@ -1,8 +1,9 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import CodeDebuggerHeaderAccessory from './CodeDebuggerHeaderAccessory';
 import {
   createIdeStore,
+  requestDebuggerPause,
   setExecutionState,
   setEditorCursorPosition,
   setRuntimeSessionMetadata,
@@ -103,7 +104,44 @@ describe('CodeDebuggerHeaderAccessory', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pause for debugging' }));
     expect(execute).toHaveBeenCalledOnce();
     expect(execute).toHaveBeenCalledWith('pause');
+    act(() => {
+      store.dispatch(requestDebuggerPause());
+    });
     expect(screen.getByRole('button', { name: 'Pause for debugging' })).toBeDisabled();
+  });
+
+  it('shares pending presentation across duplicate Code panels', () => {
+    const store = createIdeStore();
+    store.dispatch(setRuntimeSessionMetadata({ epoch: 1, ready: true, transport: 'in-process' }));
+    store.dispatch(setExecutionState({ started: true, ended: false, stopped: false }));
+    store.dispatch(
+      syncDebugSnapshot({
+        status: 'running',
+        breakpoints: [],
+        callStack: [],
+        logs: [],
+        watches: [],
+        watchpoints: [],
+      })
+    );
+    renderWithIdeProviders(
+      <>
+        <CodeDebuggerHeaderAccessory />
+        <CodeDebuggerHeaderAccessory />
+      </>,
+      { store }
+    );
+
+    act(() => {
+      store.dispatch(requestDebuggerPause());
+    });
+
+    const buttons = screen.getAllByRole('button', { name: 'Pause for debugging' });
+    expect(buttons).toHaveLength(2);
+    for (const button of buttons) {
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute('aria-busy', 'true');
+    }
   });
 
   it('runs the code-scoped debugger commands from the panel header', () => {
@@ -118,6 +156,26 @@ describe('CodeDebuggerHeaderAccessory', () => {
     expect(screen.getByRole('toolbar', { name: 'Code debugging controls' })).toHaveClass(
       'code-debugger-header-controls'
     );
+    expect(
+      screen
+        .getByRole('button', { name: 'Step over' })
+        .querySelector('[data-debug-command-icon="over"]')
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole('button', { name: 'Step into' })
+        .querySelector('[data-debug-command-icon="into"]')
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole('button', { name: 'Step out' })
+        .querySelector('[data-debug-command-icon="out"]')
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole('button', { name: 'Run to cursor' })
+        .querySelector('[data-debug-command-icon="run-to-cursor"]')
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Step over' }));
     fireEvent.click(screen.getByRole('button', { name: 'Step into' }));
     fireEvent.click(screen.getByRole('button', { name: 'Step out' }));

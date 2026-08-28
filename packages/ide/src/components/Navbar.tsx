@@ -4,10 +4,10 @@ import { useDispatch, useSelector } from 'react-redux';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faBars,
+  faBug,
   faCheck,
   faGaugeHigh,
   faMoon,
-  faPause,
   faPlay,
   faRedo,
   faStop,
@@ -21,6 +21,7 @@ import {
   revealPanelKind,
   toggleAppMenu,
   getWorkspacePaneDescriptors,
+  selectExecutionToolbarModel,
   type AppDispatch,
   type RootState,
 } from '@/store';
@@ -42,13 +43,7 @@ const Navbar: React.FC<NavbarProps> = ({ fileExplorerOpen, onToggleFileExplorer 
   const { activeWorkspaceTab, editorTheme, lineNumbers, speedMultiplier } = useSelector(
     (state: RootState) => selectNavbarPresentationModel(state)
   );
-  const executionState = useSelector((state: RootState) => state.emulator.executionState);
-  const runtimeReady = useSelector((state: RootState) => state.emulator.runtime.ready);
-  const debuggerStopped = useSelector(
-    (state: RootState) => state.debugger.snapshot.stop !== undefined
-  );
-  const sourceStale = useSelector((state: RootState) => state.debugger.sourceStale);
-  const shouldStartFresh = !runtimeReady || !executionState.started || sourceStale;
+  const executionToolbar = useSelector(selectExecutionToolbarModel);
   const isCompactShell = useCompactShell();
   const isFocusedMobileTerminal = isCompactShell && activeWorkspaceTab === 'terminal';
   const showRuntimeControls = !isCompactShell || activeWorkspaceTab !== 'terminal';
@@ -143,16 +138,8 @@ const Navbar: React.FC<NavbarProps> = ({ fileExplorerOpen, onToggleFileExplorer 
     dispatch(toggleAppMenu());
   };
 
-  const handleRun = (): void => {
-    executionCoordinator.execute(shouldStartFresh ? 'run' : 'resume');
-  };
-
   const handleWorkspaceSelection = (tab: (typeof workspaceTabs)[number]['id']): void => {
     dispatch(revealPanelKind(tab === 'hardware' ? 'hardware-display' : tab));
-  };
-
-  const handleReset = (): void => {
-    executionCoordinator.execute('stop');
   };
 
   return (
@@ -218,47 +205,70 @@ const Navbar: React.FC<NavbarProps> = ({ fileExplorerOpen, onToggleFileExplorer 
 
       <div className="navbar-right" data-runtime-visible={showRuntimeControls ? 'true' : 'false'}>
         {showRuntimeControls ? (
-          <div className="navbar-runtime-controls" aria-label="Execution controls">
-            <div className="navbar-execution-buttons">
+          <div className="navbar-runtime-controls" data-runtime-state={executionToolbar.phase}>
+            <div
+              aria-label="Execution controls"
+              className="navbar-execution-buttons"
+              role="group"
+            >
               <button
-                aria-label={shouldStartFresh ? 'Start program' : 'Continue program'}
-                className="btn-toolbar btn-toolbar-icon btn-toolbar-accent"
-                onClick={handleRun}
-                title={`${shouldStartFresh ? 'Start' : 'Continue'} (F5)`}
+                aria-busy={executionToolbar.controls.run.busy || undefined}
+                aria-label={executionToolbar.controls.run.label}
+                className={`btn-toolbar btn-toolbar-icon navbar-execution-button ${
+                  executionToolbar.controls.run.current ? 'is-current' : ''
+                } ${executionToolbar.controls.run.busy ? 'is-busy' : ''}`}
+                data-current-state={executionToolbar.controls.run.current ? 'true' : 'false'}
+                disabled={
+                  !executionToolbar.controls.run.enabled || executionToolbar.phase === 'paused'
+                }
+                onClick={() => executionCoordinator.execute(executionToolbar.controls.run.command)}
+                title={executionToolbar.controls.run.title}
                 type="button"
               >
                 <FontAwesomeIcon icon={faPlay} size="sm" />
               </button>
               <button
-                aria-label="Pause program"
-                className="btn-toolbar btn-toolbar-icon"
-                disabled={
-                  !runtimeReady ||
-                  !executionState.started ||
-                  executionState.stopped ||
-                  executionState.ended ||
-                  debuggerStopped
+                aria-busy={executionToolbar.controls.debug.busy || undefined}
+                aria-label={executionToolbar.controls.debug.label}
+                className={`btn-toolbar btn-toolbar-icon navbar-execution-button ${
+                  executionToolbar.controls.debug.current ? 'is-current' : ''
+                } ${executionToolbar.controls.debug.busy ? 'is-busy' : ''}`}
+                data-current-state={executionToolbar.controls.debug.current ? 'true' : 'false'}
+                disabled={!executionToolbar.controls.debug.enabled}
+                onClick={() =>
+                  executionCoordinator.execute(executionToolbar.controls.debug.command)
                 }
-                onClick={() => executionCoordinator.execute('pause')}
-                title="Pause (F6)"
+                title={executionToolbar.controls.debug.title}
                 type="button"
               >
-                <FontAwesomeIcon icon={faPause} size="sm" />
+                <FontAwesomeIcon icon={faBug} size="sm" />
               </button>
               <button
-                aria-label="Stop debugging"
-                className="btn-toolbar btn-toolbar-icon"
-                onClick={handleReset}
-                title="Stop (Shift+F5)"
+                aria-busy={executionToolbar.controls.stop.busy || undefined}
+                aria-label={executionToolbar.controls.stop.label}
+                className={`btn-toolbar btn-toolbar-icon navbar-execution-button ${
+                  executionToolbar.controls.stop.current ? 'is-current' : ''
+                } ${executionToolbar.controls.stop.busy ? 'is-busy' : ''}`}
+                data-current-state={executionToolbar.controls.stop.current ? 'true' : 'false'}
+                disabled={!executionToolbar.controls.stop.enabled}
+                onClick={() => executionCoordinator.execute(executionToolbar.controls.stop.command)}
+                title={executionToolbar.controls.stop.title}
                 type="button"
               >
                 <FontAwesomeIcon icon={faStop} size="sm" />
               </button>
               <button
-                aria-label="Restart program"
-                className="btn-toolbar btn-toolbar-icon"
-                onClick={() => executionCoordinator.execute('restart')}
-                title="Restart"
+                aria-busy={executionToolbar.controls.restart.busy || undefined}
+                aria-label={executionToolbar.controls.restart.label}
+                className={`btn-toolbar btn-toolbar-icon navbar-execution-button ${
+                  executionToolbar.controls.restart.current ? 'is-current' : ''
+                } ${executionToolbar.controls.restart.busy ? 'is-busy' : ''}`}
+                data-current-state={executionToolbar.controls.restart.current ? 'true' : 'false'}
+                disabled={!executionToolbar.controls.restart.enabled}
+                onClick={() =>
+                  executionCoordinator.execute(executionToolbar.controls.restart.command)
+                }
+                title={executionToolbar.controls.restart.title}
                 type="button"
               >
                 <FontAwesomeIcon icon={faRedo} size="sm" />

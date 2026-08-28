@@ -2,11 +2,15 @@ import { describe, expect, it } from 'vitest';
 import type { DebugStopReason, DebugSnapshot } from '@m68k/interpreter';
 import {
   createIdeStore,
+  requestDebuggerPause,
   setExecutionState,
   setRuntimeSessionMetadata,
   syncDebugSnapshot,
 } from '@/store';
-import { selectCodeDebuggerControlModel } from './codeDebuggerSelectors';
+import {
+  selectCodeDebuggerControlModel,
+  selectPauseForDebuggingControlModel,
+} from './codeDebuggerSelectors';
 
 function snapshotFor(reason?: DebugStopReason): DebugSnapshot {
   const paused =
@@ -76,6 +80,23 @@ function waitingInspectionModel() {
 }
 
 describe('selectCodeDebuggerControlModel', () => {
+  it('disables every pause entry point while the shared request is pending', () => {
+    const store = createIdeStore();
+    store.dispatch(setRuntimeSessionMetadata({ epoch: 1, ready: true, transport: 'worker' }));
+    store.dispatch(setExecutionState({ started: true, ended: false, stopped: false }));
+    store.dispatch(syncDebugSnapshot(snapshotFor()));
+    store.dispatch(requestDebuggerPause());
+
+    expect(selectPauseForDebuggingControlModel(store.getState())).toEqual({
+      canPause: false,
+      pauseRequestPending: true,
+    });
+    expect(selectCodeDebuggerControlModel(store.getState())).toMatchObject({
+      canPause: false,
+      pauseRequestPending: true,
+    });
+  });
+
   it('enables the collapsed Debug pause action only for active execution', () => {
     expect(modelFor(undefined, false)).toMatchObject({
       canPause: false,

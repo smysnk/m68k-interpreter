@@ -92,8 +92,8 @@ export const PANEL_PRESETS: readonly PanelPresetDefinition[] = [
             { kind: 'registers', instanceSequence: 2 },
           ],
         ],
-        [61, 39],
-        [undefined, [56, 44]]
+        [41, 59],
+        [undefined, [41, 59]]
       ),
   },
   {

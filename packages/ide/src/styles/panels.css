@@ -188,7 +188,7 @@
   margin-left: auto;
 }
 .code-debugger-header-controls {
-  --debugger-command-rail-width: 140px;
+  --debugger-command-rail-width: 112px;
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -312,6 +312,21 @@
   font-family: var(--font-monospace);
   font-size: 13px;
   font-weight: 800;
+}
+.code-debugger-command-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.45;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.code-debugger-command-icon circle {
+  fill: currentColor;
+  stroke: none;
 }
 .panel-frame-header-integrated {
   min-height: 72px;

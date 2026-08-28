@@ -13,6 +13,7 @@ export interface DebuggerState {
   configuration: DebuggerConfiguration;
   snapshot: DebugSnapshot;
   sourceStale: boolean;
+  pauseRequestPending: boolean;
   previousStopRegisters?: Registers;
   lastStopRegisters?: Registers;
   lastStopKey?: string;
@@ -35,6 +36,7 @@ export const initialDebuggerState: DebuggerState = {
     logs: [],
   },
   sourceStale: false,
+  pauseRequestPending: false,
 };
 
 function nextId(prefix: string): string {
@@ -122,9 +124,22 @@ const debuggerSlice = createSlice({
     syncDebugSnapshot(state, action: PayloadAction<DebugSnapshot>) {
       state.snapshot = structuredClone(action.payload);
     },
+    requestDebuggerPause(state) {
+      state.pauseRequestPending = true;
+    },
+    confirmDebuggerPause(state) {
+      state.pauseRequestPending = false;
+    },
+    failDebuggerPause(state) {
+      state.pauseRequestPending = false;
+    },
+    cancelDebuggerPauseRequest(state) {
+      state.pauseRequestPending = false;
+    },
     markDebugSourceStale(state) {
       state.snapshot = structuredClone(initialDebuggerState.snapshot);
       state.sourceStale = true;
+      state.pauseRequestPending = false;
       state.previousStopRegisters = undefined;
       state.lastStopRegisters = undefined;
       state.lastStopKey = undefined;
@@ -135,6 +150,7 @@ const debuggerSlice = createSlice({
     resetDebugSession(state) {
       state.snapshot = structuredClone(initialDebuggerState.snapshot);
       state.sourceStale = false;
+      state.pauseRequestPending = false;
       state.previousStopRegisters = undefined;
       state.lastStopRegisters = undefined;
       state.lastStopKey = undefined;
@@ -156,7 +172,9 @@ const debuggerSlice = createSlice({
 });
 
 export const {
+  cancelDebuggerPauseRequest,
   captureDebuggerStopRegisters,
+  confirmDebuggerPause,
   addSourceBreakpoint,
   clearBreakpoints,
   markDebugSourceStale,
@@ -165,10 +183,12 @@ export const {
   removeWatch,
   removeWatchpoint,
   replaceDebuggerConfiguration,
+  requestDebuggerPause,
   resetDebugSession,
   setBreakOnException,
   setBreakOnInterrupt,
   syncDebugSnapshot,
+  failDebuggerPause,
   toggleBreakpointEnabled,
   upsertBreakpoint,
   upsertWatch,

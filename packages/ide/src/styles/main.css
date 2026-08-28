@@ -235,6 +235,81 @@ pre {
   gap: 6px;
 }
 
+.navbar-runtime-controls {
+  --execution-state-color: var(--ide-text-muted);
+}
+
+.navbar-runtime-controls[data-runtime-state='running'],
+.navbar-runtime-controls[data-runtime-state='starting'],
+.navbar-runtime-controls[data-runtime-state='restarting'] {
+  --execution-state-color: var(--ide-status-good);
+}
+
+.navbar-runtime-controls[data-runtime-state='paused'],
+.navbar-runtime-controls[data-runtime-state='pause-requested'] {
+  --execution-state-color: var(--ide-accent);
+}
+
+.navbar-runtime-controls[data-runtime-state='waiting'],
+.navbar-runtime-controls[data-runtime-state='source-stale'] {
+  --execution-state-color: var(--ide-status-warn);
+}
+
+.navbar-runtime-controls[data-runtime-state='exception'] {
+  --execution-state-color: var(--ide-status-danger);
+}
+
+.navbar-execution-button {
+  position: relative;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.navbar-execution-button.is-current {
+  border-color: color-mix(in srgb, var(--execution-state-color) 56%, var(--ide-border));
+  background: color-mix(in srgb, var(--execution-state-color) 17%, var(--ide-surface));
+  color: var(--execution-state-color);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 1px color-mix(in srgb, var(--execution-state-color) 12%, transparent);
+}
+
+.navbar-execution-button.is-current::after {
+  position: absolute;
+  right: 8px;
+  bottom: 3px;
+  left: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+}
+
+.navbar-execution-button:focus-visible {
+  outline: 2px solid var(--ide-accent);
+  outline-offset: 2px;
+}
+
+.navbar-execution-button.is-busy svg {
+  animation: navbar-execution-busy 900ms ease-in-out infinite alternate;
+}
+
+@keyframes navbar-execution-busy {
+  from {
+    opacity: 0.5;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .navbar-runtime-field {
   display: inline-flex;
   align-items: center;
@@ -1004,21 +1079,42 @@ button {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-.btn-toolbar:hover,
-.btn-command:hover,
-.btn-tool:hover,
-.btn-download:hover {
+.btn-toolbar:hover:not(:disabled),
+.btn-command:hover:not(:disabled),
+.btn-tool:hover:not(:disabled),
+.btn-download:hover:not(:disabled) {
   border-color: var(--ide-border-strong);
   background: color-mix(in srgb, var(--ide-surface-strong) 98%, transparent);
   transform: translateY(-1px);
   box-shadow: var(--ide-shadow);
 }
 
-.btn-toolbar:active,
-.btn-command:active,
-.btn-tool:active,
-.btn-download:active {
+.btn-toolbar:active:not(:disabled),
+.btn-command:active:not(:disabled),
+.btn-tool:active:not(:disabled),
+.btn-download:active:not(:disabled) {
   transform: translateY(0);
+}
+
+.btn-toolbar:disabled,
+.btn-command:disabled,
+.btn-tool:disabled,
+.btn-download:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+  transform: none;
+}
+
+.navbar-execution-button.is-current:disabled {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navbar-execution-button,
+  .navbar-execution-button.is-busy svg {
+    transition: none;
+    animation: none;
+  }
 }
 
 .btn-toolbar.active,

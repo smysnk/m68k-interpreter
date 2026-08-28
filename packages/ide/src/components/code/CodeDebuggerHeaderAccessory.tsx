@@ -5,10 +5,7 @@ import { shallowEqual, useSelector } from 'react-redux';
 import ContextMenu from '@/components/menus/ContextMenu';
 import MenuItem from '@/components/menus/MenuItem';
 import { executionCoordinator, type ExecutionCommand } from '@/runtime/executionCoordinator';
-import {
-  recordDebuggerPauseRequest,
-  useIdeRenderTelemetry,
-} from '@/runtime/idePerformanceTelemetry';
+import { useIdeRenderTelemetry } from '@/runtime/idePerformanceTelemetry';
 import { selectCodeDebuggerControlModel } from '@/store/codeDebuggerSelectors';
 import type { MenuAnchor } from '@/components/menus/useMenuPosition';
 
@@ -29,6 +26,44 @@ interface DebugPauseButtonProps {
   onPause(): void;
 }
 
+type DebugCommandIconKind = 'into' | 'out' | 'over' | 'run-to-cursor';
+
+function DebugCommandIcon({ kind }: { kind: DebugCommandIconKind }): React.ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      className="code-debugger-command-icon"
+      data-debug-command-icon={kind}
+      focusable="false"
+      viewBox="0 0 16 16"
+    >
+      {kind === 'run-to-cursor' ? (
+        <>
+          <path d="M3.25 2.75v10.5L11.75 8 3.25 2.75Z" />
+          <path d="M12.5 15v-5" />
+          <path d="m10.25 12.25 2.25-2.25 2.25 2.25" />
+        </>
+      ) : kind === 'over' ? (
+        <>
+          <path d="M2.5 8.25C3 4.85 5.1 3 8 3c2.1 0 3.75.85 4.9 2.55" />
+          <path d="M10.35 5.55h2.6V2.9" />
+        </>
+      ) : kind === 'into' ? (
+        <>
+          <path d="M8 1.5v7.25" />
+          <path d="m4.75 5.5 3.25 3.25 3.25-3.25" />
+        </>
+      ) : (
+        <>
+          <path d="M8 9.25V2" />
+          <path d="M4.75 5.25 8 2l3.25 3.25" />
+        </>
+      )}
+      {kind !== 'run-to-cursor' ? <circle cx="8" cy="13" r="1.55" /> : null}
+    </svg>
+  );
+}
+
 function DebugPauseButton({
   canPause,
   pauseRequested,
@@ -37,6 +72,7 @@ function DebugPauseButton({
   const disabled = !canPause || pauseRequested;
   return (
     <button
+      aria-busy={pauseRequested}
       aria-label="Pause for debugging"
       className="code-debugger-pause-button"
       disabled={disabled}
@@ -121,13 +157,13 @@ function CodeDebuggerHeaderAccessory(): React.ReactElement {
   const compact = useCompactCodeHeader(rootRef);
   const {
     canPause,
+    pauseRequestPending,
     controlsExpanded,
     canStepOver,
     canStepInto,
     canStepOut,
     runToAddress,
   } = useSelector(selectCodeDebuggerControlModel, shallowEqual);
-  const [pauseRequested, setPauseRequested] = React.useState(false);
 
   const closeOverflow = (): void => setOverflowAnchor(null);
   const runToCursor = (): void => {
@@ -135,20 +171,11 @@ function CodeDebuggerHeaderAccessory(): React.ReactElement {
   };
 
   React.useEffect(() => {
-    if (controlsExpanded || !canPause) setPauseRequested(false);
     if (!controlsExpanded) closeOverflow();
-  }, [canPause, controlsExpanded]);
-
-  React.useEffect(() => {
-    if (!pauseRequested) return;
-    const timeout = window.setTimeout(() => setPauseRequested(false), 2_000);
-    return () => window.clearTimeout(timeout);
-  }, [pauseRequested]);
+  }, [controlsExpanded]);
 
   const pauseForDebugging = (): void => {
-    if (!canPause || pauseRequested) return;
-    setPauseRequested(true);
-    recordDebuggerPauseRequest();
+    if (!canPause) return;
     executionCoordinator.execute('pause');
   };
 
@@ -169,7 +196,7 @@ function CodeDebuggerHeaderAccessory(): React.ReactElement {
         <DebugPauseButton
           canPause={canPause}
           onPause={pauseForDebugging}
-          pauseRequested={pauseRequested}
+          pauseRequested={pauseRequestPending}
         />
       )}
       <div
@@ -183,14 +210,14 @@ function CodeDebuggerHeaderAccessory(): React.ReactElement {
             disabled={!canStepOver}
             label="Step over"
             shortcut="F10"
-            symbol="↷"
+            symbol={<DebugCommandIcon kind="over" />}
           />
           <DebugCommandButton
             command="stepInto"
             disabled={!canStepInto}
             label="Step into"
             shortcut="F11"
-            symbol="↓"
+            symbol={<DebugCommandIcon kind="into" />}
           />
           {!compact ? (
             <>
@@ -199,14 +226,14 @@ function CodeDebuggerHeaderAccessory(): React.ReactElement {
                 disabled={!canStepOut}
                 label="Step out"
                 shortcut="Shift+F11"
-                symbol="↑"
+                symbol={<DebugCommandIcon kind="out" />}
               />
               <DebugCommandButton
                 disabled={runToAddress === undefined}
                 label="Run to cursor"
                 onClick={runToCursor}
                 shortcut="Ctrl/Cmd+F10"
-                symbol="◎"
+                symbol={<DebugCommandIcon kind="run-to-cursor" />}
               />
             </>
           ) : (

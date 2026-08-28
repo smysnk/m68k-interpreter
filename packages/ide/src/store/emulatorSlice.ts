@@ -21,6 +21,8 @@ export interface RuntimeSessionMetadata {
   epoch: number;
 }
 
+export type RuntimeLifecycleCommand = 'start' | 'stop' | 'restart';
+
 export interface RuntimeIntentState {
   focusTerminal: number;
 }
@@ -41,6 +43,7 @@ export interface EmulatorState {
   flags: ConditionFlags;
   executionState: ExecutionState;
   runtime: RuntimeSessionMetadata;
+  runtimeCommandPending: RuntimeLifecycleCommand | null;
   terminal: TerminalRuntimeState;
   showFlags: boolean;
   delay: number;
@@ -168,6 +171,7 @@ const initialState: EmulatorState = {
     transport: null,
     epoch: 0,
   },
+  runtimeCommandPending: null,
   terminal: createEmptyTerminalState(),
   showFlags: false,
   delay: 0,
@@ -282,6 +286,9 @@ const emulatorSlice = createSlice({
     setRuntimeSessionMetadata(state, action: PayloadAction<RuntimeSessionMetadata>) {
       state.runtime = action.payload;
     },
+    setRuntimeCommandPending(state, action: PayloadAction<RuntimeLifecycleCommand | null>) {
+      state.runtimeCommandPending = action.payload;
+    },
     setTerminalState(
       state,
       action: PayloadAction<TerminalRuntimeState | TerminalMeta | TerminalSnapshot>
@@ -380,6 +387,7 @@ const emulatorSlice = createSlice({
         transport: null,
         epoch: state.runtime.epoch,
       };
+      // Preserve a pending stop/restart until async runtime disposal settles.
       state.terminal = createEmptyTerminalState(preservedTerminalColumns, preservedTerminalRows);
       state.showFlags = false;
       state.delay = preservedDelay;
@@ -398,6 +406,7 @@ export const {
   setFlags,
   setExecutionState,
   setRuntimeSessionMetadata,
+  setRuntimeCommandPending,
   setTerminalState,
   syncEmulatorFrame,
   toggleShowFlags,

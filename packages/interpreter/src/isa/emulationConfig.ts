@@ -24,13 +24,13 @@ export const CPU_MODEL_REGISTRY: Readonly<Record<CpuModel, CpuModelDefinition>> 
   m68000: {
     id: 'm68000',
     label: 'MC68000',
-    description: 'Strict Motorola 68000 behavior',
+    description: 'Original ISA · 24-bit addressing',
     capabilities: ['m68000-instructions', 'architectural-interrupts'],
   },
   m68010: {
     id: 'm68010',
     label: 'MC68010',
-    description: 'Functionally complete Motorola 68010 behavior',
+    description: 'Adds VBR · restartable faults · MOVEC/MOVES',
     capabilities: [
       'm68000-instructions',
       'm68010-instructions',
@@ -42,7 +42,7 @@ export const CPU_MODEL_REGISTRY: Readonly<Record<CpuModel, CpuModelDefinition>> 
   m68020: {
     id: 'm68020',
     label: 'MC68020',
-    description: 'Functional Motorola 68020 integer behavior',
+    description: 'Adds 32-bit addressing · full indexing · bitfields/CAS',
     capabilities: [
       'm68000-instructions',
       'm68010-instructions',

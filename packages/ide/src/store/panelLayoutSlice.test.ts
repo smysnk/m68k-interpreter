@@ -10,6 +10,7 @@ import panelLayoutReducer, {
   moveFloatingPanel,
   movePanel,
   resetToPreset,
+  revealPanelKind,
   saveView,
   setColumnCount,
   setTerminalOwner,
@@ -28,12 +29,60 @@ function reduce(actions: Parameters<typeof panelLayoutReducer>[1][]) {
 }
 
 describe('panelLayoutSlice', () => {
+  it('reveals one debugger panel without replacing a saved custom layout and restores it in place', () => {
+    const baseline = reduce([
+      setColumnCount(3),
+      saveView({ id: 'custom-debug-test', name: 'Custom debug test' }),
+    ]);
+    const columnShape = baseline.activeLayout.columns.map(({ id, width }) => ({ id, width }));
+    const existingIds = Object.keys(baseline.activeLayout.instances);
+    const savedDocument = structuredClone(baseline.userViews['custom-debug-test']!.document);
+
+    let state = panelLayoutReducer(baseline, revealPanelKind('debugger'));
+    const debuggerPanels = Object.values(state.activeLayout.instances).filter(
+      (panel) => panel.kind === 'debugger'
+    );
+    expect(debuggerPanels).toHaveLength(1);
+    const debuggerId = debuggerPanels[0]!.id;
+    expect(state.activeLayout.focusedPanelId).toBe(debuggerId);
+    expect(state.activeLayout.columns.map(({ id, width }) => ({ id, width }))).toEqual(columnShape);
+    expect(Object.keys(state.activeLayout.instances)).toEqual(expect.arrayContaining(existingIds));
+    expect(state.activeSourceViewId).toBe('custom-debug-test');
+    expect(state.userViews['custom-debug-test']!.document).toEqual(savedDocument);
+
+    state = panelLayoutReducer(state, togglePanelMinimized(debuggerId));
+    expect(state.activeLayout.instances[debuggerId]?.minimized).toBe(true);
+    state = panelLayoutReducer(state, revealPanelKind('debugger'));
+    expect(state.activeLayout.instances[debuggerId]?.minimized).toBe(false);
+    expect(state.activeLayout.focusedPanelId).toBe(debuggerId);
+    expect(
+      Object.values(state.activeLayout.instances).filter((panel) => panel.kind === 'debugger')
+    ).toHaveLength(1);
+  });
+
   it('creates independent valid preset documents', () => {
     const first = createPanelPreset('debug');
     const second = createPanelPreset('debug');
     first.columns[0]!.panelIds.length = 0;
     expect(second.columns[0]!.panelIds).toHaveLength(1);
     expect(getPanelLayoutInvariantErrors(second)).toEqual([]);
+  });
+
+  it('starts the Classic desktop workspace with Code beside Screen and Registers', () => {
+    const classic = createPanelPreset('classic');
+
+    expect(classic.columns.map((column) => column.width)).toEqual([41, 59]);
+    expect(
+      classic.columns.map((column) =>
+        column.panelIds.map((panelId) => classic.instances[panelId]!.kind)
+      )
+    ).toEqual([['code'], ['terminal', 'registers']]);
+    expect(classic.columns[0]?.panelSizes).toEqual({ 'panel-code-3': 100 });
+    expect(classic.columns[1]?.panelSizes).toEqual({
+      'panel-terminal-1': 41,
+      'panel-registers-2': 59,
+    });
+    expect(getPanelLayoutInvariantErrors(classic)).toEqual([]);
   });
 
   it('duplicates, minimizes, floats, docks, and closes instances without orphan placements', () => {

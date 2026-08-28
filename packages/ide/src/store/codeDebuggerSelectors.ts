@@ -1,28 +1,31 @@
 import { createSelector } from '@reduxjs/toolkit';
-import type { DebugStopReason } from '@m68k/interpreter';
 import type { RootState } from '@/store';
+import {
+  isActionableDebuggerStop,
+  selectExecutionToolbarModel,
+} from '@/store/executionControlSelectors';
 
-const ACTIONABLE_DEBUG_STOPS = new Set<DebugStopReason>([
-  'breakpoint',
-  'watchpoint',
-  'manual-pause',
-  'step-complete',
-  'run-to-cursor',
-  'exception',
-  'interrupt',
-]);
+export { isActionableDebuggerStop } from '@/store/executionControlSelectors';
+
+export const selectPauseForDebuggingControlModel = createSelector(
+  [selectExecutionToolbarModel, (state: RootState) => state.debugger.pauseRequestPending],
+  (toolbar, pauseRequestPending) => ({
+    canPause: toolbar.controls.debug.enabled,
+    pauseRequestPending,
+  })
+);
 
 export const selectCodeDebuggerControlModel = createSelector(
   [
+    selectPauseForDebuggingControlModel,
     (state: RootState) => state.emulator.runtime.ready,
-    (state: RootState) => state.emulator.executionState,
     (state: RootState) => state.debugger.snapshot,
     (state: RootState) => state.files.activeFileId,
     (state: RootState) => state.uiShell.editorCursorLine,
   ],
-  (runtimeReady, executionState, snapshot, activeFileId, cursorLine) => {
+  (pauseControl, runtimeReady, snapshot, activeFileId, cursorLine) => {
     const stopReason = snapshot.stop?.reason;
-    const controlsExpanded = stopReason !== undefined && ACTIONABLE_DEBUG_STOPS.has(stopReason);
+    const controlsExpanded = isActionableDebuggerStop(stopReason);
     const runToAddress =
       controlsExpanded && snapshot.program?.fileId === activeFileId
         ? snapshot.program.sourceMap.find(
@@ -31,13 +34,7 @@ export const selectCodeDebuggerControlModel = createSelector(
         : undefined;
 
     return {
-      canPause:
-        runtimeReady &&
-        executionState.started &&
-        !executionState.ended &&
-        !executionState.stopped &&
-        snapshot.status === 'running' &&
-        snapshot.stop === undefined,
+      ...pauseControl,
       controlsExpanded,
       stopReason,
       currentSourceLocation: snapshot.stop?.source,

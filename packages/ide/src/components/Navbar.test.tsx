@@ -1,7 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import Navbar from './Navbar';
-import { createIdeStore, focusPanel, setEditorCode, setExecutionState } from '@/store';
+import {
+  createIdeStore,
+  confirmDebuggerPause,
+  focusPanel,
+  requestDebuggerPause,
+  setEditorCode,
+  setExecutionState,
+  setRuntimeSessionMetadata,
+  setRuntimeCommandPending,
+  syncDebugSnapshot,
+} from '@/store';
 import { EditorThemeEnum } from '@/theme/editorThemeRegistry';
 import { renderWithIdeProviders } from '@/test/renderWithIdeProviders';
 import { executionCoordinator } from '@/runtime/executionCoordinator';
@@ -58,7 +68,9 @@ describe('Navbar', () => {
         .getAllByRole('button')
         .find((button) => button.getAttribute('aria-label') === 'Start program')!
     );
-    fireEvent.click(screen.getByRole('button', { name: /stop debugging/i }));
+    expect(screen.getByRole('button', { name: /stop program/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /restart program/i })).toBeDisabled();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /step into/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /step backward/i })).not.toBeInTheDocument();
     const initialTheme = store.getState().settings.editorTheme;
@@ -101,7 +113,7 @@ describe('Navbar', () => {
     expect(
       screen.queryByRole('menuitem', { name: /compatibility notes/i })
     ).not.toBeInTheDocument();
-    expect(executionSpy.mock.calls.map(([command]) => command)).toEqual(['run', 'stop']);
+    expect(executionSpy.mock.calls.map(([command]) => command)).toEqual(['run']);
     expect(store.getState().emulator.runtimeIntents).toEqual({ focusTerminal: 0 });
   });
 
@@ -116,8 +128,87 @@ describe('Navbar', () => {
     });
 
     expect(store.getState().debugger.sourceStale).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Start program' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run updated source' }));
     expect(executionSpy).toHaveBeenCalledWith('run');
+  });
+
+  it('presents pause as debugging and uses shared pending state', () => {
+    const store = createIdeStore();
+    store.dispatch(setRuntimeSessionMetadata({ epoch: 1, ready: true, transport: 'worker' }));
+    store.dispatch(setExecutionState({ started: true, ended: false, stopped: false }));
+    store.dispatch(
+      syncDebugSnapshot({
+        status: 'running',
+        breakpoints: [],
+        callStack: [],
+        logs: [],
+        watches: [],
+        watchpoints: [],
+      })
+    );
+    const execute = vi.spyOn(executionCoordinator, 'execute').mockImplementation(() => {});
+    renderWithIdeProviders(<Navbar fileExplorerOpen={false} onToggleFileExplorer={() => {}} />, {
+      store,
+    });
+
+    const pause = screen.getByRole('button', { name: 'Pause for debugging' });
+    const running = screen.getByRole('button', { name: 'Program running' });
+    expect(running).toBeDisabled();
+    expect(running).toHaveAttribute('data-current-state', 'false');
+    expect(screen.getByRole('button', { name: 'Stop program' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Restart program' })).toBeEnabled();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(pause).toHaveAttribute('title', 'Pause for debugging (F6)');
+    expect(pause.querySelector('svg')).toHaveAttribute('data-icon', 'bug');
+    fireEvent.click(pause);
+    expect(execute).toHaveBeenCalledWith('pause');
+
+    act(() => {
+      store.dispatch(requestDebuggerPause());
+    });
+    expect(pause).toBeDisabled();
+    expect(pause).toHaveAttribute('aria-busy', 'true');
+    expect(pause).toHaveAttribute('data-current-state', 'true');
+    expect(pause).toHaveAttribute('title', 'Pausing at the next instruction boundary');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('moves the current-state treatment from running to paused and lifecycle actions', () => {
+    const store = createIdeStore();
+    store.dispatch(setRuntimeSessionMetadata({ epoch: 1, ready: true, transport: 'worker' }));
+    store.dispatch(setExecutionState({ started: false, ended: false, stopped: true }));
+    store.dispatch(
+      syncDebugSnapshot({
+        status: 'paused',
+        stop: { pc: 0x1006, reason: 'breakpoint' },
+        breakpoints: [],
+        callStack: [],
+        logs: [],
+        watches: [],
+        watchpoints: [],
+      })
+    );
+    store.dispatch(confirmDebuggerPause());
+    renderWithIdeProviders(<Navbar fileExplorerOpen={false} onToggleFileExplorer={() => {}} />, {
+      store,
+    });
+
+    expect(screen.getByRole('button', { name: 'Continue program' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Debugger paused' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Debugger paused' })).toHaveAttribute(
+      'data-current-state',
+      'true'
+    );
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+    act(() => {
+      store.dispatch(setRuntimeCommandPending('restart'));
+    });
+    const restarting = screen.getByRole('button', { name: 'Restarting program' });
+    expect(restarting).toBeDisabled();
+    expect(restarting).toHaveAttribute('aria-busy', 'true');
+    expect(restarting).toHaveAttribute('data-current-state', 'true');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('changes columns and adds panels from the View menu', () => {

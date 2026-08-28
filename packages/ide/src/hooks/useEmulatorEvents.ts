@@ -41,7 +41,10 @@ import { easy68kAudioHost } from '@/runtime/easy68kAudioHost';
 import { DEFAULT_EASY68K_SOUND_ASSETS } from '@/runtime/defaultSoundAssets';
 import { loadPersistedEasy68kSoundAssets } from '@/runtime/easy68kSoundAssetManifest';
 import { executionCoordinator } from '@/runtime/executionCoordinator';
-import { recordDebuggerSnapshotDispatch } from '@/runtime/idePerformanceTelemetry';
+import {
+  recordDebuggerPauseRequest,
+  recordDebuggerSnapshotDispatch,
+} from '@/runtime/idePerformanceTelemetry';
 import { syncRuntimeGeometryBridge } from '@/runtime/terminalProgramBridge';
 import { buildRuntimeLoadRequest } from '@/runtime/useRuntimeConfiguration';
 import { subscribeToCurrentRuntimeFrames } from '@/runtime/useRuntimeFrameSubscription';
@@ -55,9 +58,16 @@ import type { WorkspaceTab } from '@/store/uiShellSlice';
 import { useCompactShell } from '@/hooks/useCompactShell';
 import {
   NIBBLES_FILE_ID,
+  cancelDebuggerPauseRequest,
   markDebugSourceSynchronized,
+  confirmDebuggerPause,
+  failDebuggerPause,
+  requestDebuggerPause,
   resetEmulatorState,
   resetDebugSession,
+  selectExecutionToolbarModel,
+  selectPauseForDebuggingControlModel,
+  setRuntimeCommandPending,
   setRuntimeSessionMetadata,
   setExecutionState as setExecutionStateAction,
   setRuntimeMetrics as setRuntimeMetricsAction,
@@ -82,6 +92,7 @@ const REGISTER_SYNC_INTERVAL_MS = 250;
 const MANUAL_RUN_GEOMETRY_RETRY_MS = 120;
 const MANUAL_RUN_GEOMETRY_MAX_RETRIES = 6;
 const AUTOPLAY_UNDO_CHECKPOINT_INTERVAL = 64;
+const DEBUGGER_PAUSE_REQUEST_TIMEOUT_MS = 2_000;
 
 function isWorkerRuntime(runtime: IdeRuntimeSession | null): boolean {
   return runtime?.getRuntimeTransport?.() === 'worker' && runtime.controller !== undefined;
@@ -266,6 +277,7 @@ export const useEmulatorEvents = () => {
   const pendingRunUntilGeometryRef = useRef(false);
   const pendingRunRetryCountRef = useRef(0);
   const pendingRunRetryTimeoutRef = useRef<number | null>(null);
+  const pauseRequestTimeoutRef = useRef<number | null>(null);
   const frameSyncCacheRef = useRef(createRuntimeFrameSyncCache());
   const runtimeEpochRef = useRef(0);
   const workerUnsubscribeRef = useRef<(() => void) | null>(null);
@@ -329,6 +341,26 @@ export const useEmulatorEvents = () => {
   }, [debuggerConfiguration]);
 
   useEffect(() => {
+    const clearPauseRequestTimeout = (): void => {
+      if (pauseRequestTimeoutRef.current !== null) {
+        window.clearTimeout(pauseRequestTimeoutRef.current);
+        pauseRequestTimeoutRef.current = null;
+      }
+    };
+
+    const cancelPendingDebuggerPause = (): void => {
+      clearPauseRequestTimeout();
+      dispatch(cancelDebuggerPauseRequest());
+    };
+
+    const schedulePauseRequestTimeout = (): void => {
+      clearPauseRequestTimeout();
+      pauseRequestTimeoutRef.current = window.setTimeout(() => {
+        pauseRequestTimeoutRef.current = null;
+        dispatch(failDebuggerPause());
+      }, DEBUGGER_PAUSE_REQUEST_TIMEOUT_MS);
+    };
+
     const syncStoreFromEmulator = (
       emulator: IdeRuntimeSession,
       options: {
@@ -372,6 +404,13 @@ export const useEmulatorEvents = () => {
         lastDebugSnapshotVersionRef.current =
           emulator.getRuntimeSyncVersions?.()?.debugger ?? publishedVersion ?? null;
         dispatch(syncDebugSnapshot(debugSnapshot));
+        if (debugSnapshot.status === 'paused' && debugSnapshot.stop?.reason === 'manual-pause') {
+          clearPauseRequestTimeout();
+          dispatch(confirmDebuggerPause());
+        } else if (debugSnapshot.stop || debugSnapshot.status !== 'running') {
+          cancelPendingDebuggerPause();
+        }
+
         recordDebuggerSnapshotDispatch({
           snapshot: debugSnapshot,
           manualPause: debugSnapshot.stop?.reason === 'manual-pause',
@@ -558,6 +597,7 @@ export const useEmulatorEvents = () => {
     };
 
     const initializeEmulator = async (code: string): Promise<IdeRuntimeSession | null> => {
+      cancelPendingDebuggerPause();
       clearScheduledExecution();
       clearWorkerSubscription();
       runtimeEpochRef.current += 1;
@@ -629,6 +669,8 @@ export const useEmulatorEvents = () => {
             }
 
             if (event.type === 'fault') {
+              clearPauseRequestTimeout();
+              dispatch(failDebuggerPause());
               dispatch(
                 setExecutionStateAction({
                   started: false,
@@ -739,6 +781,10 @@ export const useEmulatorEvents = () => {
       '';
 
     const handleRun = (): void => {
+      cancelPendingDebuggerPause();
+      if (ideStore.getState().emulator.runtimeCommandPending === null) {
+        dispatch(setRuntimeCommandPending('start'));
+      }
       if (ideStore.getState().settings.machineProfile === 'easy68k') {
         void easy68kAudioHost.unlock();
       }
@@ -785,6 +831,14 @@ export const useEmulatorEvents = () => {
             return;
           }
 
+          dispatch(
+            setExecutionStateAction({
+              started: true,
+              ended: false,
+              stopped: false,
+              exception: null,
+            })
+          );
           await primeRuntimeForAutoplay(emulator);
           const workerController = getWorkerController(emulator);
           if (workerController) {
@@ -796,9 +850,20 @@ export const useEmulatorEvents = () => {
         } catch (error) {
           if (!isDisposedWorkerRuntimeError(error)) {
             console.error(error);
+            dispatch(
+              setExecutionStateAction({
+                started: false,
+                ended: true,
+                stopped: false,
+                exception: error instanceof Error ? error.message : String(error),
+              })
+            );
           }
         } finally {
           isInitializingRuntimeRef.current = false;
+          if (ideStore.getState().emulator.runtimeCommandPending === 'start') {
+            dispatch(setRuntimeCommandPending(null));
+          }
 
           if (queuedRunAfterInitRef.current) {
             queuedRunAfterInitRef.current = false;
@@ -811,6 +876,7 @@ export const useEmulatorEvents = () => {
     };
 
     const handleResume = (): void => {
+      cancelPendingDebuggerPause();
       if (ideStore.getState().settings.machineProfile === 'easy68k') {
         void easy68kAudioHost.unlock();
       }
@@ -937,17 +1003,35 @@ export const useEmulatorEvents = () => {
     };
 
     const handlePause = (): void => {
+      const pauseControl = selectPauseForDebuggingControlModel(ideStore.getState());
+      if (!pauseControl.canPause || !emulatorRef.current) return;
+
+      dispatch(requestDebuggerPause());
+      recordDebuggerPauseRequest();
+      schedulePauseRequestTimeout();
       void (async () => {
-        clearScheduledExecution();
-        const emulator = emulatorRef.current;
-        if (!emulator) return;
-        await runtimeExecutionCommandPort.pause();
-        if (!getWorkerController(emulator)) {
-          syncStoreFromEmulator(emulator, {
-            executionState: { started: false, ended: false, stopped: true },
-            runtimeMetrics: { lastStopReason: 'manual-pause' },
-            forceRegisterSync: true,
-          });
+        try {
+          clearScheduledExecution();
+          const emulator = emulatorRef.current;
+          if (!emulator) {
+            cancelPendingDebuggerPause();
+            return;
+          }
+          await synchronizeDebuggerConfiguration();
+          await runtimeExecutionCommandPort.pause();
+          if (!getWorkerController(emulator)) {
+            syncStoreFromEmulator(emulator, {
+              executionState: { started: false, ended: false, stopped: true },
+              runtimeMetrics: { lastStopReason: 'manual-pause' },
+              forceRegisterSync: true,
+            });
+          }
+        } catch (error) {
+          clearPauseRequestTimeout();
+          dispatch(failDebuggerPause());
+          if (!isDisposedWorkerRuntimeError(error)) {
+            console.error(error);
+          }
         }
       })();
     };
@@ -1040,44 +1124,80 @@ export const useEmulatorEvents = () => {
       })();
     };
 
+    const resetRuntime = async (): Promise<void> => {
+      cancelPendingDebuggerPause();
+      clearScheduledExecution();
+      clearPendingRunRetry();
+      runtimeEpochRef.current += 1;
+      clearWorkerSubscription();
+      lastRegisterSyncAtRef.current = 0;
+      pendingRunUntilGeometryRef.current = false;
+      pendingRunRetryCountRef.current = 0;
+      isInitializingRuntimeRef.current = false;
+      queuedRunAfterInitRef.current = false;
+      const { columns, rows } = ideStore.getState().emulator.terminal;
+      terminalSurfaceStore.reset(columns, rows);
+      frameSyncCacheRef.current = createRuntimeFrameSyncCache();
+      const runtime = emulatorRef.current;
+      emulatorRef.current = null;
+      dispatch(resetEmulatorState());
+      dispatch(resetDebugSession());
+      publishRuntimeSession(null, dispatch);
+      hardwareSurfaceStore.reset();
+      graphicsSurfaceStore.reset();
+      soundSurfaceStore.reset();
+      easy68kAudioHost.dispose();
+      await disposeRuntime(runtime);
+    };
+
     const handleReset = (): void => {
-      void (async () => {
-        clearScheduledExecution();
-        clearPendingRunRetry();
-        runtimeEpochRef.current += 1;
-        clearWorkerSubscription();
-        lastRegisterSyncAtRef.current = 0;
-        pendingRunUntilGeometryRef.current = false;
-        pendingRunRetryCountRef.current = 0;
-        isInitializingRuntimeRef.current = false;
-        queuedRunAfterInitRef.current = false;
-        const { columns, rows } = ideStore.getState().emulator.terminal;
-        terminalSurfaceStore.reset(columns, rows);
-        frameSyncCacheRef.current = createRuntimeFrameSyncCache();
-        const runtime = emulatorRef.current;
-        emulatorRef.current = null;
-        dispatch(resetEmulatorState());
-        dispatch(resetDebugSession());
-        publishRuntimeSession(null, dispatch);
-        hardwareSurfaceStore.reset();
-        graphicsSurfaceStore.reset();
-        soundSurfaceStore.reset();
-        easy68kAudioHost.dispose();
-        await disposeRuntime(runtime);
-      })();
+      if (ideStore.getState().emulator.runtimeCommandPending !== null) return;
+      dispatch(setRuntimeCommandPending('stop'));
+      void resetRuntime()
+        .catch((error) => {
+          if (!isDisposedWorkerRuntimeError(error)) console.error(error);
+        })
+        .finally(() => {
+          if (ideStore.getState().emulator.runtimeCommandPending === 'stop') {
+            dispatch(setRuntimeCommandPending(null));
+          }
+        });
+    };
+
+    const handleRestart = (): void => {
+      if (ideStore.getState().emulator.runtimeCommandPending !== null) return;
+      dispatch(setRuntimeCommandPending('restart'));
+      void resetRuntime()
+        .then(() => {
+          if (ideStore.getState().emulator.runtimeCommandPending === 'restart') {
+            dispatch(setRuntimeCommandPending(null));
+            handleRun();
+          }
+        })
+        .catch((error) => {
+          if (!isDisposedWorkerRuntimeError(error)) console.error(error);
+          if (ideStore.getState().emulator.runtimeCommandPending === 'restart') {
+            dispatch(setRuntimeCommandPending(null));
+          }
+        });
     };
 
     handleRunRef.current = handleRun;
     handleResetRef.current = handleReset;
     const unbindExecutionCoordinator = executionCoordinator.bind({
-      run: handleRun,
+      run: () => {
+        const control = selectExecutionToolbarModel(ideStore.getState()).controls.run;
+        if (control.enabled && control.command === 'run') handleRun();
+      },
       resume: handleResume,
       pulseResume: handlePulseResume,
       pause: handlePause,
-      stop: handleReset,
+      stop: () => {
+        if (selectExecutionToolbarModel(ideStore.getState()).controls.stop.enabled) handleReset();
+      },
       restart: () => {
-        handleReset();
-        window.setTimeout(handleRun, 0);
+        if (selectExecutionToolbarModel(ideStore.getState()).controls.restart.enabled)
+          handleRestart();
       },
       stepInto: handleStep,
       stepOver: () => handleAdvancedStep('over'),
@@ -1089,6 +1209,8 @@ export const useEmulatorEvents = () => {
 
     return () => {
       unbindExecutionCoordinator();
+      cancelPendingDebuggerPause();
+      dispatch(setRuntimeCommandPending(null));
       clearScheduledExecution();
       clearPendingRunRetry();
       runtimeEpochRef.current += 1;
