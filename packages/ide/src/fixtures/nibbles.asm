@@ -1,4 +1,4 @@
-; @m68k-ide/v1 layout=terminal-focus machine=easy68k cpu=m68000 focus=terminal speed=1 run=auto
+; @m68k-ide/v1 layout=nibbles machine=easy68k cpu=m68000 focus=terminal speed=1 run=auto
 ;=============================================================================
 ;        File: nibbles.asm
 ;      Author: Joshua Bellamy

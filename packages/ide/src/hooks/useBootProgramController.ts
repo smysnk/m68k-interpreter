@@ -1,11 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import {
-  requestFocusTerminal,
-  revealPanelKind,
-  type AppDispatch,
-  type RootState,
-} from '@/store';
+import { requestFocusTerminal, revealPanelKind, type AppDispatch, type RootState } from '@/store';
 import { getIdeBootConfig } from '@/config/ideBootConfig';
 import { executionCoordinator } from '@/runtime/executionCoordinator';
 
@@ -20,12 +15,13 @@ export function useBootProgramController() {
   const terminalGeometryVersion = useSelector(
     (state: RootState) => state.emulator.terminal.geometryVersion
   );
+  const lastFocusedSourceKeyRef = useRef('');
   const lastAutoPlayedKeyRef = useRef('');
   const hasObservedSourceDirectiveRef = useRef(false);
   const { autoPlay } = getIdeBootConfig();
 
   useEffect(() => {
-    if (!autoPlay || isJsdomEnvironment()) {
+    if (isJsdomEnvironment()) {
       return;
     }
 
@@ -36,6 +32,21 @@ export function useBootProgramController() {
     if (terminalGeometryVersion <= 1) {
       return;
     }
+
+    if (
+      sourceIdeCurrent.status === 'applied' &&
+      sourceIdeCurrent.fileId === activeFileId &&
+      sourceIdeCurrent.directive.focus === 'terminal'
+    ) {
+      const focusKey = `${activeFileId}:${sourceIdeCurrent.signature}:${sourceIdeCurrent.applySequence}`;
+      if (lastFocusedSourceKeyRef.current !== focusKey) {
+        lastFocusedSourceKeyRef.current = focusKey;
+        dispatch(revealPanelKind('terminal'));
+        dispatch(requestFocusTerminal());
+      }
+    }
+
+    if (!autoPlay) return;
 
     if (sourceIdeCurrent.status !== 'none') hasObservedSourceDirectiveRef.current = true;
     const sourceAutoRun =

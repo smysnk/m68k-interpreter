@@ -186,7 +186,11 @@ describe('App', () => {
 
     await waitFor(() => {
       const layout = ideStore.getState().panelLayout.activeLayout;
+      expect(layout.name).toBe('Nibbles Workbench');
       expect(layout.instances[layout.focusedPanelId ?? '']?.kind).toBe('terminal');
+      expect(
+        layout.columns.map((column) => column.panelIds.map((id) => layout.instances[id]?.kind))
+      ).toEqual([['code', 'registers'], ['terminal']]);
     });
     expect(screen.queryByText(/source config/i)).not.toBeInTheDocument();
   });

@@ -107,6 +107,18 @@ export const PANEL_PRESETS: readonly PanelPresetDefinition[] = [
       ]),
   },
   {
+    id: 'nibbles',
+    name: 'Nibbles Workbench',
+    description: 'Nibbles source and registers beside a full-height interactive screen.',
+    create: () =>
+      buildPreset(
+        'Nibbles Workbench',
+        [[{ kind: 'code' }, { kind: 'registers' }], [{ kind: 'terminal' }]],
+        [41, 59],
+        [[64, 36], undefined]
+      ),
+  },
+  {
     id: 'hardware-lab',
     name: 'Hardware Lab',
     description: 'Screen beside hardware with diagnostic panels one click away.',

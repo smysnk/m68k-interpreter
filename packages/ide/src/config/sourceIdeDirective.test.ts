@@ -37,6 +37,37 @@ describe('compact source IDE directives', () => {
     expect(result.directive.graphicsSmoothing).toBe(false);
   });
 
+  it('applies the dedicated Nibbles workbench with terminal focus', () => {
+    const source = bundledExampleFiles.find((example) => example.name === 'nibbles.asm')!.content;
+    const parsed = parseSourceIdeDirective(source);
+    expect(parsed.status).toBe('valid');
+    if (parsed.status !== 'valid') return;
+
+    expect(parsed.directive).toMatchObject({
+      layout: 'nibbles',
+      machine: 'easy68k',
+      cpu: 'm68000',
+      focus: 'terminal',
+      speed: 1,
+      run: 'auto',
+    });
+    const resolved = resolveSourceIdeLayout(parsed.directive, createPanelPreset('classic'));
+    expect(resolved.diagnostics).toEqual([]);
+    expect(resolved.layout.name).toBe('Nibbles Workbench');
+    expect(resolved.layout.columns.map((column) => column.width)).toEqual([41, 59]);
+    expect(
+      resolved.layout.columns.map((column) =>
+        column.panelIds.map((id) => resolved.layout.instances[id]?.kind)
+      )
+    ).toEqual([['code', 'registers'], ['terminal']]);
+    expect(resolved.layout.columns[0]?.panelSizes).toEqual({
+      'panel-code-1': 64,
+      'panel-registers-2': 36,
+    });
+    expect(resolved.layout.instances[resolved.layout.focusedPanelId!]?.kind).toBe('terminal');
+    expect(resolved.layout.terminalOwnerPanelId).toBe(resolved.layout.focusedPanelId);
+  });
+
   it('ignores ordinary comments and directives below source code', () => {
     expect(parseSourceIdeDirective('; ordinary comment\nORG $1000')).toEqual({ status: 'none' });
     expect(parseSourceIdeDirective('ORG $1000\n; @m68k-ide/v1 layout=debug')).toEqual({

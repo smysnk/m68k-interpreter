@@ -23,6 +23,7 @@ const MAX_ADDRESS = 0x00ff_ffff;
 const PANEL_PRESET_IDS: readonly PanelPresetId[] = [
   'classic',
   'code-run',
+  'nibbles',
   'hardware-lab',
   'multimedia',
   'debug',

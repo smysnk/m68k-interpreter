@@ -32,7 +32,7 @@ export type PanelInstanceId = string;
 export type PanelColumnId = string;
 export type PanelViewId = string;
 export type PanelPresetId =
-  'classic' | 'code-run' | 'hardware-lab' | 'multimedia' | 'debug' | 'terminal-focus';
+  'classic' | 'code-run' | 'nibbles' | 'hardware-lab' | 'multimedia' | 'debug' | 'terminal-focus';
 
 export interface PanelKindDefinition {
   kind: PanelKind;

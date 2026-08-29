@@ -29,6 +29,7 @@ import {
   resetToPreset,
   selectActivePanelLayout,
   ideStore,
+  type PanelPresetId,
   type RootState,
 } from '@/store';
 import { executionCoordinator } from '@/runtime/executionCoordinator';
@@ -45,9 +46,7 @@ declare global {
       runProgram: () => void;
       setSpeedMultiplier: (value: number) => void;
       setWorkspaceTab: (value: 'terminal' | 'code' | 'registers' | 'memory' | 'hardware') => void;
-      setPanelPreset: (
-        value: 'classic' | 'code-run' | 'hardware-lab' | 'debug' | 'terminal-focus'
-      ) => void;
+      setPanelPreset: (value: PanelPresetId) => void;
     };
   }
 }

@@ -19,7 +19,11 @@ describe('source IDE directive controller', () => {
     renderWithIdeProviders(<Harness />, { store });
 
     await waitFor(() => expect(store.getState().sourceIde.current.status).toBe('applied'));
-    expect(store.getState().panelLayout.activeLayout.name).toContain('Terminal Focus');
+    expect(store.getState().panelLayout.activeLayout.name).toBe('Nibbles Workbench');
+    expect(store.getState().panelLayout.activeLayout.columns).toMatchObject([
+      { width: 41, panelSizes: { 'panel-code-1': 64, 'panel-registers-2': 36 } },
+      { width: 59, panelSizes: { 'panel-terminal-3': 100 } },
+    ]);
     expect(
       store.getState().panelLayout.activeLayout.instances[
         store.getState().panelLayout.activeLayout.focusedPanelId!
