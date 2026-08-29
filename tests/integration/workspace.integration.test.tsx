@@ -32,6 +32,12 @@ describe('workspace integration', () => {
 
   const getEmulatorTerminalText = (): string => getWindowEmulator().getTerminalText();
 
+  const waitForRuntimeCommandsToSettle = async (): Promise<void> => {
+    await waitFor(() => {
+      expect(ideStore.getState().emulator.runtimeCommandPending).toBeNull();
+    });
+  };
+
   beforeEach(() => {
     terminalSurfaceStore.reset();
     useEmulatorStore.getState().reset();
@@ -72,6 +78,7 @@ describe('workspace integration', () => {
       );
     });
     const focusedPanelBeforeRun = ideStore.getState().panelLayout.activeLayout.focusedPanelId;
+    await waitForRuntimeCommandsToSettle();
 
     act(() => {
       executionCoordinator.execute('run');
@@ -94,6 +101,7 @@ describe('workspace integration', () => {
       fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
       fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
       expect(getActiveFile(ideStore.getState().files).content).toContain('END NIBBLES');
+      await waitForRuntimeCommandsToSettle();
 
       act(() => {
         executionCoordinator.execute('run');
@@ -172,6 +180,7 @@ describe('workspace integration', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /open file explorer/i }));
       fireEvent.click(screen.getByRole('button', { name: /nibbles\.asm/i }));
+      await waitForRuntimeCommandsToSettle();
 
       act(() => {
         executionCoordinator.execute('run');
@@ -200,6 +209,7 @@ describe('workspace integration', () => {
         expect(useEmulatorStore.getState().executionState.lastInstruction).toBe('Ready');
         expect(terminalSurfaceStore.getText().trim()).toBe('');
       });
+      await waitForRuntimeCommandsToSettle();
 
       act(() => {
         executionCoordinator.execute('run');
